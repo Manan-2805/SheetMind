@@ -1,0 +1,221 @@
+import { Moon, Sun } from "lucide-react";
+import {
+  Bookmark,
+  Clock,
+  Database,
+  Package,
+  PenLine,
+  Settings,
+} from "lucide-react";
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useTheme } from "@/hooks/useTheme";
+import { cn } from "@/utils/cn";
+
+type ActiveView = "chat" | "data-sources" | "settings";
+type ActiveDrawer = "history" | "artifacts" | "saved-queries" | null;
+
+interface SidebarProps {
+  activeView: ActiveView;
+  activeDrawer: ActiveDrawer;
+  onViewChange: (view: ActiveView) => void;
+  onDrawerToggle: (drawer: "history" | "artifacts" | "saved-queries") => void;
+  onNewChat: () => void;
+}
+
+interface SidebarButtonProps {
+  icon: React.ElementType;
+  label: string;
+  isActive?: boolean;
+  onClick: () => void;
+}
+
+function SidebarButton({ icon: Icon, label, isActive, onClick }: SidebarButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            onClick={onClick}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-[120ms]",
+              "active:scale-[0.97]"
+            )}
+            style={{
+              backgroundColor: isActive
+                ? "var(--color-accent-subtle)"
+                : "transparent",
+              color: isActive
+                ? "var(--color-accent)"
+                : "var(--color-text-tertiary)",
+              border: isActive
+                ? "1px solid var(--color-accent-border)"
+                : "1px solid transparent",
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "var(--color-bg-hover)";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-text-secondary)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "transparent";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-text-tertiary)";
+              }
+            }}
+            aria-label={label}
+          >
+            <Icon size={18} />
+          </button>
+        }
+      />
+      <TooltipContent
+        side="right"
+        style={{
+          backgroundColor: "var(--color-bg-active)",
+          border: "1px solid var(--color-border-default)",
+          color: "var(--color-text-primary)",
+          fontSize: "12px",
+        }}
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+
+export function Sidebar({
+  activeView,
+  activeDrawer,
+  onViewChange,
+  onDrawerToggle,
+  onNewChat,
+}: SidebarProps) {
+  const { resolvedTheme, setTheme } = useTheme();
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  };
+
+  return (
+    <div
+      className="flex h-full w-[52px] shrink-0 flex-col items-center py-3 gap-1"
+      style={{
+        backgroundColor: "var(--color-bg-elevated)",
+        borderRight: "1px solid var(--color-border-default)",
+      }}
+    >
+      <div
+        className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold"
+        style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
+        aria-label="SheetMind"
+      >
+        S
+      </div>
+
+      <div
+        className="my-1 w-6"
+        style={{
+          height: "1px",
+          backgroundColor: "var(--color-border-subtle)",
+        }}
+      />
+
+      <SidebarButton
+        icon={PenLine}
+        label="New Chat"
+        onClick={onNewChat}
+      />
+      <SidebarButton
+        icon={Clock}
+        label="Chat History"
+        isActive={activeDrawer === "history"}
+        onClick={() => onDrawerToggle("history")}
+      />
+      <SidebarButton
+        icon={Package}
+        label="Artifacts"
+        isActive={activeDrawer === "artifacts"}
+        onClick={() => onDrawerToggle("artifacts")}
+      />
+      <SidebarButton
+        icon={Bookmark}
+        label="Saved Queries"
+        isActive={activeDrawer === "saved-queries"}
+        onClick={() => onDrawerToggle("saved-queries")}
+      />
+
+      <div className="flex-1" />
+
+      <SidebarButton
+        icon={Database}
+        label="Data Sources"
+        isActive={activeView === "data-sources"}
+        onClick={() => onViewChange("data-sources")}
+      />
+      <SidebarButton
+        icon={Settings}
+        label="Settings"
+        isActive={activeView === "settings"}
+        onClick={() => onViewChange("settings")}
+      />
+
+      <div
+        className="my-1 w-6"
+        style={{
+          height: "1px",
+          backgroundColor: "var(--color-border-subtle)",
+        }}
+      />
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-[120ms] active:scale-[0.97]"
+              style={{ color: "var(--color-text-tertiary)" }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "var(--color-bg-hover)";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-text-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "transparent";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-text-tertiary)";
+              }}
+              aria-label="Toggle theme"
+            >
+              {resolvedTheme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+          }
+        />
+        <TooltipContent
+          side="right"
+          style={{
+            backgroundColor: "var(--color-bg-active)",
+            border: "1px solid var(--color-border-default)",
+            color: "var(--color-text-primary)",
+            fontSize: "12px",
+          }}
+        >
+          Toggle theme
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+

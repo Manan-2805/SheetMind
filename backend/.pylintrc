@@ -1,0 +1,99 @@
+[MAIN]
+# Python version target
+py-version = 3.11
+
+# Analyse imports from this directory too
+source-roots = .
+
+# Parallel jobs (0 = auto)
+jobs = 0
+
+
+[FORMAT]
+# Max line length matching Black/Ruff defaults
+max-line-length = 100
+
+# Expected indentation style
+indent-string = "    "
+indent-after-paren = 4
+
+
+[MESSAGES CONTROL]
+# Disable noisy messages that don't apply to a FastAPI/Pydantic project
+disable =
+    # Pydantic models set fields as class vars — false positives
+    too-few-public-methods,
+
+    # FastAPI router functions are short by design
+    too-many-return-statements,
+    too-many-branches,
+    too-many-statements,
+    too-many-arguments,
+    too-many-locals,
+    too-many-instance-attributes,
+
+    # Standard in async FastAPI code
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+
+    # Pydantic uses validators & config classes with bare `pass`
+    unnecessary-pass,
+
+    # FastAPI uses typing.Annotated and complex dependency annotations
+    fixme
+
+# Enable useful messages explicitly
+enable =
+    use-implicit-booleaness-not-comparison,
+    use-list-literal,
+    use-dict-literal
+
+
+[DESIGN]
+max-line-length = 100
+max-args = 10
+max-attributes = 15
+max-bool-expr = 5
+max-branches = 12
+max-locals = 20
+max-returns = 6
+max-statements = 60
+max-parents = 7
+max-public-methods = 30
+
+
+[TYPECHECK]
+# Pydantic model fields are resolved at runtime, not statically
+ignored-modules = pydantic, duckdb
+
+# Allow dynamic attributes on Pydantic BaseModel and FastAPI Request/Response
+ignored-classes = BaseModel, Request, Response
+
+
+[VARIABLES]
+# Common FastAPI/Pydantic patterns — allow single letter vars in lambdas
+good-names = i, j, k, n, x, y, z, e, f, db, df, id, ok
+
+# Ignore variables prefixed with _ (intentionally unused)
+dummy-variables-rgx = _+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+$)|dummy|^ignored_|^unused_
+
+
+[IMPORTS]
+# Known third-party packages used in this project
+known-third-party = fastapi, pydantic, duckdb, pandas, uvicorn, openpyxl
+
+# Allow C-extension imports
+allow-wildcard-with-all = no
+
+
+[LOGGING]
+# Use logging-format-interpolation if standard logging is added later
+logging-modules = logging
+
+
+[REPORTS]
+# Short output format — one line per message
+output-format = text
+reports = no
+score = yes
