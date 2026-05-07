@@ -28,6 +28,7 @@ export interface ChatMessage {
   nl_summary?: string;
   referenced_files?: string[];
   is_typing?: boolean;
+  session_title?: string;
 }
 
 export interface ChatSession {

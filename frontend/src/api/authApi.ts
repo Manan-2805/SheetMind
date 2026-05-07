@@ -1,6 +1,6 @@
 import axios, { type AxiosResponse } from "axios";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;
@@ -23,6 +23,16 @@ function handleError(error: unknown): never {
 interface SetupResponse {
   username: string;
   created_at: string;
+  is_new: boolean;
+}
+
+export async function listUsers(): Promise<string[]> {
+  try {
+    const res = await client.get<{ users: string[] }>("/auth/users");
+    return res.data.users;
+  } catch {
+    return [];
+  }
 }
 
 export async function setupUser(username: string): Promise<SetupResponse> {

@@ -5,7 +5,7 @@ import {
   clearChatHistory,
   deleteAllFiles,
   getSettings,
-  pullOllamaModel,
+  getOllamaModels,
   testLLM,
   updateSettings,
 } from "@/api/settingsApi";
@@ -113,8 +113,13 @@ export function SettingsPage() {
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [pullModelInput, setPullModelInput] = useState("");
   const [isPulling, setIsPulling] = useState(false);
+  const [pullProgress, setPullProgress] = useState<{ status: string; completed?: number; total?: number } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
+  const [isSavingLLM, setIsSavingLLM] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
+  const [ollamaSelectedModel, setOllamaSelectedModel] = useState<string>("");
+  const [maxConcurrentUploads, setMaxConcurrentUploads] = useState<number>(1);
 
   useEffect(() => {
     getSettings()
@@ -123,10 +128,19 @@ export function SettingsPage() {
         setApiKey(s.openai.api_key);
         setOpenaiModel(s.openai.model);
         setOllamaUrl(s.ollama.url);
+        setOllamaSelectedModel(s.ollama.model || "");
+        setMaxConcurrentUploads(s.max_concurrent_uploads || 1);
       })
       .catch((err: { message?: string }) => {
         addToast({ type: "error", title: "Error", description: err.message });
       });
+
+    // fetch ollama models if ollama is selected
+    getOllamaModels().then((data) => {
+      if (data && data.models) {
+        setOllamaModels(data.models);
+      }
+    }).catch(() => {});
   }, [addToast]);
 
   const handleThemeChange = async (t: Theme) => {
@@ -156,18 +170,67 @@ export function SettingsPage() {
     }
   };
 
+  const handleSaveLLMSettings = async () => {
+    setIsSavingLLM(true);
+    try {
+      await updateSettings({
+        llm_provider: llmProvider,
+        openai: { api_key: apiKey, model: openaiModel },
+        ollama: { url: ollamaUrl, model: ollamaSelectedModel },
+      });
+      addToast({ type: "success", title: "Saved", description: `LLM provider set to ${llmProvider}` });
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addToast({ type: "error", title: "Save failed", description: e?.message });
+    } finally {
+      setIsSavingLLM(false);
+    }
+  };
+
   const handlePullModel = async () => {
     if (!pullModelInput.trim()) return;
     setIsPulling(true);
+    setPullProgress({ status: "Starting..." });
     try {
-      await pullOllamaModel(pullModelInput.trim());
+      const res = await fetch("http://localhost:8000/api/settings/pull-ollama-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_name: pullModelInput.trim() }),
+      });
+      
+      if (!res.body) throw new Error("No response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n").filter(Boolean);
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.error) throw new Error(data.error);
+            setPullProgress(data);
+          } catch {
+            // ignore parse errors for partial lines
+          }
+        }
+      }
+
       addToast({ type: "success", title: "Model pulled", description: pullModelInput.trim() });
       setPullModelInput("");
+      
+      // Refresh models
+      const modelsData = await getOllamaModels();
+      if (modelsData && modelsData.models) setOllamaModels(modelsData.models);
+
     } catch (err: unknown) {
       const e = err as { message?: string };
       addToast({ type: "error", title: "Pull failed", description: e?.message });
     } finally {
       setIsPulling(false);
+      setPullProgress(null);
     }
   };
 
@@ -325,18 +388,31 @@ export function SettingsPage() {
                       disabled={isTesting}
                       className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
                       style={{
-                        backgroundColor: "var(--color-accent)",
-                        color: "#fff",
+                        backgroundColor: "var(--color-bg-hover)",
+                        border: "1px solid var(--color-border-default)",
+                        color: "var(--color-text-secondary)",
                         opacity: isTesting ? 0.7 : 1,
                       }}
                     >
                       {isTesting ? "Testing..." : "Test Connection"}
                     </button>
+                    <button
+                      onClick={handleSaveLLMSettings}
+                      disabled={isSavingLLM}
+                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
+                      style={{
+                        backgroundColor: "var(--color-accent)",
+                        color: "#fff",
+                        opacity: isSavingLLM ? 0.7 : 1,
+                      }}
+                    >
+                      {isSavingLLM ? "Saving..." : "Save Settings"}
+                    </button>
                     {testResult === "success" && (
-                      <span style={{ color: "var(--color-success)" }} className="text-body-em">✓ Connected</span>
+                      <span style={{ color: "var(--color-success)" }} className="text-body-em">Connected</span>
                     )}
                     {testResult === "error" && (
-                      <span style={{ color: "var(--color-destructive)" }} className="text-body-em">✗ Failed</span>
+                      <span style={{ color: "var(--color-destructive)" }} className="text-body-em">Failed</span>
                     )}
                   </div>
                 </div>
@@ -374,6 +450,26 @@ export function SettingsPage() {
                   </div>
                   <div>
                     <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
+                      DOWNLOADED MODELS
+                    </label>
+                    <select
+                      value={ollamaSelectedModel}
+                      onChange={(e) => setOllamaSelectedModel(e.target.value)}
+                      className="w-full max-w-sm rounded-lg px-3 py-2 text-body outline-none"
+                      style={{
+                        backgroundColor: "var(--color-bg-hover)",
+                        border: "1px solid var(--color-border-default)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    >
+                      <option value="">Select a model</option>
+                      {ollamaModels.map((m) => (
+                        <option key={m.name} value={m.name}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
                       PULL NEW MODEL
                     </label>
                     <div className="flex max-w-sm gap-2">
@@ -402,20 +498,48 @@ export function SettingsPage() {
                         {isPulling ? "Pulling..." : "Pull"}
                       </button>
                     </div>
-                    {isPulling && (
-                      <div className="mt-2 overflow-hidden rounded-full" style={{ height: 4, backgroundColor: "var(--color-bg-hover)", maxWidth: 320 }}>
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            backgroundColor: "var(--color-accent)",
-                            width: "60%",
-                            backgroundImage: "linear-gradient(90deg, var(--color-accent) 25%, var(--color-accent-hover) 50%, var(--color-accent) 75%)",
-                            backgroundSize: "200% 100%",
-                            animation: "shimmer 1.5s infinite",
-                          }}
-                        />
+                    {isPulling && pullProgress && (
+                      <div className="mt-2">
+                        <div className="mb-1 flex justify-between text-ui-label" style={{ color: "var(--color-text-secondary)", maxWidth: 320 }}>
+                          <span>{pullProgress.status}</span>
+                          {pullProgress.total && pullProgress.completed && (
+                            <span>{Math.round((pullProgress.completed / pullProgress.total) * 100)}%</span>
+                          )}
+                        </div>
+                        <div className="overflow-hidden rounded-full bg-gray-200" style={{ height: 4, backgroundColor: "var(--color-bg-hover)", maxWidth: 320 }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              backgroundColor: "var(--color-accent)",
+                              width: pullProgress.total ? `${Math.round((pullProgress.completed! / pullProgress.total) * 100)}%` : "100%",
+                              backgroundImage: pullProgress.total ? "none" : "linear-gradient(90deg, var(--color-accent) 25%, var(--color-accent-hover) 50%, var(--color-accent) 75%)",
+                              backgroundSize: "200% 100%",
+                              animation: pullProgress.total ? "none" : "shimmer 1.5s infinite",
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
+                    </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleTestLLM}
+                      disabled={isTesting}
+                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
+                      style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", opacity: isTesting ? 0.7 : 1 }}
+                    >
+                      {isTesting ? "Testing..." : "Test Connection"}
+                    </button>
+                    <button
+                      onClick={handleSaveLLMSettings}
+                      disabled={isSavingLLM}
+                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
+                      style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isSavingLLM ? 0.7 : 1 }}
+                    >
+                      {isSavingLLM ? "Saving..." : "Save Settings"}
+                    </button>
+                    {testResult === "success" && <span style={{ color: "var(--color-success)" }} className="text-body-em">Connected</span>}
+                    {testResult === "error" && <span style={{ color: "var(--color-destructive)" }} className="text-body-em">Failed</span>}
                   </div>
                 </div>
               )}
@@ -432,6 +556,29 @@ export function SettingsPage() {
               className="rounded-xl px-6"
               style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
             >
+              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Max Concurrent Uploads</p>
+                  <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>Limit parallel processing to save system resources</p>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={maxConcurrentUploads}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 1;
+                    setMaxConcurrentUploads(val);
+                    updateSettings({ max_concurrent_uploads: val }).catch(() => {});
+                  }}
+                  className="w-20 rounded-lg px-3 py-2 text-body outline-none text-center"
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
+                />
+              </div>
               <DestructiveButton
                 label="Clear Chat History"
                 description="Permanently deletes all chat sessions and messages"

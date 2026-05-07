@@ -160,16 +160,35 @@ export function HistoryDrawer({
                           <div className="flex shrink-0 items-center gap-0.5 pr-1">
                             <button
                               className="rounded p-1 transition-colors duration-[120ms]"
-                              style={{ color: "var(--color-text-tertiary)" }}
-                              onClick={(e) => e.stopPropagation()}
+                              style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
+                                  setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                } catch {
+                                  addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
+                                }
+                              }}
                               aria-label="Star session"
                             >
-                              <Star size={12} />
+                              <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
                             </button>
                             <button
                               className="rounded p-1 transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const newTitle = prompt("Enter new title for session:", session.title);
+                                if (newTitle && newTitle !== session.title) {
+                                  try {
+                                    const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
+                                    setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                  } catch {
+                                    addToast({ type: "error", title: "Error", description: "Failed to rename session" });
+                                  }
+                                }
+                              }}
                               aria-label="Rename session"
                             >
                               <Edit2 size={12} />
@@ -177,7 +196,20 @@ export function HistoryDrawer({
                             <button
                               className="rounded p-1 transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (confirm("Are you sure you want to delete this session?")) {
+                                  try {
+                                    await import("@/api/chatApi").then(m => m.deleteSession(session.id));
+                                    setSessions(prev => prev.filter(s => s.id !== session.id));
+                                    if (activeSessionId === session.id) {
+                                      window.location.hash = "#/chat/new";
+                                    }
+                                  } catch {
+                                    addToast({ type: "error", title: "Error", description: "Failed to delete session" });
+                                  }
+                                }
+                              }}
                               aria-label="Delete session"
                             >
                               <Trash2 size={12} />

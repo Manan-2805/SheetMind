@@ -2,7 +2,7 @@ import axios, { type AxiosResponse } from "axios";
 
 import type { CreateSavedQueryRequest, SavedQuery } from "@/types/SavedQuery";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;
@@ -60,6 +60,21 @@ export async function runSavedQuery(id: string): Promise<{ inserted_query: strin
       `/saved-queries/${id}/run`
     );
     return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function generateLabel(
+  nl_query: string,
+  sql_query: string
+): Promise<string> {
+  try {
+    const res: AxiosResponse<{ label: string }> = await client.post(
+      "/saved-queries/generate-label",
+      { nl_query, sql_query }
+    );
+    return res.data.label;
   } catch (error) {
     handleError(error);
   }

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   createSession,
@@ -13,6 +14,7 @@ const TYPING_ID = "__typing__";
 
 export function useChat() {
   const { addToast } = useToast();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -59,32 +61,32 @@ export function useChat() {
     [addToast]
   );
 
-  const startNewChat = useCallback(async () => {
-    try {
-      const session = await createSession();
-      setSessions((prev) => [session, ...prev]);
-      setActiveSessionId(session.id);
-      setMessages([]);
-      return session;
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      addToast({
-        type: "error",
-        title: "Error",
-        description: e?.message ?? "Failed to create session",
-      });
-      return null;
-    }
-  }, [addToast]);
+  const startNewChat = useCallback(() => {
+    setActiveSessionId(null);
+    setMessages([]);
+    return null;
+  }, []);
 
   const sendChatMessage = useCallback(
     async (content: string, referencedFiles: string[] = []) => {
       let sessionId = activeSessionId;
 
       if (!sessionId) {
-        const session = await startNewChat();
-        if (!session) return;
-        sessionId = session.id;
+        try {
+          const session = await createSession();
+          setSessions((prev) => [session, ...prev]);
+          sessionId = session.id;
+          setActiveSessionId(sessionId);
+          navigate(`/chat/${sessionId}`, { replace: true });
+        } catch (err: unknown) {
+          const e = err as { message?: string };
+          addToast({
+            type: "error",
+            title: "Error",
+            description: e?.message ?? "Failed to create session for new message",
+          });
+          return;
+        }
       }
 
       const userMessage: ChatMessage = {
@@ -118,7 +120,11 @@ export function useChat() {
         setSessions((prev) =>
           prev.map((s) =>
             s.id === sessionId
-              ? { ...s, updated_at: new Date().toISOString() }
+              ? {
+                  ...s,
+                  updated_at: new Date().toISOString(),
+                  title: response.session_title ?? s.title,
+                }
               : s
           )
         );
@@ -134,7 +140,7 @@ export function useChat() {
         setIsSending(false);
       }
     },
-    [activeSessionId, startNewChat, addToast]
+    [activeSessionId, addToast, navigate]
   );
 
   return {

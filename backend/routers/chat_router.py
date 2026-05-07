@@ -1,6 +1,7 @@
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 import models.chat_models as chat_models
 from schemas.chat_schemas import (
@@ -41,9 +42,47 @@ async def create_message(
     session_id: str,
     body: SendMessageRequest,
 ) -> ChatMessageResponse:
-    await asyncio.sleep(0.8)
-    return chat_models.create_message(
+    return await chat_models.create_message(
         session_id=session_id,
         content=body.content,
         referenced_files=body.referenced_files,
     )
+
+
+from schemas.chat_schemas import ChatSessionUpdate
+
+
+@router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
+async def update_session(session_id: str, body: ChatSessionUpdate) -> ChatSessionResponse:
+    return chat_models.update_session(session_id, title=body.title, is_favorite=body.is_favorite)
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    chat_models.delete_session(session_id)
+    return {"status": "success"}
+
+
+class FeedbackRequest(BaseModel):
+    feedback: str  # "like" | "dislike"
+
+
+@router.put("/messages/{message_id}/feedback")
+async def set_message_feedback(message_id: str, body: FeedbackRequest):
+    chat_models.set_message_feedback(message_id, body.feedback)
+    return {"status": "success", "message_id": message_id, "feedback": body.feedback}
+
+
+class RegenerateRequest(BaseModel):
+    content: str
+    referenced_files: list[str] = []
+
+
+@router.post("/sessions/{session_id}/regenerate", response_model=ChatMessageResponse)
+async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMessageResponse:
+    return await chat_models.regenerate_response(
+        session_id=session_id,
+        content=body.content,
+        referenced_files=body.referenced_files,
+    )
+

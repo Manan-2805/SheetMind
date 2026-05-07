@@ -21,6 +21,8 @@ class DataSourceResponse(BaseModel):
     num_sheets: int
     file_size_bytes: int
     sheets: list[SheetResponse]
+    status: Optional[str] = 'completed'
+    error_message: Optional[str] = None
 
 
 class PreviewResponse(BaseModel):

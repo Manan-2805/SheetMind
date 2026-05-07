@@ -1,3 +1,5 @@
 .venv
 Temp
 .vscode
+backend/sheetmind.duckdb.wal
+relational_excels

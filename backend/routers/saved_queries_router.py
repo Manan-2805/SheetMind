@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 import models.saved_query_models as sq_models
+import models.chat_models as chat_models
 from schemas.common_schemas import SuccessResponse
 from schemas.saved_query_schemas import CreateSavedQueryRequest, SavedQueryResponse
 
@@ -10,6 +11,21 @@ router = APIRouter(prefix="/saved-queries", tags=["saved-queries"])
 
 class RunResponse(BaseModel):
     inserted_query: str
+
+
+class GenerateLabelRequest(BaseModel):
+    nl_query: str
+    sql_query: str
+
+
+class GenerateLabelResponse(BaseModel):
+    label: str
+
+
+@router.post("/generate-label", response_model=GenerateLabelResponse)
+async def generate_label(body: GenerateLabelRequest) -> GenerateLabelResponse:
+    label = await chat_models.generate_query_label(body.nl_query, body.sql_query)
+    return GenerateLabelResponse(label=label)
 
 
 @router.get("", response_model=list[SavedQueryResponse])

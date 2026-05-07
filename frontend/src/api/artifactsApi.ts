@@ -2,7 +2,7 @@ import axios, { type AxiosResponse } from "axios";
 
 import type { ArtifactsResponse } from "@/types/Artifact";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;

@@ -6,6 +6,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  Info,
 } from "lucide-react";
 
 import {
@@ -13,6 +14,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ChatMessageMeta } from "./ChatMessageMeta";
+import type { ChatMessage } from "@/types/ChatMessage";
 
 interface ChatMessageActionsProps {
   onRegenerate?: () => void;
@@ -22,6 +25,7 @@ interface ChatMessageActionsProps {
   onDownload?: () => void;
   onStar?: () => void;
   onViewSQL?: () => void;
+  message: ChatMessage;
 }
 
 const ACTIONS = [
@@ -42,6 +46,7 @@ export function ChatMessageActions({
   onDownload,
   onStar,
   onViewSQL,
+  message,
 }: ChatMessageActionsProps) {
   const handlers = {
     regenerate: onRegenerate,
@@ -93,6 +98,47 @@ export function ChatMessageActions({
           </TooltipContent>
         </Tooltip>
       ))}
+
+      {/* Info Hover Tooltip */}
+      {(message.token_count_input != null || message.sql_execution_ms != null || message.confidence_score != null) && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                className="rounded p-1 transition-colors duration-[120ms]"
+                style={{ color: "var(--color-text-tertiary)" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color =
+                    "var(--color-text-primary)";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    "var(--color-bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color =
+                    "var(--color-text-tertiary)";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    "transparent";
+                }}
+                aria-label="Query details"
+              >
+                <Info size={14} />
+              </button>
+            }
+          />
+          <TooltipContent
+            side="top"
+            style={{
+              backgroundColor: "var(--color-bg-active)",
+              border: "1px solid var(--color-border-default)",
+              color: "var(--color-text-primary)",
+              fontSize: "11px",
+              padding: "4px"
+            }}
+          >
+            <ChatMessageMeta message={message} />
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

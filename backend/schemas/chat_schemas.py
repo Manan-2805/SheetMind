@@ -40,6 +40,7 @@ class ChatMessageResponse(BaseModel):
     result_data: Optional[ResultTable] = None
     nl_summary: Optional[str] = None
     referenced_files: Optional[list[str]] = None
+    session_title: Optional[str] = None  # set on first message so frontend can update sidebar title
 
 
 class SendMessageRequest(BaseModel):
@@ -49,3 +50,7 @@ class SendMessageRequest(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     title: Optional[str] = None
+
+class ChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    is_favorite: Optional[bool] = None

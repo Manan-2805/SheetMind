@@ -1,5 +1,4 @@
 import { ChatMessageActions } from "./ChatMessageActions";
-import { ChatMessageMeta } from "./ChatMessageMeta";
 import { ChatResultTable } from "./ChatResultTable";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -8,9 +7,25 @@ import { formatRelativeTime } from "@/utils/formatDate";
 
 interface ChatMessageProps {
   message: ChatMessageType;
+  onRegenerate?: () => void;
+  onThumbUp?: () => void;
+  onThumbDown?: () => void;
+  onViewChart?: () => void;
+  onDownload?: () => void;
+  onStar?: () => void;
+  onViewSQL?: () => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ 
+  message,
+  onRegenerate,
+  onThumbUp,
+  onThumbDown,
+  onViewChart,
+  onDownload,
+  onStar,
+  onViewSQL,
+}: ChatMessageProps) {
   if (message.is_typing) {
     return <TypingIndicator />;
   }
@@ -76,8 +91,16 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </p>
         )}
 
-        <ChatMessageActions />
-        <ChatMessageMeta message={message} />
+        <ChatMessageActions 
+          message={message} 
+          onRegenerate={onRegenerate}
+          onThumbUp={onThumbUp}
+          onThumbDown={onThumbDown}
+          onViewChart={onViewChart}
+          onDownload={onDownload}
+          onStar={onStar}
+          onViewSQL={onViewSQL}
+        />
       </div>
     </div>
   );

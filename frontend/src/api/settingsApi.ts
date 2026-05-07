@@ -7,7 +7,7 @@ import type {
   TestLLMResponse,
 } from "@/types/Settings";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;
@@ -51,6 +51,15 @@ export async function testLLM(data: TestLLMRequest): Promise<TestLLMResponse> {
       "/settings/test-llm",
       data
     );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function getOllamaModels(): Promise<{ models: { name: string }[] }> {
+  try {
+    const res = await client.get("/settings/ollama-models");
     return res.data;
   } catch (error) {
     handleError(error);

@@ -1,4 +1,4 @@
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, LogOut } from "lucide-react";
 import {
   Bookmark,
   Clock,
@@ -107,6 +107,11 @@ export function Sidebar({
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("sheetmind-username");
+    window.location.reload();
+  };
+
   return (
     <div
       className="flex h-full w-[52px] shrink-0 flex-col items-center py-3 gap-1"
@@ -213,6 +218,40 @@ export function Sidebar({
           }}
         >
           Toggle theme
+        </TooltipContent>
+      </Tooltip>
+      
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              onClick={handleLogout}
+              className="flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-[120ms] active:scale-[0.97]"
+              style={{ color: "var(--color-destructive)" }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "var(--color-bg-hover)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                  "transparent";
+              }}
+              aria-label="Logout"
+            >
+              <LogOut size={16} />
+            </button>
+          }
+        />
+        <TooltipContent
+          side="right"
+          style={{
+            backgroundColor: "var(--color-bg-active)",
+            border: "1px solid var(--color-border-default)",
+            color: "var(--color-text-primary)",
+            fontSize: "12px",
+          }}
+        >
+          Logout
         </TooltipContent>
       </Tooltip>
     </div>

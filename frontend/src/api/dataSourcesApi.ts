@@ -6,7 +6,7 @@ import type {
   DataSourcePreview,
 } from "@/types/DataSource";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;

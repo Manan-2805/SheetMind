@@ -1,6 +1,3 @@
-import { useState } from "react";
-import { ChevronRight } from "lucide-react";
-
 import type { ChatMessage } from "@/types/ChatMessage";
 
 interface ChatMessageMetaProps {
@@ -20,8 +17,6 @@ function getConfidenceColor(score: number): string {
 }
 
 export function ChatMessageMeta({ message }: ChatMessageMetaProps) {
-  const [expanded, setExpanded] = useState(false);
-
   const hasMetadata =
     message.token_count_input != null ||
     message.sql_execution_ms != null ||
@@ -30,38 +25,13 @@ export function ChatMessageMeta({ message }: ChatMessageMetaProps) {
   if (!hasMetadata) return null;
 
   return (
-    <div className="mt-2">
-      <button
-        onClick={() => setExpanded((p) => !p)}
-        className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
-        style={{ color: "var(--color-text-tertiary)" }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "var(--color-text-secondary)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "var(--color-text-tertiary)";
-        }}
-      >
-        <ChevronRight
-          size={12}
-          style={{
-            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
-            transition: "transform 150ms ease",
-          }}
-        />
-        Query details
-      </button>
-
-      {expanded && (
-        <div
-          className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md p-3 text-ui-label"
-          style={{
-            backgroundColor: "var(--color-bg-hover)",
-            border: "1px solid var(--color-border-subtle)",
-          }}
-        >
+    <div
+      className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md p-2 text-ui-label"
+      style={{
+        backgroundColor: "transparent",
+        minWidth: "200px"
+      }}
+    >
           {message.token_count_input != null && (
             <>
               <span style={{ color: "var(--color-text-tertiary)" }}>
@@ -123,8 +93,6 @@ export function ChatMessageMeta({ message }: ChatMessageMetaProps) {
               </span>
             </>
           )}
-        </div>
-      )}
     </div>
   );
 }

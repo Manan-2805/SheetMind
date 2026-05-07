@@ -15,16 +15,14 @@ from schemas.settings_schemas import (
     UpdateSettingsRequest,
 )
 
-router = APIRouter(prefix="/settings", tags=["settings"])
-
-_settings = SettingsResponse(
-    theme="dark",
-    llm_provider="openai",
-    openai=OpenAISettingsSchema(api_key="", model="gpt-4o"),
-    ollama=OllamaSettingsSchema(url="http://localhost:11434", model=""),
-    username="",
-    created_at=datetime.now(timezone.utc).isoformat(),
+from models.settings_models import (
+    get_settings as db_get_settings,
+    update_settings_db,
+    clear_chat_history_db,
+    delete_all_files_db,
 )
+
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class TestLLMResponse(BaseModel):
@@ -50,21 +48,25 @@ class DeleteFilesResponse(BaseModel):
 
 @router.get("", response_model=SettingsResponse)
 async def get_settings() -> SettingsResponse:
-    return _settings
+    return db_get_settings()
 
 
 @router.put("", response_model=SettingsResponse)
 async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
-    global _settings
+    current_settings = db_get_settings()
     if body.theme is not None:
-        _settings.theme = body.theme
+        current_settings.theme = body.theme
     if body.llm_provider is not None:
-        _settings.llm_provider = body.llm_provider
+        current_settings.llm_provider = body.llm_provider
     if body.openai is not None:
-        _settings.openai = body.openai
+        current_settings.openai = body.openai
     if body.ollama is not None:
-        _settings.ollama = body.ollama
-    return _settings
+        current_settings.ollama = body.ollama
+    if body.max_concurrent_uploads is not None:
+        current_settings.max_concurrent_uploads = body.max_concurrent_uploads
+        
+    update_settings_db(current_settings)
+    return current_settings
 
 
 @router.post("/test-llm", response_model=TestLLMResponse)
@@ -77,25 +79,54 @@ async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
     )
 
 
-@router.post("/pull-ollama-model", response_model=PullModelResponse)
-async def pull_ollama_model(body: PullModelRequest) -> PullModelResponse:
-    await asyncio.sleep(2.0)
-    return PullModelResponse(success=True, model=body.model_name)
+import httpx
+from fastapi.responses import StreamingResponse
+
+@router.get("/ollama-models")
+async def get_ollama_models():
+    settings = db_get_settings()
+    ollama_url = settings.ollama.url.rstrip("/")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{ollama_url}/api/tags")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"detail": str(e)})
+
+@router.post("/pull-ollama-model")
+async def pull_ollama_model(body: PullModelRequest):
+    settings = db_get_settings()
+    ollama_url = settings.ollama.url.rstrip("/")
+    
+    async def stream_pull():
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream("POST", f"{ollama_url}/api/pull", json={"name": body.model_name}) as response:
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+            except Exception as e:
+                yield json.dumps({"error": str(e)}).encode("utf-8")
+                
+    return StreamingResponse(stream_pull(), media_type="application/x-ndjson")
 
 
 @router.post("/clear-chat-history", response_model=ClearHistoryResponse)
 async def clear_chat_history() -> ClearHistoryResponse:
-    return ClearHistoryResponse(success=True, deleted_sessions=5)
+    deleted = clear_chat_history_db()
+    return ClearHistoryResponse(success=True, deleted_sessions=deleted)
 
 
 @router.post("/delete-all-files", response_model=DeleteFilesResponse)
 async def delete_all_files() -> DeleteFilesResponse:
-    return DeleteFilesResponse(success=True, deleted_files=3)
+    deleted = delete_all_files_db()
+    return DeleteFilesResponse(success=True, deleted_files=deleted)
 
 
 @router.get("/export")
 async def export_settings() -> Response:
-    data = _settings.model_dump()
+    settings = db_get_settings()
+    data = settings.model_dump()
     data["openai"]["api_key"] = ""
     content = json.dumps(data, indent=2, default=str)
     return Response(

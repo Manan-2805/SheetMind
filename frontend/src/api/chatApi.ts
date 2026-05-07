@@ -2,7 +2,7 @@ import axios, { type AxiosResponse } from "axios";
 
 import type { ChatMessage, ChatSession } from "@/types/ChatMessage";
 
-const client = axios.create({ baseURL: "http://localhost:8000/api" });
+import { apiClient as client } from "./apiClient";
 
 interface ApiError {
   status: number;
@@ -61,6 +61,50 @@ export async function sendMessage(
   try {
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/messages`,
+      { content, referenced_files: referencedFiles }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function updateSession(sessionId: string, data: { title?: string, is_favorite?: boolean }): Promise<ChatSession> {
+  try {
+    const res: AxiosResponse<ChatSession> = await client.put(`/chat/sessions/${sessionId}`, data);
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  try {
+    await client.delete(`/chat/sessions/${sessionId}`);
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function setMessageFeedback(
+  messageId: string,
+  feedback: "like" | "dislike"
+): Promise<void> {
+  try {
+    await client.put(`/chat/messages/${messageId}/feedback`, { feedback });
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function regenerateMessage(
+  sessionId: string,
+  content: string,
+  referencedFiles: string[]
+): Promise<ChatMessage> {
+  try {
+    const res: AxiosResponse<ChatMessage> = await client.post(
+      `/chat/sessions/${sessionId}/regenerate`,
       { content, referenced_files: referencedFiles }
     );
     return res.data;

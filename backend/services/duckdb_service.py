@@ -1,28 +1,44 @@
 import duckdb
 
-DB_PATH = "sheetmind.duckdb"
+from dependencies import current_username
 
-_conn: duckdb.DuckDBPyConnection | None = None
+_conns: dict[str, duckdb.DuckDBPyConnection] = {}
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
-    global _conn
-    if _conn is None:
-        _conn = duckdb.connect(DB_PATH)
-    return _conn
+    global _conns
+    username = current_username.get("default")
+    
+    # Sanitize username slightly
+    safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
+    if not safe_username:
+        safe_username = "default"
+        
+    db_path = f"sheetmind_{safe_username}.duckdb"
+    
+    if db_path not in _conns:
+        conn = duckdb.connect(db_path)
+        _conns[db_path] = conn
+        init_schema(conn)
+        
+    return _conns[db_path]
 
 
-def init_schema() -> None:
-    conn = get_connection()
+def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS excel_files (
-            id INTEGER PRIMARY KEY,
+            id VARCHAR PRIMARY KEY,
             original_filename VARCHAR NOT NULL,
             stored_path VARCHAR NOT NULL,
             uploaded_at TIMESTAMP NOT NULL,
             num_sheets INTEGER NOT NULL DEFAULT 1,
-            file_size_bytes BIGINT NOT NULL DEFAULT 0
+            file_size_bytes BIGINT NOT NULL DEFAULT 0,
+            status VARCHAR NOT NULL DEFAULT 'completed',
+            error_message VARCHAR,
+            row_count INTEGER,
+            column_count INTEGER,
+            updated_at TIMESTAMP
         )
     """)
 
@@ -40,7 +56,7 @@ def init_schema() -> None:
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS chat_sessions (
-            id INTEGER PRIMARY KEY,
+            id VARCHAR PRIMARY KEY,
             title VARCHAR NOT NULL,
             created_at TIMESTAMP NOT NULL,
             updated_at TIMESTAMP NOT NULL,
@@ -50,8 +66,8 @@ def init_schema() -> None:
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS chat_messages (
-            id INTEGER PRIMARY KEY,
-            session_id INTEGER NOT NULL,
+            id VARCHAR PRIMARY KEY,
+            session_id VARCHAR NOT NULL,
             role VARCHAR NOT NULL,
             content VARCHAR NOT NULL,
             created_at TIMESTAMP NOT NULL,
@@ -61,13 +77,14 @@ def init_schema() -> None:
             token_count_input INTEGER,
             token_count_output INTEGER,
             confidence_score INTEGER,
-            result_row_count INTEGER
+            result_row_count INTEGER,
+            feedback VARCHAR
         )
     """)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS saved_queries (
-            id INTEGER PRIMARY KEY,
+            id VARCHAR PRIMARY KEY,
             label VARCHAR NOT NULL,
             nl_query VARCHAR NOT NULL,
             sql_query VARCHAR NOT NULL,
@@ -86,5 +103,12 @@ def init_schema() -> None:
             created_at TIMESTAMP NOT NULL,
             source_message_id INTEGER,
             title VARCHAR
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY,
+            settings_json VARCHAR NOT NULL
         )
     """)

@@ -54,6 +54,39 @@ export function DataSourcesPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/api/ws/datasources");
+    ws.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.type === "status_update") {
+          setSources(prev => prev.map(s => {
+            const update = payload.data.find((u: { id: string, status: string, error_message: string | null, row_count?: number, column_count?: number }) => u.id === s.id);
+            if (update) {
+              return {
+                ...s,
+                status: update.status,
+                error_message: update.error_message,
+                sheets: update.status === 'completed' && s.sheets.length === 0 ? [{
+                  id: `${s.id}_sh1`,
+                  sheet_name: "Sheet1",
+                  table_name: `file_${s.id.replace(/-/g, '_')}`,
+                  row_count: update.row_count || 0,
+                  col_count: update.column_count || 0,
+                  imported_at: s.uploaded_at
+                }] : s.sheets
+              };
+            }
+            return s;
+          }));
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+    return () => ws.close();
+  }, []);
+
   const handleUpload = async (files: FileList) => {
     const fileArr = Array.from(files);
     const ids = fileArr.map(() => crypto.randomUUID());
@@ -238,7 +271,7 @@ export function DataSourcesPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr style={{ backgroundColor: "var(--color-bg-hover)" }}>
-                  {["Filename", "Sheets", "Rows", "Size", "Uploaded", "Actions"].map((h) => (
+                  {["Filename", "Status", "Sheets", "Rows", "Size", "Uploaded", "Actions"].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-ui-label uppercase"
@@ -287,6 +320,17 @@ export function DataSourcesPage() {
                             </span>
                           </div>
                         </td>
+                        <td className="px-4 py-2">
+                          <span 
+                            className="rounded-full px-2 py-0.5 text-xs" 
+                            style={{ 
+                              backgroundColor: src.status === 'completed' ? 'var(--color-success-subtle)' : src.status === 'error' ? 'var(--color-destructive-subtle)' : 'var(--color-accent-subtle)',
+                              color: src.status === 'completed' ? 'var(--color-success)' : src.status === 'error' ? 'var(--color-destructive)' : 'var(--color-accent)'
+                            }}
+                          >
+                            {src.status || 'completed'}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
                           {src.num_sheets}
                         </td>
@@ -301,15 +345,17 @@ export function DataSourcesPage() {
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-                            <button
-                              onClick={() => openPreview(src.id)}
-                              className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
-                              style={{ color: "var(--color-text-tertiary)" }}
-                              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
-                              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
-                            >
-                              <Eye size={13} /> Preview
-                            </button>
+                            {src.status === 'completed' && (
+                              <button
+                                onClick={() => openPreview(src.id)}
+                                className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
+                                style={{ color: "var(--color-text-tertiary)" }}
+                                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
+                                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                              >
+                                <Eye size={13} /> Preview
+                              </button>
+                            )}
                             <button
                               onClick={() => setDeleteId(src.id)}
                               className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
@@ -341,6 +387,7 @@ export function DataSourcesPage() {
                             >
                               {sheet.sheet_name}
                             </td>
+                            <td className="px-4 py-2" />
                             <td className="px-4 py-2" />
                             <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-tertiary)" }}>
                               {sheet.row_count.toLocaleString()} rows

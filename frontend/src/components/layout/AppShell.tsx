@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { useCallback, useState, useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { ArtifactsDrawer } from "@/drawers/ArtifactsDrawer";
@@ -16,7 +17,8 @@ type ActiveView = "chat" | "data-sources" | "settings";
 type ActiveDrawer = "history" | "artifacts" | "saved-queries" | null;
 
 export function AppShell() {
-  const [activeView, setActiveView] = useState<ActiveView>("chat");
+  const navigate = useNavigate();
+  const location = useLocation();
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
 
   const {
@@ -28,12 +30,36 @@ export function AppShell() {
     selectSession,
     startNewChat,
     sendChatMessage,
+    setMessages,
   } = useChat();
 
+  const handleRegeneratedMessage = useCallback((msg: import("@/types/ChatMessage").ChatMessage) => {
+    setMessages((prev) => [...prev.filter((m) => !m.is_typing), msg]);
+  }, [setMessages]);
+
+  // Sync route param with chat session
+  useEffect(() => {
+    const match = location.pathname.match(/^\/chat\/([^/]+)$/);
+    if (match && match[1] !== "new") {
+      const sessionId = match[1];
+      if (sessionId !== activeSessionId) {
+        selectSession(sessionId);
+      }
+    }
+  }, [location.pathname, activeSessionId, selectSession]);
+
+  const getActiveView = (): ActiveView => {
+    if (location.pathname.startsWith("/data-sources")) return "data-sources";
+    if (location.pathname.startsWith("/settings")) return "settings";
+    return "chat";
+  };
+
   const handleViewChange = useCallback((view: ActiveView) => {
-    setActiveView(view);
+    if (view === "chat") navigate("/chat/new");
+    if (view === "data-sources") navigate("/data-sources");
+    if (view === "settings") navigate("/settings");
     setActiveDrawer(null);
-  }, []);
+  }, [navigate]);
 
   const handleDrawerToggle = useCallback(
     (drawer: "history" | "artifacts" | "saved-queries") => {
@@ -42,29 +68,37 @@ export function AppShell() {
     []
   );
 
-  const handleNewChat = useCallback(async () => {
-    await startNewChat();
-    setActiveView("chat");
+  const handleNewChat = useCallback(() => {
+    startNewChat();
+    navigate("/chat/new");
     setActiveDrawer(null);
-  }, [startNewChat]);
+  }, [startNewChat, navigate]);
 
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
-      setActiveView("chat");
-      await selectSession(sessionId);
+      navigate(`/chat/${sessionId}`);
+      // selectSession is called by the useEffect above
     },
-    [selectSession]
+    [navigate]
   );
 
   const handleRunQuery = useCallback(
     (nlQuery: string) => {
-      setActiveView("chat");
+      navigate("/chat/new");
       setActiveDrawer(null);
       sendChatMessage(nlQuery);
     },
-    [sendChatMessage]
+    [sendChatMessage, navigate]
   );
 
+  const handleChatSent = useCallback(async (content: string, files?: string[]) => {
+    await sendChatMessage(content, files);
+  }, [sendChatMessage]);
+
+  // When a message is sent in a "new" chat, we should ideally navigate to the new session ID.
+  // We will handle this in useChat to return the new session ID and navigate there.
+  // We'll update useChat to optionally take a navigate callback, or we handle it here.
+  
   return (
     <TooltipProvider delayDuration={500}>
       <div
@@ -72,7 +106,7 @@ export function AppShell() {
         style={{ backgroundColor: "var(--color-bg-base)" }}
       >
         <Sidebar
-          activeView={activeView}
+          activeView={getActiveView()}
           activeDrawer={activeDrawer}
           onViewChange={handleViewChange}
           onDrawerToggle={handleDrawerToggle}
@@ -98,19 +132,24 @@ export function AppShell() {
         />
 
         <main className="flex flex-1 flex-col overflow-hidden">
-          {activeView === "chat" && (
-            <ChatPage
-              onNewChat={handleNewChat}
-              messages={messages}
-              isLoadingMessages={isLoadingMessages}
-              isSending={isSending}
-              sendChatMessage={sendChatMessage}
-              loadSessions={loadSessions}
-              startNewChat={startNewChat}
-            />
-          )}
-          {activeView === "data-sources" && <DataSourcesPage />}
-          {activeView === "settings" && <SettingsPage />}
+          <Routes>
+            <Route path="/" element={<Navigate to="/chat/new" replace />} />
+            <Route path="/chat/*" element={
+              <ChatPage
+                onNewChat={handleNewChat}
+                messages={messages}
+                isLoadingMessages={isLoadingMessages}
+                isSending={isSending}
+                sendChatMessage={handleChatSent}
+                loadSessions={loadSessions}
+                startNewChat={startNewChat}
+                activeSessionId={activeSessionId}
+                onRegeneratedMessage={handleRegeneratedMessage}
+              />
+            } />
+            <Route path="/data-sources" element={<DataSourcesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
         </main>
 
         <Toast />

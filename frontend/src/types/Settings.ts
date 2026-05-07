@@ -19,6 +19,7 @@ export interface Settings {
   ollama: OllamaSettings;
   username: string;
   created_at: string;
+  max_concurrent_uploads: number;
 }
 
 export interface TestLLMRequest {

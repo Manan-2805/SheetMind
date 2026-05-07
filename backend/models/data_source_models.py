@@ -10,178 +10,110 @@ from schemas.data_source_schemas import (
 )
 
 
+from datetime import datetime, timezone
+import os
+import shutil
+from typing import Any
+
+from schemas.data_source_schemas import (
+    AutocompleteFile,
+    AutocompleteResponse,
+    DataSourceResponse,
+    PreviewResponse,
+    SheetResponse,
+)
+from services.duckdb_service import get_connection
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
-
-def _ago(days: int = 0, hours: int = 0) -> datetime:
-    return _now() - timedelta(days=days, hours=hours)
-
-
-MOCK_SOURCES: list[dict[str, Any]] = [
-    {
-        "id": "ds-001",
-        "original_filename": "Q1_2024_Sales_Report.xlsx",
-        "stored_path": "uploads/Q1_2024_Sales_Report.xlsx",
-        "uploaded_at": _ago(hours=2),
-        "num_sheets": 3,
-        "file_size_bytes": 2_847_392,
-        "sheets": [
-            {
-                "id": "sh-001",
-                "sheet_name": "Sales",
-                "table_name": "q1_2024_sales_report_Sales",
-                "row_count": 12847,
-                "col_count": 18,
-                "imported_at": _ago(hours=2),
-            },
-            {
-                "id": "sh-002",
-                "sheet_name": "Returns",
-                "table_name": "q1_2024_sales_report_Returns",
-                "row_count": 743,
-                "col_count": 10,
-                "imported_at": _ago(hours=2),
-            },
-            {
-                "id": "sh-003",
-                "sheet_name": "Summary",
-                "table_name": "q1_2024_sales_report_Summary",
-                "row_count": 24,
-                "col_count": 8,
-                "imported_at": _ago(hours=2),
-            },
-        ],
-    },
-    {
-        "id": "ds-002",
-        "original_filename": "Marketing_Budget_FY2024.xlsx",
-        "stored_path": "uploads/Marketing_Budget_FY2024.xlsx",
-        "uploaded_at": _ago(days=1, hours=6),
-        "num_sheets": 2,
-        "file_size_bytes": 1_204_856,
-        "sheets": [
-            {
-                "id": "sh-004",
-                "sheet_name": "Digital",
-                "table_name": "marketing_budget_fy2024_Digital",
-                "row_count": 3420,
-                "col_count": 12,
-                "imported_at": _ago(days=1, hours=6),
-            },
-            {
-                "id": "sh-005",
-                "sheet_name": "Traditional",
-                "table_name": "marketing_budget_fy2024_Traditional",
-                "row_count": 1890,
-                "col_count": 12,
-                "imported_at": _ago(days=1, hours=6),
-            },
-        ],
-    },
-    {
-        "id": "ds-003",
-        "original_filename": "Employee_Headcount_2024.xlsx",
-        "stored_path": "uploads/Employee_Headcount_2024.xlsx",
-        "uploaded_at": _ago(days=4),
-        "num_sheets": 2,
-        "file_size_bytes": 892_144,
-        "sheets": [
-            {
-                "id": "sh-006",
-                "sheet_name": "Headcount",
-                "table_name": "employee_headcount_2024_Headcount",
-                "row_count": 2341,
-                "col_count": 15,
-                "imported_at": _ago(days=4),
-            },
-            {
-                "id": "sh-007",
-                "sheet_name": "Org Chart",
-                "table_name": "employee_headcount_2024_OrgChart",
-                "row_count": 48,
-                "col_count": 6,
-                "imported_at": _ago(days=4),
-            },
-        ],
-    },
-]
-
-MOCK_PREVIEW_COLUMNS = [
-    "customer_name", "region", "product_sku", "quantity", "unit_price",
-    "total_revenue", "order_date", "channel", "rep_name", "status",
-]
-
-MOCK_PREVIEW_ROWS = [
-    ["Acme Corp", "North America", "SKU-4821", 12, 399.99, 4799.88, "2024-01-15", "Direct", "Sarah Chen", "Completed"],
-    ["GlobalTech Ltd", "Europe", "SKU-2034", 5, 1299.00, 6495.00, "2024-01-18", "Partner", "James Okafor", "Completed"],
-    ["Pacific Ventures", "Asia Pacific", "SKU-9102", 20, 89.50, 1790.00, "2024-01-22", "Online", "Priya Nair", "Completed"],
-    ["Sunrise Industries", "North America", "SKU-4821", 8, 399.99, 3199.92, "2024-02-01", "Direct", "Marcus Webb", "Completed"],
-    ["Delta Systems", "Europe", "SKU-7743", 3, 2100.00, 6300.00, "2024-02-08", "Partner", "Elena Vasquez", "Completed"],
-    ["Orion Group", "Latin America", "SKU-2034", 7, 1299.00, 9093.00, "2024-02-14", "Direct", "Ricardo Lima", "Completed"],
-    ["Meridian Co", "Middle East", "SKU-5512", 15, 450.00, 6750.00, "2024-02-20", "Online", "Amir Hassan", "Completed"],
-    ["Nexus Partners", "North America", "SKU-9102", 30, 89.50, 2685.00, "2024-03-02", "Reseller", "Diana Park", "Completed"],
-    ["Summit Retail", "Europe", "SKU-4821", 6, 399.99, 2399.94, "2024-03-10", "Direct", "Oliver Grant", "Completed"],
-    ["Apex Solutions", "Asia Pacific", "SKU-7743", 2, 2100.00, 4200.00, "2024-03-18", "Partner", "Wei Zhang", "Completed"],
-]
-
-
 def get_all() -> list[DataSourceResponse]:
+    conn = get_connection()
+    rows = conn.execute("SELECT id, original_filename, stored_path, uploaded_at, num_sheets, file_size_bytes, status, error_message, row_count, column_count, updated_at FROM excel_files ORDER BY uploaded_at DESC").fetchall()
+    
     result = []
-    for src in MOCK_SOURCES:
-        sheets = [SheetResponse(**s) for s in src["sheets"]]
+    for row in rows:
+        sheets = []
+        if row[6] == 'completed':
+            sheets = [
+                SheetResponse(
+                    id=f"{row[0]}_sh1",
+                    sheet_name="Sheet1",
+                    table_name=f"file_{row[0].replace('-', '_')}",
+                    row_count=row[8] or 0,
+                    col_count=row[9] or 0,
+                    imported_at=row[10] or row[3]
+                )
+            ]
+            
         result.append(
             DataSourceResponse(
-                id=src["id"],
-                original_filename=src["original_filename"],
-                stored_path=src["stored_path"],
-                uploaded_at=src["uploaded_at"],
-                num_sheets=src["num_sheets"],
-                file_size_bytes=src["file_size_bytes"],
+                id=row[0],
+                original_filename=row[1],
+                stored_path=row[2],
+                uploaded_at=row[3],
+                num_sheets=row[4] or 1,
+                file_size_bytes=row[5] or 0,
+                status=row[6],
+                error_message=row[7],
                 sheets=sheets,
             )
         )
     return result
 
-
 def upload_file(filename: str, size: int) -> DataSourceResponse:
-    now = _now()
-    sheet = SheetResponse(
-        id=f"sh-new-{int(now.timestamp())}",
-        sheet_name="Sheet1",
-        table_name=f"uploaded_{int(now.timestamp())}_Sheet1",
-        row_count=1000,
-        col_count=10,
-        imported_at=now,
-    )
-    return DataSourceResponse(
-        id=f"ds-new-{int(now.timestamp())}",
-        original_filename=filename,
-        stored_path=f"uploads/{filename}",
-        uploaded_at=now,
-        num_sheets=1,
-        file_size_bytes=size,
-        sheets=[sheet],
-    )
-
-
-def delete(source_id: str) -> None:
+    # This will be replaced by direct logic in the router
     pass
 
+def delete(source_id: str) -> None:
+    conn = get_connection()
+    row = conn.execute("SELECT stored_path FROM excel_files WHERE id = ?", [source_id]).fetchone()
+    if row:
+        stored_path = row[0]
+        if os.path.exists(stored_path):
+            os.remove(stored_path)
+            
+    # Drop table
+    conn.execute(f"DROP TABLE IF EXISTS file_{source_id.replace('-', '_')}")
+    
+    # Delete record
+    conn.execute("DELETE FROM excel_files WHERE id = ?", [source_id])
 
 def get_preview(source_id: str) -> PreviewResponse:
+    conn = get_connection()
+    table_name = f"file_{source_id.replace('-', '_')}"
+    
+    try:
+        # Check if table exists
+        conn.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
+    except:
+        return PreviewResponse(columns=[], rows=[])
+        
+    df = conn.execute(f"SELECT * FROM {table_name} LIMIT 50").fetchdf()
+    columns = list(df.columns)
+    rows = df.values.tolist()
+    
+    # convert NaNs to None for JSON serialization
+    cleaned_rows = []
+    for row in rows:
+        cleaned_rows.append([None if pd.isna(x) else x for x in row])
+        
     return PreviewResponse(
-        columns=MOCK_PREVIEW_COLUMNS,
-        rows=MOCK_PREVIEW_ROWS,
+        columns=columns,
+        rows=cleaned_rows,
     )
 
-
 def list_for_autocomplete() -> AutocompleteResponse:
+    conn = get_connection()
+    rows = conn.execute("SELECT original_filename FROM excel_files WHERE status = 'completed'").fetchall()
+    
     files = [
         AutocompleteFile(
-            filename=src["original_filename"],
-            sheets=[s["sheet_name"] for s in src["sheets"]],
+            filename=row[0],
+            sheets=["Sheet1"],
         )
-        for src in MOCK_SOURCES
+        for row in rows
     ]
     return AutocompleteResponse(files=files)
+
+import pandas as pd

@@ -20,6 +20,7 @@ class SettingsResponse(BaseModel):
     ollama: OllamaSettingsSchema = OllamaSettingsSchema()
     username: str = ""
     created_at: str = ""
+    max_concurrent_uploads: int = 1
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -27,6 +28,7 @@ class UpdateSettingsRequest(BaseModel):
     llm_provider: Optional[str] = None
     openai: Optional[OpenAISettingsSchema] = None
     ollama: Optional[OllamaSettingsSchema] = None
+    max_concurrent_uploads: Optional[int] = None
 
 
 class TestLLMRequest(BaseModel):

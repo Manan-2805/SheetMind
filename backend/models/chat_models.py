@@ -1,5 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import time
+import json
+import httpx
+import pandas as pd
+from openai import AsyncOpenAI
 
 from schemas.chat_schemas import (
     ChatMessageResponse,
@@ -7,6 +12,7 @@ from schemas.chat_schemas import (
     ResultColumn,
     ResultTable,
 )
+from models.settings_models import get_settings
 
 
 def _now() -> datetime:
@@ -136,19 +142,76 @@ MOCK_MESSAGES: list[dict[str, Any]] = [
 ]
 
 
+from services.duckdb_service import get_connection
+
 def get_sessions() -> list[ChatSessionResponse]:
-    return [ChatSessionResponse(**s) for s in MOCK_SESSIONS]
+    conn = get_connection()
+    result = conn.execute("""
+        SELECT s.id, s.title, s.created_at, s.updated_at, s.is_favorite, COUNT(m.id) as message_count
+        FROM chat_sessions s
+        LEFT JOIN chat_messages m ON s.id = m.session_id
+        GROUP BY s.id, s.title, s.created_at, s.updated_at, s.is_favorite
+        ORDER BY s.updated_at DESC
+    """).fetchall()
+    
+    sessions = []
+    for row in result:
+        sessions.append(ChatSessionResponse(
+            id=row[0],
+            title=row[1],
+            created_at=row[2],
+            updated_at=row[3],
+            is_favorite=row[4],
+            message_count=row[5]
+        ))
+    return sessions
 
 
 def get_messages(session_id: str) -> list[ChatMessageResponse]:
-    return [ChatMessageResponse(**m) for m in MOCK_MESSAGES]
+    conn = get_connection()
+    result = conn.execute("""
+        SELECT id, session_id, role, content, created_at, sql_generated, 
+               sql_execution_ms, llm_generation_ms, token_count_input, 
+               token_count_output, confidence_score, result_row_count
+        FROM chat_messages
+        WHERE session_id = ?
+        ORDER BY created_at ASC
+    """, [session_id]).fetchall()
+    
+    messages = []
+    for row in result:
+        # We don't store result_data in DB currently to save space, but we could serialize it as JSON
+        # For this version we will return what we have
+        messages.append(ChatMessageResponse(
+            id=row[0],
+            session_id=row[1],
+            role=row[2],
+            content=row[3],
+            created_at=row[4],
+            sql_generated=row[5],
+            sql_execution_ms=row[6],
+            llm_generation_ms=row[7],
+            token_count_input=row[8],
+            token_count_output=row[9],
+            confidence_score=row[10],
+            result_row_count=row[11]
+        ))
+    return messages
 
 
 def create_session(title: str | None = None) -> ChatSessionResponse:
+    import uuid
     now = _now()
+    session_id = f"sess-{uuid.uuid4().hex[:8]}"
+    title = title or "New conversation"
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO chat_sessions (id, title, created_at, updated_at, is_favorite) VALUES (?, ?, ?, ?, ?)",
+        [session_id, title, now, now, False]
+    )
     return ChatSessionResponse(
-        id=f"sess-{int(now.timestamp())}",
-        title=title or "New conversation",
+        id=session_id,
+        title=title,
         created_at=now,
         updated_at=now,
         is_favorite=False,
@@ -156,26 +219,437 @@ def create_session(title: str | None = None) -> ChatSessionResponse:
     )
 
 
-def create_message(
+def update_session(session_id: str, title: str | None = None, is_favorite: bool | None = None) -> ChatSessionResponse:
+    conn = get_connection()
+    if title is not None:
+        conn.execute("UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?", [title, _now(), session_id])
+    if is_favorite is not None:
+        conn.execute("UPDATE chat_sessions SET is_favorite = ?, updated_at = ? WHERE id = ?", [is_favorite, _now(), session_id])
+    
+    # fetch updated session
+    row = conn.execute("SELECT id, title, created_at, updated_at, is_favorite FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
+    if row:
+        return ChatSessionResponse(
+            id=row[0], title=row[1], created_at=row[2], updated_at=row[3], is_favorite=row[4], message_count=0
+        )
+    raise ValueError("Session not found")
+
+def delete_session(session_id: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM chat_messages WHERE session_id = ?", [session_id])
+    conn.execute("DELETE FROM chat_sessions WHERE id = ?", [session_id])
+
+
+def set_message_feedback(message_id: str, feedback: str) -> None:
+    conn = get_connection()
+    conn.execute(
+        "UPDATE chat_messages SET feedback = ? WHERE id = ?",
+        [feedback, message_id]
+    )
+
+def _extract_json_sql(raw: str) -> tuple[str, str]:
+    """Parse JSON response {sql, message} from LLM. Returns (sql, message)."""
+    text = raw.strip()
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        lines = text.splitlines()
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    try:
+        data = json.loads(text)
+        return str(data.get("sql", "")).strip(), str(data.get("message") or "")
+    except json.JSONDecodeError:
+        pass
+    # Fallback: extract first SELECT/WITH/INSERT block
+    import re
+    match = re.search(r"((?:SELECT|WITH|INSERT|UPDATE|DELETE)[\s\S]+?)(?:```|$)", text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip(), ""
+    return text, ""
+
+
+async def generate_sql(content: str, schema_info: str) -> tuple[str, str]:
+    """Returns (sql, llm_message) where llm_message is optional context from the LLM."""
+    prompt = f"""You are an expert DuckDB SQL generator.
+
+The following DuckDB tables are available (use ONLY these exact table names in your SQL, never use file names or sheet names):
+
+{schema_info}
+
+CRITICAL RULES:
+- Use ONLY the exact "DuckDB Table Name" values shown above (e.g. file_abc123_def456) in your FROM clause.
+- Do NOT use file names, sheet names, or any other identifiers.
+- Respond with ONLY a valid JSON object, no prose, no markdown fences.
+
+Required JSON format:
+{{"sql": "<the complete DuckDB SQL query>", "message": "<optional one-sentence note, or null>"}}
+
+User question: "{content}"""""
+    with open("llm_prompt_debug.txt", "w") as f:
+        f.write(prompt)
+
+    settings = get_settings()
+    if settings.llm_provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        response = await client.chat.completions.create(
+            model=settings.openai.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        return _extract_json_sql(response.choices[0].message.content or "")
+    else:
+        url = settings.ollama.url.rstrip("/")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{url}/api/generate",
+                json={
+                    "model": settings.ollama.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json",
+                },
+                timeout=60.0
+            )
+            resp.raise_for_status()
+            return _extract_json_sql(resp.json()["response"])
+
+async def generate_nl_summary(content: str, sql: str, results: list) -> str:
+    results_str = json.dumps(results[:20], default=str)
+    prompt = f"""You are a helpful data analyst assistant. 
+The user asked: "{content}"
+I ran the following SQL query:
+{sql}
+And got these results (showing up to 20 rows):
+{results_str}
+
+Please provide a concise, natural language summary of these results to answer the user's question directly.
+Do not mention the SQL query itself, just interpret the data."""
+
+    settings = get_settings()
+    if settings.llm_provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        response = await client.chat.completions.create(
+            model=settings.openai.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    else:
+        url = settings.ollama.url.rstrip("/")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{url}/api/generate",
+                json={
+                    "model": settings.ollama.model,
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=60.0
+            )
+            resp.raise_for_status()
+            return resp.json()["response"].strip()
+
+
+async def generate_title(content: str) -> str:
+    prompt = f"""Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: "{content}". Do not use quotes or prefixes, just the title text."""
+    settings = get_settings()
+    if settings.llm_provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        response = await client.chat.completions.create(
+            model=settings.openai.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    else:
+        url = settings.ollama.url.rstrip("/")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{url}/api/generate",
+                json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
+                timeout=30.0
+            )
+            resp.raise_for_status()
+            return resp.json()["response"].strip()
+
+
+async def generate_query_label(nl_query: str, sql_query: str) -> str:
+    prompt = f"""Create a short, human-readable label (max 6 words) for a saved SQL query.
+The user asked: "{nl_query}"
+The SQL generated: {sql_query[:200]}
+Return ONLY the label text, no quotes, no punctuation at end."""
+    settings = get_settings()
+    if settings.llm_provider == "openai":
+        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        response = await client.chat.completions.create(
+            model=settings.openai.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    else:
+        url = settings.ollama.url.rstrip("/")
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{url}/api/generate",
+                json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
+                timeout=30.0
+            )
+            resp.raise_for_status()
+            return resp.json()["response"].strip()
+
+
+async def create_message(
     session_id: str,
     content: str,
     referenced_files: list[str],
 ) -> ChatMessageResponse:
+    import uuid
     now = _now()
+    conn = get_connection()
+    user_msg_id = f"msg-{uuid.uuid4().hex[:8]}-u"
+    conn.execute(
+        "INSERT INTO chat_messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+        [user_msg_id, session_id, "user", content, now]
+    )
+    
+    # 1. Fetch Schema - use referenced files if provided, else ALL completed files
+    schema_info = ""
+    files_to_describe = referenced_files
+
+    if not files_to_describe:
+        all_rows = conn.execute(
+            "SELECT original_filename FROM excel_files WHERE status = 'completed'"
+        ).fetchall()
+        files_to_describe = [r[0] for r in all_rows]
+
+    for filename in files_to_describe:
+        row = conn.execute(
+            "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
+            [filename]
+        ).fetchone()
+        if row:
+            table_name = f"file_{row[0].replace('-', '_')}"
+            try:
+                # Get columns
+                cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
+                col_defs = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
+                schema_info += (
+                    f"DuckDB Table Name: {table_name}\n"
+                    f"  (source file: {filename})\n"
+                    f"  Columns: {col_defs}\n\n"
+                )
+            except Exception:
+                pass
+
+    if not schema_info:
+        schema_info = "No completed tables available yet."
+
+    # Check if first message AND session still has default title (guard against re-triggering)
+    msg_count = conn.execute(
+        "SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]
+    ).fetchone()[0]
+    sess_row = conn.execute(
+        "SELECT title FROM chat_sessions WHERE id = ?", [session_id]
+    ).fetchone()
+    current_title = sess_row[0] if sess_row else ""
+    is_first = msg_count == 1 and current_title in ("New conversation", "", None)
+
+    # 2. Generate SQL and potentially Title
+    t0 = time.time()
+    session_title: str | None = None
+    llm_message: str = ""
+    try:
+        if is_first:
+            import asyncio
+            (sql_result, llm_message), title = await asyncio.gather(
+                generate_sql(content, schema_info),
+                generate_title(content)
+            )
+            conn.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id])
+            session_title = title
+        else:
+            sql_result, llm_message = await generate_sql(content, schema_info)
+
+        sql = sql_result.strip()
+    except Exception as e:
+        sql = f"ERROR: Failed to generate SQL: {str(e)}"
+        llm_message = ""
+    t1 = time.time()
+    llm_ms = int((t1 - t0) * 1000)
+
+    # 3. Execute SQL
+    sql_ms = 0
+    result_table = None
+    result_rows = []
+    # Use LLM message as fallback if SQL failed to generate
+    nl_summary = llm_message if (sql.startswith("ERROR") and llm_message) else "Could not generate or execute SQL successfully."
+
+    if not sql.startswith("ERROR"):
+        t2 = time.time()
+        try:
+            df = conn.execute(sql).fetchdf()
+            sql_ms = int((time.time() - t2) * 1000)
+            
+            # Format results
+            columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
+            rows = df.to_dict('records')
+            
+            # clean NaNs
+            clean_rows = []
+            for r in rows:
+                clean_r = {}
+                for k, v in r.items():
+                    clean_r[k] = None if pd.isna(v) else v
+                clean_rows.append(clean_r)
+            
+            result_table = ResultTable(columns=columns, rows=clean_rows, total_rows=len(clean_rows))
+            result_rows = clean_rows
+            
+            # 4. Generate NL Summary
+            t3 = time.time()
+            try:
+                nl_summary = await generate_nl_summary(content, sql, result_rows)
+            except Exception as e:
+                nl_summary = f"Generated SQL executed successfully, but failed to generate summary: {str(e)}"
+            llm_ms += int((time.time() - t3) * 1000)
+            
+        except Exception as e:
+            sql_ms = int((time.time() - t2) * 1000)
+            nl_summary = f"SQL Execution Failed: {str(e)}"
+
+    # 5. Save assistant message
+    now2 = _now()
+    assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-a"
+    
+    conn.execute(
+        """INSERT INTO chat_messages 
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows)]
+    )
+    conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
+    
     return ChatMessageResponse(
-        id=f"msg-{int(now.timestamp())}",
+        id=assistant_msg_id,
         session_id=session_id,
         role="assistant",
-        content=f"Based on your query about **\"{content[:60]}...\"**, here are the results from the dataset.",
-        created_at=now,
-        sql_generated=f"SELECT * FROM sheet1\nWHERE condition = 'value'\nORDER BY column DESC\nLIMIT 20;",
-        sql_execution_ms=42,
-        llm_generation_ms=680,
-        token_count_input=len(content.split()) * 2,
-        token_count_output=87,
-        confidence_score=4,
-        result_row_count=20,
-        result_data=MOCK_RESULT_TABLE,
-        nl_summary="The query returned 20 rows matching the specified criteria. Values are sorted in descending order by the primary metric.",
+        content=nl_summary,
+        created_at=now2,
+        sql_generated=sql,
+        sql_execution_ms=sql_ms,
+        llm_generation_ms=llm_ms,
+        result_row_count=len(result_rows),
+        result_data=result_table,
+        referenced_files=referenced_files,
+        session_title=session_title,
+    )
+
+
+async def regenerate_response(
+    session_id: str,
+    content: str,
+    referenced_files: list[str],
+) -> ChatMessageResponse:
+    """Re-run SQL generation + execution for an existing user query without inserting a new user message."""
+    import uuid
+    conn = get_connection()
+
+    schema_info = ""
+    files_to_describe = referenced_files
+
+    if not files_to_describe:
+        all_rows = conn.execute(
+            "SELECT original_filename FROM excel_files WHERE status = 'completed'"
+        ).fetchall()
+        files_to_describe = [r[0] for r in all_rows]
+
+    for filename in files_to_describe:
+        row = conn.execute(
+            "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
+            [filename]
+        ).fetchone()
+        if row:
+            table_name = f"file_{row[0].replace('-', '_')}"
+            try:
+                cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
+                col_defs = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
+                schema_info += (
+                    f"DuckDB Table Name: {table_name}\n"
+                    f"  (source file: {filename})\n"
+                    f"  Columns: {col_defs}\n\n"
+                )
+            except Exception:
+                pass
+
+    if not schema_info:
+        schema_info = "No completed tables available yet."
+
+    t0 = time.time()
+    try:
+        sql_result, _llm_msg = await generate_sql(content, schema_info)
+        sql = sql_result.strip()
+    except Exception as e:
+        sql = f"ERROR: Failed to generate SQL: {str(e)}"
+    t1 = time.time()
+    llm_ms = int((t1 - t0) * 1000)
+
+    sql_ms = 0
+    result_table = None
+    result_rows = []
+    nl_summary = "Could not generate or execute SQL successfully."
+
+    if not sql.startswith("ERROR"):
+        t2 = time.time()
+        try:
+            df = conn.execute(sql).fetchdf()
+            sql_ms = int((time.time() - t2) * 1000)
+
+            columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
+            rows = df.to_dict('records')
+
+            clean_rows = []
+            for r in rows:
+                clean_r = {}
+                for k, v in r.items():
+                    clean_r[k] = None if pd.isna(v) else v
+                clean_rows.append(clean_r)
+
+            result_table = ResultTable(columns=columns, rows=clean_rows, total_rows=len(clean_rows))
+            result_rows = clean_rows
+
+            t3 = time.time()
+            try:
+                nl_summary = await generate_nl_summary(content, sql, result_rows)
+            except Exception as e:
+                nl_summary = f"SQL executed, but failed to generate summary: {str(e)}"
+            llm_ms += int((time.time() - t3) * 1000)
+
+        except Exception as e:
+            sql_ms = int((time.time() - t2) * 1000)
+            nl_summary = f"SQL Execution Failed: {str(e)}"
+
+    now2 = _now()
+    assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-r"
+
+    conn.execute(
+        """INSERT INTO chat_messages
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows)]
+    )
+    conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
+
+    return ChatMessageResponse(
+        id=assistant_msg_id,
+        session_id=session_id,
+        role="assistant",
+        content=nl_summary,
+        created_at=now2,
+        sql_generated=sql,
+        sql_execution_ms=sql_ms,
+        llm_generation_ms=llm_ms,
+        result_row_count=len(result_rows),
+        result_data=result_table,
         referenced_files=referenced_files,
     )
