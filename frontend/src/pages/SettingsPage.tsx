@@ -70,10 +70,10 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
   const buttonText = isLoading
     ? "Processing..."
     : isConfirming && isRunning
-    ? `Confirm in ${count}...`
-    : isConfirming && count === 0
-    ? "Confirm now"
-    : label;
+      ? `Confirm in ${count}...`
+      : isConfirming && count === 0
+        ? "Confirm now"
+        : label;
 
   return (
     <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
@@ -120,6 +120,7 @@ export function SettingsPage() {
   const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
   const [ollamaSelectedModel, setOllamaSelectedModel] = useState<string>("");
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState<number>(1);
+  const [resultRowLimit, setResultRowLimit] = useState<number>(500);
 
   useEffect(() => {
     getSettings()
@@ -130,6 +131,7 @@ export function SettingsPage() {
         setOllamaUrl(s.ollama.url);
         setOllamaSelectedModel(s.ollama.model || "");
         setMaxConcurrentUploads(s.max_concurrent_uploads || 1);
+        setResultRowLimit(s.result_row_limit || 500);
       })
       .catch((err: { message?: string }) => {
         addToast({ type: "error", title: "Error", description: err.message });
@@ -140,7 +142,7 @@ export function SettingsPage() {
       if (data && data.models) {
         setOllamaModels(data.models);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, [addToast]);
 
   const handleThemeChange = async (t: Theme) => {
@@ -197,11 +199,11 @@ export function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model_name: pullModelInput.trim() }),
       });
-      
+
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -220,7 +222,7 @@ export function SettingsPage() {
 
       addToast({ type: "success", title: "Model pulled", description: pullModelInput.trim() });
       setPullModelInput("");
-      
+
       // Refresh models
       const modelsData = await getOllamaModels();
       if (modelsData && modelsData.models) setOllamaModels(modelsData.models);
@@ -520,7 +522,7 @@ export function SettingsPage() {
                         </div>
                       </div>
                     )}
-                    </div>
+                  </div>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={handleTestLLM}
@@ -569,9 +571,32 @@ export function SettingsPage() {
                   onChange={(e) => {
                     const val = parseInt(e.target.value) || 1;
                     setMaxConcurrentUploads(val);
-                    updateSettings({ max_concurrent_uploads: val }).catch(() => {});
+                    updateSettings({ max_concurrent_uploads: val }).catch(() => { });
                   }}
                   className="w-20 rounded-lg px-3 py-2 text-body outline-none text-center"
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Result Row Limit</p>
+                  <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per result table</p>
+                </div>
+                <input
+                  type="number"
+                  min="10"
+                  max="5000"
+                  value={resultRowLimit}
+                  onChange={(e) => {
+                    const val = Math.max(10, parseInt(e.target.value) || 10);
+                    setResultRowLimit(val);
+                    updateSettings({ result_row_limit: val }).catch(() => { });
+                  }}
+                  className="w-24 rounded-lg px-3 py-2 text-body outline-none text-center"
                   style={{
                     backgroundColor: "var(--color-bg-hover)",
                     border: "1px solid var(--color-border-default)",

@@ -1,5 +1,4 @@
 import json
-import duckdb
 from schemas.settings_schemas import SettingsResponse
 from services.duckdb_service import get_connection
 
@@ -36,11 +35,20 @@ def delete_all_files_db() -> int:
     
     for row in rows:
         file_id = row[0]
-        table_name = f"file_{file_id.replace('-', '_')}"
+        sheet_tables = conn.execute(
+            "SELECT table_name FROM excel_sheets WHERE excel_file_id = ?",
+            [file_id],
+        ).fetchall()
+        for table_row in sheet_tables:
+            try:
+                conn.execute(f"DROP TABLE IF EXISTS {table_row[0]}")
+            except Exception:
+                pass
         try:
-            conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            conn.execute(f"DROP TABLE IF EXISTS file_{file_id.replace('-', '_')}")
         except Exception:
             pass
             
     conn.execute("DELETE FROM excel_files")
+    conn.execute("DELETE FROM excel_sheets")
     return count

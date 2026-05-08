@@ -12,9 +12,14 @@ class SavedQueryResponse(BaseModel):
     created_at: datetime
     last_used_at: datetime
     use_count: int
+    is_favorite: bool = False
 
 
 class CreateSavedQueryRequest(BaseModel):
     label: str
     nl_query: str
     sql_query: str
+
+
+class UpdateSavedQueryRequest(BaseModel):
+    label: str

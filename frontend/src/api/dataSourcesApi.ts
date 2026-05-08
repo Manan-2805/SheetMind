@@ -59,11 +59,13 @@ export async function deleteDataSource(id: string): Promise<void> {
 }
 
 export async function getDataSourcePreview(
-  id: string
+  id: string,
+  sheet?: string
 ): Promise<DataSourcePreview> {
   try {
+    const params = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
     const res: AxiosResponse<DataSourcePreview> = await client.get(
-      `/data-sources/${id}/preview`
+      `/data-sources/${id}/preview${params}`
     );
     return res.data;
   } catch (error) {

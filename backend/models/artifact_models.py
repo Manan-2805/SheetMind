@@ -1,80 +1,152 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any
+import os
+import uuid
+from datetime import datetime, timezone
 
 from schemas.artifact_schemas import (
     ArtifactChartResponse,
     ArtifactExportResponse,
     ArtifactsResponse,
 )
+from services.duckdb_service import get_connection
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _ago(days: int = 0, minutes: int = 0, hours: int = 0) -> datetime:
-    return _now() - timedelta(days=days, minutes=minutes, hours=hours)
+def _get_source_session_name(conn, source_message_id: str | None) -> str | None:
+    if not source_message_id:
+        return None
+    row = conn.execute(
+        """
+        SELECT s.title
+        FROM chat_messages m
+        JOIN chat_sessions s ON s.id = m.session_id
+        WHERE m.id = ?
+        """,
+        [source_message_id],
+    ).fetchone()
+    return row[0] if row else None
 
 
 def get_all() -> ArtifactsResponse:
-    excel_exports = [
-        ArtifactExportResponse(
-            id="art-001",
-            filename="Top_Customers_Q1_2024.xlsx",
-            file_path="artifacts/Top_Customers_Q1_2024.xlsx",
-            file_size_bytes=148_320,
-            created_at=_ago(minutes=45),
-            source_message_id="msg-002",
-            source_session_name="Q1 Revenue Breakdown",
-            title="Top 10 Customers by Revenue — Q1 2024",
-        ),
-        ArtifactExportResponse(
-            id="art-002",
-            filename="Marketing_Channel_Analysis.xlsx",
-            file_path="artifacts/Marketing_Channel_Analysis.xlsx",
-            file_size_bytes=92_480,
-            created_at=_ago(hours=3),
-            source_message_id="msg-010",
-            source_session_name="Marketing Spend by Channel",
-            title="Marketing Spend vs ROI by Channel",
-        ),
-        ArtifactExportResponse(
-            id="art-003",
-            filename="Inventory_Turnover_Report.xlsx",
-            file_path="artifacts/Inventory_Turnover_Report.xlsx",
-            file_size_bytes=234_112,
-            created_at=_ago(days=2),
-            source_message_id="msg-024",
-            source_session_name="Inventory Turnover Analysis",
-            title="Inventory Turnover by SKU — Last 90 Days",
-        ),
-    ]
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT id, type, filename, file_path, file_size_bytes, created_at, source_message_id, title
+        FROM artifacts
+        ORDER BY created_at DESC
+        """
+    ).fetchall()
 
-    charts = [
-        ArtifactChartResponse(
-            id="art-chart-001",
-            chart_type="bar",
-            title="Revenue by Region — Q1 2024",
-            created_at=_ago(hours=1),
-            source_message_id="msg-002",
-            source_session_name="Q1 Revenue Breakdown",
-        ),
-        ArtifactChartResponse(
-            id="art-chart-002",
-            chart_type="line",
-            title="Monthly Active Users Trend",
-            created_at=_ago(hours=5),
-            source_message_id="msg-015",
-            source_session_name="User Growth Analysis",
-        ),
-        ArtifactChartResponse(
-            id="art-chart-003",
-            chart_type="donut",
-            title="Marketing Budget Allocation",
-            created_at=_ago(days=1),
-            source_message_id="msg-011",
-            source_session_name="Marketing Spend by Channel",
-        ),
-    ]
+    excel_exports: list[ArtifactExportResponse] = []
+    charts: list[ArtifactChartResponse] = []
+
+    for row in rows:
+        artifact_id, artifact_type, filename, file_path, file_size, created_at, source_message_id, title = row
+        if artifact_type == "excel_export":
+            source_session_name = _get_source_session_name(conn, source_message_id)
+            excel_exports.append(
+                ArtifactExportResponse(
+                    id=str(artifact_id),
+                    filename=filename,
+                    file_path=file_path,
+                    file_size_bytes=int(file_size or 0),
+                    created_at=created_at,
+                    source_message_id=source_message_id,
+                    source_session_name=source_session_name,
+                    title=title or filename,
+                )
+            )
+        elif artifact_type == "chart":
+            source_session_name = _get_source_session_name(conn, source_message_id)
+            charts.append(
+                ArtifactChartResponse(
+                    id=str(artifact_id),
+                    chart_type="",
+                    title=title or filename,
+                    created_at=created_at,
+                    source_message_id=source_message_id,
+                    source_session_name=source_session_name,
+                )
+            )
 
     return ArtifactsResponse(excel_exports=excel_exports, charts=charts)
+
+
+def create_export(
+    filename: str,
+    file_path: str,
+    file_size_bytes: int,
+    title: str,
+    source_message_id: str | None,
+) -> ArtifactExportResponse:
+    conn = get_connection()
+    artifact_id = f"art-{uuid.uuid4().hex[:10]}"
+    created_at = _now()
+    conn.execute(
+        """
+        INSERT INTO artifacts
+        (id, type, filename, file_path, file_size_bytes, created_at, source_message_id, title)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [artifact_id, "excel_export", filename, file_path, file_size_bytes, created_at, source_message_id, title],
+    )
+    source_session_name = _get_source_session_name(conn, source_message_id)
+    return ArtifactExportResponse(
+        id=artifact_id,
+        filename=filename,
+        file_path=file_path,
+        file_size_bytes=file_size_bytes,
+        created_at=created_at,
+        source_message_id=source_message_id,
+        source_session_name=source_session_name,
+        title=title,
+    )
+
+
+def get_by_id(artifact_id: str):
+    conn = get_connection()
+    return conn.execute(
+        """
+        SELECT id, type, filename, file_path, file_size_bytes, created_at, source_message_id, title
+        FROM artifacts
+        WHERE id = ?
+        """,
+        [artifact_id],
+    ).fetchone()
+
+
+def delete(artifact_id: str) -> bool:
+    conn = get_connection()
+    row = get_by_id(artifact_id)
+    if not row:
+        return False
+    _, _, _, file_path, _, _, _, _ = row
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
+    conn.execute("DELETE FROM artifacts WHERE id = ?", [artifact_id])
+    return True
+
+
+def rename(artifact_id: str, title: str) -> ArtifactExportResponse | None:
+    conn = get_connection()
+    conn.execute("UPDATE artifacts SET title = ? WHERE id = ?", [title, artifact_id])
+    row = get_by_id(artifact_id)
+    if not row:
+        return None
+    _, _, filename, file_path, file_size, created_at, source_message_id, stored_title = row
+    source_session_name = _get_source_session_name(conn, source_message_id)
+    return ArtifactExportResponse(
+        id=artifact_id,
+        filename=filename,
+        file_path=file_path,
+        file_size_bytes=int(file_size or 0),
+        created_at=created_at,
+        source_message_id=source_message_id,
+        source_session_name=source_session_name,
+        title=stored_title or filename,
+    )

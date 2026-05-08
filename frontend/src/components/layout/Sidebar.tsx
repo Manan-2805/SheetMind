@@ -16,14 +16,14 @@ import {
 import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/utils/cn";
 
-type ActiveView = "chat" | "data-sources" | "settings";
-type ActiveDrawer = "history" | "artifacts" | "saved-queries" | null;
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts";
+type ActiveDrawer = "history" | null;
 
 interface SidebarProps {
   activeView: ActiveView;
   activeDrawer: ActiveDrawer;
   onViewChange: (view: ActiveView) => void;
-  onDrawerToggle: (drawer: "history" | "artifacts" | "saved-queries") => void;
+  onDrawerToggle: (drawer: "history") => void;
   onNewChat: () => void;
 }
 
@@ -150,14 +150,14 @@ export function Sidebar({
       <SidebarButton
         icon={Package}
         label="Artifacts"
-        isActive={activeDrawer === "artifacts"}
-        onClick={() => onDrawerToggle("artifacts")}
+        isActive={activeView === "artifacts"}
+        onClick={() => onViewChange("artifacts")}
       />
       <SidebarButton
         icon={Bookmark}
         label="Saved Queries"
-        isActive={activeDrawer === "saved-queries"}
-        onClick={() => onDrawerToggle("saved-queries")}
+        isActive={activeView === "saved-queries"}
+        onClick={() => onViewChange("saved-queries")}
       />
 
       <div className="flex-1" />
@@ -220,7 +220,7 @@ export function Sidebar({
           Toggle theme
         </TooltipContent>
       </Tooltip>
-      
+
       <Tooltip>
         <TooltipTrigger
           render={

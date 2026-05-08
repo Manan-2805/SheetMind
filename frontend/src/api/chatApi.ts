@@ -1,6 +1,7 @@
 import axios, { type AxiosResponse } from "axios";
 
-import type { ChatMessage, ChatSession } from "@/types/ChatMessage";
+import type { ArtifactExport } from "@/types/Artifact";
+import type { ChatMessage, ChatSession, ResultTable } from "@/types/ChatMessage";
 
 import { apiClient as client } from "./apiClient";
 
@@ -106,6 +107,28 @@ export async function regenerateMessage(
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/regenerate`,
       { content, referenced_files: referencedFiles }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function getMessageData(messageId: string): Promise<ResultTable> {
+  try {
+    const res: AxiosResponse<ResultTable> = await client.get(
+      `/chat/messages/${messageId}/data`
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function exportMessage(messageId: string): Promise<ArtifactExport> {
+  try {
+    const res: AxiosResponse<ArtifactExport> = await client.post(
+      `/chat/messages/${messageId}/export`
     );
     return res.data;
   } catch (error) {

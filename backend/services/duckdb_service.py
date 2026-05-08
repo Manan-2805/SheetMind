@@ -26,6 +26,12 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
 
+    def _safe_execute(statement: str) -> None:
+        try:
+            conn.execute(statement)
+        except Exception:
+            pass
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS excel_files (
             id VARCHAR PRIMARY KEY,
@@ -44,8 +50,8 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS excel_sheets (
-            id INTEGER PRIMARY KEY,
-            excel_file_id INTEGER NOT NULL,
+            id VARCHAR PRIMARY KEY,
+            excel_file_id VARCHAR NOT NULL,
             sheet_name VARCHAR NOT NULL,
             table_name VARCHAR NOT NULL,
             row_count INTEGER NOT NULL DEFAULT 0,
@@ -90,18 +96,20 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             sql_query VARCHAR NOT NULL,
             created_at TIMESTAMP NOT NULL,
             last_used_at TIMESTAMP NOT NULL,
-            use_count INTEGER DEFAULT 0
+            use_count INTEGER DEFAULT 0,
+            is_favorite BOOLEAN DEFAULT false
         )
     """)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS artifacts (
-            id INTEGER PRIMARY KEY,
+            id VARCHAR PRIMARY KEY,
             type VARCHAR NOT NULL,
             filename VARCHAR NOT NULL,
             file_path VARCHAR NOT NULL,
+            file_size_bytes BIGINT NOT NULL DEFAULT 0,
             created_at TIMESTAMP NOT NULL,
-            source_message_id INTEGER,
+            source_message_id VARCHAR,
             title VARCHAR
         )
     """)
@@ -112,3 +120,11 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             settings_json VARCHAR NOT NULL
         )
     """)
+
+    _safe_execute("ALTER TABLE excel_sheets ALTER COLUMN id SET DATA TYPE VARCHAR")
+    _safe_execute("ALTER TABLE excel_sheets ALTER COLUMN excel_file_id SET DATA TYPE VARCHAR")
+    _safe_execute("ALTER TABLE saved_queries ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false")
+    _safe_execute("ALTER TABLE artifacts ALTER COLUMN id SET DATA TYPE VARCHAR")
+    _safe_execute("ALTER TABLE artifacts ALTER COLUMN source_message_id SET DATA TYPE VARCHAR")
+    _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT DEFAULT 0")
+    _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS title VARCHAR")

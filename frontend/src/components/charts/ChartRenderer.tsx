@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import ReactApexChart from "react-apexcharts";
-import type { ApexOptions } from "apexcharts";
+import type { ApexAxisChartSeries, ApexNonAxisChartSeries } from "apexcharts";
 
 import { useTheme } from "@/hooks/useTheme";
 import { buildChartOptions } from "@/utils/buildChartOptions";
@@ -16,17 +16,15 @@ type ChartType =
   | "histogram"
   | "heatmap";
 
-interface ChartSeries {
-  name: string;
-  data: number[];
-}
-
 interface ChartRendererProps {
   type: ChartType;
-  series: ChartSeries[];
+  series: ApexAxisChartSeries | ApexNonAxisChartSeries;
   categories?: string[];
+  labels?: string[];
   title?: string;
   height?: number;
+  chartId?: string;
+  colors?: string[];
 }
 
 function mapType(type: ChartType): string {
@@ -38,17 +36,17 @@ export function ChartRenderer({
   type,
   series,
   categories,
+  labels,
   title,
   height = 300,
+  chartId,
+  colors,
 }: ChartRendererProps) {
   const { resolvedTheme } = useTheme();
-  const options = useMemo<ApexOptions>(
-    () => buildChartOptions({ type, theme: resolvedTheme, title, categories, height }),
-    [type, resolvedTheme, title, categories, height]
+  const options = useMemo(
+    () => buildChartOptions({ type, theme: resolvedTheme, title, categories, labels, height, colors, chartId }),
+    [type, resolvedTheme, title, categories, labels, height, colors, chartId]
   );
-
-  const isPieDonut = type === "pie" || type === "donut";
-  const chartSeries = isPieDonut ? series.map((s) => s.data).flat() : series;
 
   return (
     <div
@@ -57,7 +55,7 @@ export function ChartRenderer({
     >
       <ReactApexChart
         type={mapType(type) as ApexCharts.ChartType}
-        series={chartSeries as ApexAxisChartSeries | ApexNonAxisChartSeries}
+        series={series}
         options={options}
         height={height}
       />

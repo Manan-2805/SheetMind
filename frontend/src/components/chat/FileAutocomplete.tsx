@@ -30,7 +30,7 @@ export function FileAutocomplete({
   useEffect(() => {
     listForAutocomplete()
       .then((res) => setFiles(res.files))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const flatItems: FlatItem[] = files
@@ -47,7 +47,7 @@ export function FileAutocomplete({
         .map((s) => ({
           type: "sheet" as const,
           label: s,
-          insertValue: `${f.filename}:${s}`,
+          insertValue: `${f.filename}::${s}`,
           parentFile: f.filename,
         })),
     ]);

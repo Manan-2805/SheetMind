@@ -2,19 +2,19 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-
 import { useCallback, useState, useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { ArtifactsDrawer } from "@/drawers/ArtifactsDrawer";
 import { HistoryDrawer } from "@/drawers/HistoryDrawer";
-import { SavedQueriesDrawer } from "@/drawers/SavedQueriesDrawer";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Toast } from "@/components/ui/Toast";
 import { useChat } from "@/hooks/useChat";
 
 import { ChatPage } from "@/pages/ChatPage";
 import { DataSourcesPage } from "@/pages/DataSourcesPage";
+import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
+import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 
-type ActiveView = "chat" | "data-sources" | "settings";
-type ActiveDrawer = "history" | "artifacts" | "saved-queries" | null;
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts";
+type ActiveDrawer = "history" | null;
 
 export function AppShell() {
   const navigate = useNavigate();
@@ -50,6 +50,8 @@ export function AppShell() {
 
   const getActiveView = (): ActiveView => {
     if (location.pathname.startsWith("/data-sources")) return "data-sources";
+    if (location.pathname.startsWith("/saved-queries")) return "saved-queries";
+    if (location.pathname.startsWith("/artifacts")) return "artifacts";
     if (location.pathname.startsWith("/settings")) return "settings";
     return "chat";
   };
@@ -57,12 +59,14 @@ export function AppShell() {
   const handleViewChange = useCallback((view: ActiveView) => {
     if (view === "chat") navigate("/chat/new");
     if (view === "data-sources") navigate("/data-sources");
+    if (view === "saved-queries") navigate("/saved-queries");
+    if (view === "artifacts") navigate("/artifacts");
     if (view === "settings") navigate("/settings");
     setActiveDrawer(null);
   }, [navigate]);
 
   const handleDrawerToggle = useCallback(
-    (drawer: "history" | "artifacts" | "saved-queries") => {
+    (drawer: "history") => {
       setActiveDrawer((prev) => (prev === drawer ? null : drawer));
     },
     []
@@ -82,15 +86,6 @@ export function AppShell() {
     [navigate]
   );
 
-  const handleRunQuery = useCallback(
-    (nlQuery: string) => {
-      navigate("/chat/new");
-      setActiveDrawer(null);
-      sendChatMessage(nlQuery);
-    },
-    [sendChatMessage, navigate]
-  );
-
   const handleChatSent = useCallback(async (content: string, files?: string[]) => {
     await sendChatMessage(content, files);
   }, [sendChatMessage]);
@@ -98,7 +93,7 @@ export function AppShell() {
   // When a message is sent in a "new" chat, we should ideally navigate to the new session ID.
   // We will handle this in useChat to return the new session ID and navigate there.
   // We'll update useChat to optionally take a navigate callback, or we handle it here.
-  
+
   return (
     <TooltipProvider delayDuration={500}>
       <div
@@ -120,17 +115,6 @@ export function AppShell() {
           onSelectSession={handleSelectSession}
         />
 
-        <ArtifactsDrawer
-          open={activeDrawer === "artifacts"}
-          onClose={() => setActiveDrawer(null)}
-        />
-
-        <SavedQueriesDrawer
-          open={activeDrawer === "saved-queries"}
-          onClose={() => setActiveDrawer(null)}
-          onRunQuery={handleRunQuery}
-        />
-
         <main className="flex flex-1 flex-col overflow-hidden">
           <Routes>
             <Route path="/" element={<Navigate to="/chat/new" replace />} />
@@ -148,6 +132,8 @@ export function AppShell() {
               />
             } />
             <Route path="/data-sources" element={<DataSourcesPage />} />
+            <Route path="/saved-queries" element={<SavedQueriesPage />} />
+            <Route path="/artifacts" element={<ArtifactsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

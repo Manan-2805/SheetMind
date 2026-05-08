@@ -14,8 +14,6 @@ interface SortState {
   direction: SortDirection;
 }
 
-const MAX_VISIBLE_ROWS = 8;
-
 export function ChatResultTable({ data }: ChatResultTableProps) {
   const [sort, setSort] = useState<SortState>({ column: null, direction: null });
 
@@ -42,8 +40,8 @@ export function ChatResultTable({ data }: ChatResultTableProps) {
     });
   }, [data.rows, sort]);
 
-  const visibleRows = sortedRows.slice(0, MAX_VISIBLE_ROWS);
-  const hasMore = data.total_rows > MAX_VISIBLE_ROWS;
+  const visibleRows = sortedRows;
+  const hasMore = data.total_rows > visibleRows.length;
 
   return (
     <div
@@ -108,9 +106,9 @@ export function ChatResultTable({ data }: ChatResultTableProps) {
                       ? typeof row[col.key] === "number" &&
                         String(row[col.key]).includes(".")
                         ? Number(row[col.key]).toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
                         : Number(row[col.key]).toLocaleString()
                       : String(row[col.key] ?? "")}
                   </td>

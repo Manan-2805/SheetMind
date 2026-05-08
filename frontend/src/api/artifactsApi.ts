@@ -1,6 +1,7 @@
 import axios, { type AxiosResponse } from "axios";
 
-import type { ArtifactsResponse } from "@/types/Artifact";
+import type { ArtifactExport, ArtifactsResponse } from "@/types/Artifact";
+import type { ResultTable } from "@/types/ChatMessage";
 
 import { apiClient as client } from "./apiClient";
 
@@ -30,4 +31,40 @@ export async function getArtifacts(): Promise<ArtifactsResponse> {
   } catch (error) {
     handleError(error);
   }
+}
+
+export async function deleteArtifact(id: string): Promise<void> {
+  try {
+    await client.delete(`/artifacts/${id}`);
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function renameArtifact(id: string, title: string): Promise<ArtifactExport> {
+  try {
+    const res: AxiosResponse<ArtifactExport> = await client.put(
+      `/artifacts/${id}`,
+      { title }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function getArtifactData(id: string): Promise<ResultTable> {
+  try {
+    const res: AxiosResponse<ResultTable> = await client.get(
+      `/artifacts/${id}/data`
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export function downloadArtifactUrl(id: string): string {
+  const base = client.defaults.baseURL ?? "";
+  return `${base}/artifacts/${id}/download`;
 }

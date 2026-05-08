@@ -6,6 +6,7 @@ export interface SavedQuery {
   created_at: string;
   last_used_at: string;
   use_count: number;
+  is_favorite: boolean;
 }
 
 export interface CreateSavedQueryRequest {

@@ -4,10 +4,11 @@ import { Sparkles, X } from "lucide-react";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
+import { QueryResultPanel } from "@/components/QueryResultPanel";
 import { SkeletonChatMessage } from "@/components/skeletons/SkeletonChatMessage";
-import type { ChatMessage as ChatMessageType } from "@/types/ChatMessage";
+import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 import { getDataSources } from "@/api/dataSourcesApi";
-import { setMessageFeedback, regenerateMessage } from "@/api/chatApi";
+import { exportMessage, getMessageData, regenerateMessage, setMessageFeedback } from "@/api/chatApi";
 import { createSavedQuery, generateLabel } from "@/api/savedQueriesApi";
 import { useToast } from "@/hooks/useToast";
 
@@ -46,6 +47,9 @@ export function ChatPage({
   const [saveLabel, setSaveLabel] = useState("");
   const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
   const [isSavingQuery, setIsSavingQuery] = useState(false);
+  const [activeResult, setActiveResult] = useState<{ message: ChatMessageType; result: ResultTable } | null>(null);
+  const [isLoadingResult, setIsLoadingResult] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -107,6 +111,45 @@ export function ChatPage({
       addToast({ type: "error", title: "Error", description: "Could not regenerate response" });
     }
   }, [activeSessionId, messages, onRegeneratedMessage, addToast]);
+
+  const handleViewChart = useCallback(async (msg: ChatMessageType) => {
+    if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
+      addToast({ type: "error", title: "No data", description: "This message has no results to chart." });
+      return;
+    }
+    if (msg.result_data) {
+      setActiveResult({ message: msg, result: msg.result_data });
+      return;
+    }
+    if (isLoadingResult) return;
+
+    setIsLoadingResult(true);
+    try {
+      const result = await getMessageData(msg.id);
+      setActiveResult({ message: msg, result });
+    } catch {
+      addToast({ type: "error", title: "Error", description: "Could not load results for charting" });
+    } finally {
+      setIsLoadingResult(false);
+    }
+  }, [addToast, isLoadingResult]);
+
+  const handleExport = useCallback(async (msg: ChatMessageType) => {
+    if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
+      addToast({ type: "error", title: "No data", description: "This message has no results to export." });
+      return;
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      await exportMessage(msg.id);
+      addToast({ type: "success", title: "Exported", description: "Excel file saved to artifacts" });
+    } catch {
+      addToast({ type: "error", title: "Error", description: "Could not export to Excel" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [addToast, isExporting]);
 
   const handleViewSQL = useCallback((msg: ChatMessageType) => {
     if (msg.sql_generated) {
@@ -179,6 +222,8 @@ export function ChatPage({
                   onRegenerate={() => handleRegenerate()}
                   onThumbUp={() => handleThumbUp(msg)}
                   onThumbDown={() => handleThumbDown(msg)}
+                  onViewChart={() => handleViewChart(msg)}
+                  onDownload={() => handleExport(msg)}
                   onViewSQL={() => handleViewSQL(msg)}
                   onStar={() => handleOpenSaveModal(msg)}
                 />
@@ -443,6 +488,18 @@ export function ChatPage({
             </div>
           </div>
         </div>
+      )}
+
+      {activeResult && (
+        <QueryResultPanel
+          open={!!activeResult}
+          onClose={() => setActiveResult(null)}
+          title="Chat result"
+          result={activeResult.result}
+          onExport={() => handleExport(activeResult.message)}
+          exporting={isExporting}
+          exportLabel="Export to Excel"
+        />
       )}
     </div>
   );

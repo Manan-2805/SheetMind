@@ -64,6 +64,8 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
         current_settings.ollama = body.ollama
     if body.max_concurrent_uploads is not None:
         current_settings.max_concurrent_uploads = body.max_concurrent_uploads
+    if body.result_row_limit is not None:
+        current_settings.result_row_limit = body.result_row_limit
         
     update_settings_db(current_settings)
     return current_settings

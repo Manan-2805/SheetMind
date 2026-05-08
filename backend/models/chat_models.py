@@ -1,18 +1,23 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any
-import time
 import json
-import httpx
-import pandas as pd
-from openai import AsyncOpenAI
+import re
+import time
+from typing import Any
 
+import httpx
+from openai import AsyncOpenAI
+import pandas as pd
+
+import models.artifact_models as artifact_models
+from models.settings_models import get_settings
 from schemas.chat_schemas import (
     ChatMessageResponse,
     ChatSessionResponse,
     ResultColumn,
     ResultTable,
 )
-from models.settings_models import get_settings
+from services.query_service import dataframe_to_result_table
+from services.storage_service import get_debug_prompts_dir, get_exports_dir
 
 
 def _now() -> datetime:
@@ -267,6 +272,224 @@ def _extract_json_sql(raw: str) -> tuple[str, str]:
     return text, ""
 
 
+def _write_debug_prompt(prompt: str) -> None:
+    debug_dir = get_debug_prompts_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    debug_path = debug_dir / f"prompt_{timestamp}.txt"
+    debug_path.write_text(prompt, encoding="utf-8")
+
+
+def _split_reference(value: str) -> tuple[str, str | None]:
+    if "::" in value:
+        filename, sheet_name = value.split("::", 1)
+        return filename.strip(), sheet_name.strip() or None
+    if ":" in value:
+        filename, sheet_name = value.split(":", 1)
+        return filename.strip(), sheet_name.strip() or None
+    return value.strip(), None
+
+
+def _extract_references_from_content(conn, content: str) -> list[str]:
+    if not content:
+        return []
+
+    file_rows = conn.execute(
+        "SELECT id, original_filename FROM excel_files WHERE status = 'completed'"
+    ).fetchall()
+    if not file_rows:
+        return []
+
+    sheets_rows = conn.execute(
+        "SELECT excel_file_id, sheet_name FROM excel_sheets"
+    ).fetchall()
+    sheets_by_file: dict[str, list[str]] = {}
+    for file_id, sheet_name in sheets_rows:
+        sheets_by_file.setdefault(str(file_id), []).append(str(sheet_name))
+
+    refs: list[str] = []
+    seen = set()
+    for file_id, filename in file_rows:
+        file_id = str(file_id)
+        filename = str(filename)
+        matched_sheet = False
+        for sheet_name in sheets_by_file.get(file_id, []):
+            if f"#{filename}::{sheet_name}" in content or f"#{filename}:{sheet_name}" in content:
+                ref = f"{filename}::{sheet_name}"
+                if ref not in seen:
+                    refs.append(ref)
+                    seen.add(ref)
+                matched_sheet = True
+        if not matched_sheet and f"#{filename}" in content:
+            if filename not in seen:
+                refs.append(filename)
+                seen.add(filename)
+    return refs
+
+
+def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> tuple[list[dict[str, str]], list[str]]:
+    effective_refs = [r for r in referenced_files if r.strip()]
+    if not effective_refs:
+        effective_refs = _extract_references_from_content(conn, content)
+
+    tables: list[dict[str, str]] = []
+    seen_tables: set[str] = set()
+
+    if effective_refs:
+        for ref in effective_refs:
+            filename, sheet_name = _split_reference(ref)
+            file_row = conn.execute(
+                "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
+                [filename],
+            ).fetchone()
+            if not file_row:
+                continue
+            file_id = str(file_row[0])
+            if sheet_name:
+                sheet_row = conn.execute(
+                    """
+                    SELECT sheet_name, table_name
+                    FROM excel_sheets
+                    WHERE excel_file_id = ? AND sheet_name = ?
+                    """,
+                    [file_id, sheet_name],
+                ).fetchone()
+                if sheet_row:
+                    table_name = sheet_row[1]
+                    if table_name not in seen_tables:
+                        tables.append({
+                            "filename": filename,
+                            "sheet_name": sheet_row[0],
+                            "table_name": table_name,
+                        })
+                        seen_tables.add(table_name)
+            else:
+                sheet_rows = conn.execute(
+                    """
+                    SELECT sheet_name, table_name
+                    FROM excel_sheets
+                    WHERE excel_file_id = ?
+                    ORDER BY sheet_name ASC
+                    """,
+                    [file_id],
+                ).fetchall()
+                for sheet_row in sheet_rows:
+                    table_name = sheet_row[1]
+                    if table_name not in seen_tables:
+                        tables.append({
+                            "filename": filename,
+                            "sheet_name": sheet_row[0],
+                            "table_name": table_name,
+                        })
+                        seen_tables.add(table_name)
+
+    if not tables:
+        all_rows = conn.execute(
+            """
+            SELECT f.original_filename, s.sheet_name, s.table_name
+            FROM excel_files f
+            JOIN excel_sheets s ON s.excel_file_id = f.id
+            WHERE f.status = 'completed'
+            ORDER BY f.uploaded_at DESC, s.sheet_name ASC
+            """
+        ).fetchall()
+        for filename, sheet_name, table_name in all_rows:
+            if table_name not in seen_tables:
+                tables.append({
+                    "filename": str(filename),
+                    "sheet_name": str(sheet_name),
+                    "table_name": str(table_name),
+                })
+                seen_tables.add(str(table_name))
+
+    return tables, effective_refs
+
+
+def _build_schema_info(conn, tables: list[dict[str, str]]) -> str:
+    schema_info = ""
+    for entry in tables:
+        filename = entry["filename"]
+        sheet_name = entry["sheet_name"]
+        table_name = entry["table_name"]
+        try:
+            cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
+            col_defs = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
+            schema_info += (
+                f"File: {filename}\n"
+                f"Sheet: {sheet_name}\n"
+                f"DuckDB Table Name: {table_name}\n"
+                f"Columns: {col_defs}\n\n"
+            )
+        except Exception:
+            pass
+
+    return schema_info or "No completed tables available yet."
+
+
+def _get_result_row_limit() -> int:
+    settings = get_settings()
+    limit = settings.result_row_limit if hasattr(settings, "result_row_limit") else 500
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 500
+    return max(1, limit)
+
+
+def _get_message_sql(conn, message_id: str) -> tuple[str, str]:
+    row = conn.execute(
+        "SELECT sql_generated, session_id FROM chat_messages WHERE id = ?",
+        [message_id],
+    ).fetchone()
+    if not row:
+        raise ValueError("Message not found")
+    sql, session_id = row
+    sql = str(sql or "").strip()
+    if not sql or sql.startswith("ERROR"):
+        raise ValueError("Message has no valid SQL")
+    return sql, str(session_id)
+
+
+def get_message_data(message_id: str) -> ResultTable:
+    conn = get_connection()
+    sql, _session_id = _get_message_sql(conn, message_id)
+    try:
+        df = conn.execute(sql).fetchdf()
+    except Exception as exc:
+        raise ValueError(f"SQL Execution Failed: {str(exc)}")
+    return dataframe_to_result_table(df, _get_result_row_limit())
+
+
+def export_message(message_id: str):
+    conn = get_connection()
+    sql, session_id = _get_message_sql(conn, message_id)
+    try:
+        df = conn.execute(sql).fetchdf()
+    except Exception as exc:
+        raise ValueError(f"SQL Execution Failed: {str(exc)}")
+
+    session_row = conn.execute(
+        "SELECT title FROM chat_sessions WHERE id = ?",
+        [session_id],
+    ).fetchone()
+    session_title = session_row[0] if session_row and session_row[0] else "Chat export"
+
+    exports_dir = get_exports_dir()
+    safe_title = re.sub(r"[^0-9A-Za-z_]+", "_", session_title).strip("_") or "chat_export"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe_title}_{timestamp}.xlsx"
+    file_path = exports_dir / filename
+    df.to_excel(file_path, index=False)
+    file_size = file_path.stat().st_size
+
+    return artifact_models.create_export(
+        filename=filename,
+        file_path=str(file_path),
+        file_size_bytes=file_size,
+        title=session_title,
+        source_message_id=message_id,
+    )
+
+
 async def generate_sql(content: str, schema_info: str) -> tuple[str, str]:
     """Returns (sql, llm_message) where llm_message is optional context from the LLM."""
     prompt = f"""You are an expert DuckDB SQL generator.
@@ -284,8 +507,7 @@ Required JSON format:
 {{"sql": "<the complete DuckDB SQL query>", "message": "<optional one-sentence note, or null>"}}
 
 User question: "{content}"""""
-    with open("llm_prompt_debug.txt", "w") as f:
-        f.write(prompt)
+    _write_debug_prompt(prompt)
 
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -314,12 +536,12 @@ User question: "{content}"""""
             return _extract_json_sql(resp.json()["response"])
 
 async def generate_nl_summary(content: str, sql: str, results: list) -> str:
-    results_str = json.dumps(results[:20], default=str)
+    results_str = json.dumps(results[:100], default=str)
     prompt = f"""You are a helpful data analyst assistant. 
 The user asked: "{content}"
 I ran the following SQL query:
 {sql}
-And got these results (showing up to 20 rows):
+And got these results (showing up to 100 rows):
 {results_str}
 
 Please provide a concise, natural language summary of these results to answer the user's question directly.
@@ -413,37 +635,9 @@ async def create_message(
         [user_msg_id, session_id, "user", content, now]
     )
     
-    # 1. Fetch Schema - use referenced files if provided, else ALL completed files
-    schema_info = ""
-    files_to_describe = referenced_files
-
-    if not files_to_describe:
-        all_rows = conn.execute(
-            "SELECT original_filename FROM excel_files WHERE status = 'completed'"
-        ).fetchall()
-        files_to_describe = [r[0] for r in all_rows]
-
-    for filename in files_to_describe:
-        row = conn.execute(
-            "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
-            [filename]
-        ).fetchone()
-        if row:
-            table_name = f"file_{row[0].replace('-', '_')}"
-            try:
-                # Get columns
-                cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
-                col_defs = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
-                schema_info += (
-                    f"DuckDB Table Name: {table_name}\n"
-                    f"  (source file: {filename})\n"
-                    f"  Columns: {col_defs}\n\n"
-                )
-            except Exception:
-                pass
-
-    if not schema_info:
-        schema_info = "No completed tables available yet."
+    # 1. Fetch Schema - use referenced files if provided, else parse from content / fallback to all
+    tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
+    schema_info = _build_schema_info(conn, tables)
 
     # Check if first message AND session still has default title (guard against re-triggering)
     msg_count = conn.execute(
@@ -503,7 +697,10 @@ async def create_message(
                     clean_r[k] = None if pd.isna(v) else v
                 clean_rows.append(clean_r)
             
-            result_table = ResultTable(columns=columns, rows=clean_rows, total_rows=len(clean_rows))
+            total_rows = len(clean_rows)
+            row_limit = _get_result_row_limit()
+            visible_rows = clean_rows[:row_limit]
+            result_table = ResultTable(columns=columns, rows=visible_rows, total_rows=total_rows)
             result_rows = clean_rows
             
             # 4. Generate NL Summary
@@ -541,7 +738,7 @@ async def create_message(
         llm_generation_ms=llm_ms,
         result_row_count=len(result_rows),
         result_data=result_table,
-        referenced_files=referenced_files,
+        referenced_files=effective_refs,
         session_title=session_title,
     )
 
@@ -555,35 +752,8 @@ async def regenerate_response(
     import uuid
     conn = get_connection()
 
-    schema_info = ""
-    files_to_describe = referenced_files
-
-    if not files_to_describe:
-        all_rows = conn.execute(
-            "SELECT original_filename FROM excel_files WHERE status = 'completed'"
-        ).fetchall()
-        files_to_describe = [r[0] for r in all_rows]
-
-    for filename in files_to_describe:
-        row = conn.execute(
-            "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
-            [filename]
-        ).fetchone()
-        if row:
-            table_name = f"file_{row[0].replace('-', '_')}"
-            try:
-                cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
-                col_defs = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
-                schema_info += (
-                    f"DuckDB Table Name: {table_name}\n"
-                    f"  (source file: {filename})\n"
-                    f"  Columns: {col_defs}\n\n"
-                )
-            except Exception:
-                pass
-
-    if not schema_info:
-        schema_info = "No completed tables available yet."
+    tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
+    schema_info = _build_schema_info(conn, tables)
 
     t0 = time.time()
     try:
@@ -615,7 +785,10 @@ async def regenerate_response(
                     clean_r[k] = None if pd.isna(v) else v
                 clean_rows.append(clean_r)
 
-            result_table = ResultTable(columns=columns, rows=clean_rows, total_rows=len(clean_rows))
+            total_rows = len(clean_rows)
+            row_limit = _get_result_row_limit()
+            visible_rows = clean_rows[:row_limit]
+            result_table = ResultTable(columns=columns, rows=visible_rows, total_rows=total_rows)
             result_rows = clean_rows
 
             t3 = time.time()
@@ -651,5 +824,5 @@ async def regenerate_response(
         llm_generation_ms=llm_ms,
         result_row_count=len(result_rows),
         result_data=result_table,
-        referenced_files=referenced_files,
+        referenced_files=effective_refs,
     )

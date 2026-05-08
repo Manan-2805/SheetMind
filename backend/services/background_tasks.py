@@ -1,18 +1,34 @@
 import asyncio
-import pandas as pd
+import re
+import uuid
 from datetime import datetime, timezone
-import duckdb
 
-from services.duckdb_service import get_connection
+import pandas as pd
+
 from dependencies import current_username
 from models.settings_models import get_settings
+from services.duckdb_service import get_connection
 
-# The queue stores tuples of (username, file_id, file_path, table_name)
+# The queue stores tuples of (username, file_id, file_path)
 task_queue = asyncio.Queue()
 active_tasks = set()
 
 
-def process_excel_file_sync(username: str, file_id: str, file_path: str, table_name: str):
+def _safe_table_name(file_id: str, sheet_name: str | None = None) -> str:
+    base = f"file_{file_id.replace('-', '_')}"
+    if sheet_name:
+        base = f"{base}_{sheet_name}"
+    safe = re.sub(r"[^0-9A-Za-z_]+", "_", base.strip())
+    safe = re.sub(r"_+", "_", safe).strip("_")
+    return safe.lower() if safe else f"file_{file_id.replace('-', '_')}"
+
+
+def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = [str(c).strip().replace(" ", "_").replace("-", "_") for c in df.columns]
+    return df
+
+
+def process_excel_file_sync(username: str, file_id: str, file_path: str):
     token = current_username.set(username)
     try:
         conn = get_connection()
@@ -23,33 +39,70 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str, table_n
                 [file_id]
             )
             
-            # Load the file based on extension
-            if file_path.endswith('.csv'):
-                df = pd.read_csv(file_path)
+            conn.execute("DELETE FROM excel_sheets WHERE excel_file_id = ?", [file_id])
+
+            total_rows = 0
+            max_cols = 0
+            num_sheets = 0
+
+            if file_path.endswith(".csv"):
+                df = _clean_columns(pd.read_csv(file_path))
+                table_name = _safe_table_name(file_id)
+                conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+
+                row_count = len(df)
+                col_count = len(df.columns)
+                total_rows += row_count
+                max_cols = max(max_cols, col_count)
+                num_sheets = 1
+
+                conn.execute(
+                    """
+                    INSERT INTO excel_sheets
+                    (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [f"sh-{uuid.uuid4().hex[:8]}", file_id, "Sheet1", table_name, row_count, col_count, _now()]
+                )
             else:
-                df = pd.read_excel(file_path)
-                
-            # Clean column names for DuckDB
-            df.columns = [str(c).strip().replace(" ", "_").replace("-", "_") for c in df.columns]
-            
-            # Insert into DuckDB
-            conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df")
-            
-            # Get counts
-            row_count = len(df)
-            col_count = len(df.columns)
-            
-            # Update status to complete
-            now = datetime.now(timezone.utc)
+                workbook = pd.read_excel(file_path, sheet_name=None)
+                for sheet_name, df in workbook.items():
+                    df = _clean_columns(df)
+                    table_name = _safe_table_name(file_id, sheet_name)
+                    conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+
+                    row_count = len(df)
+                    col_count = len(df.columns)
+                    total_rows += row_count
+                    max_cols = max(max_cols, col_count)
+                    num_sheets += 1
+
+                    conn.execute(
+                        """
+                        INSERT INTO excel_sheets
+                        (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        [f"sh-{uuid.uuid4().hex[:8]}", file_id, sheet_name, table_name, row_count, col_count, _now()]
+                    )
+
+            if num_sheets == 0:
+                raise ValueError("No sheets found to import")
+
+            now = _now()
             conn.execute(
-                "UPDATE excel_files SET status = 'completed', row_count = ?, column_count = ?, updated_at = ? WHERE id = ?",
-                [row_count, col_count, now, file_id]
+                """
+                UPDATE excel_files
+                SET status = 'completed', row_count = ?, column_count = ?, num_sheets = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                [total_rows, max_cols, num_sheets, now, file_id]
             )
             
         except Exception as e:
             # Update status to error
             error_msg = str(e)
-            now = datetime.now(timezone.utc)
+            now = _now()
             conn.execute(
                 "UPDATE excel_files SET status = 'error', error_message = ?, updated_at = ? WHERE id = ?",
                 [error_msg, now, file_id]
@@ -58,9 +111,13 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str, table_n
         current_username.reset(token)
 
 
-async def _process_wrapper(username: str, file_id: str, file_path: str, table_name: str):
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _process_wrapper(username: str, file_id: str, file_path: str):
     """Wraps the sync function to run in a thread."""
-    await asyncio.to_thread(process_excel_file_sync, username, file_id, file_path, table_name)
+    await asyncio.to_thread(process_excel_file_sync, username, file_id, file_path)
 
 
 async def queue_worker():
@@ -70,7 +127,7 @@ async def queue_worker():
             # But wait, limit is per-user! So we just process globally with a global limit of 2?
             # Or get settings for the specific user? Let's just use the default or first user's limit 
             # if we have no task yet. Actually, we can get task first, then wait based on THAT user's limit.
-            username, file_id, file_path, table_name = await task_queue.get()
+            username, file_id, file_path = await task_queue.get()
             
             token = current_username.set(username)
             try:
@@ -84,7 +141,7 @@ async def queue_worker():
             finally:
                 current_username.reset(token)
                 
-            task = asyncio.create_task(_process_wrapper(username, file_id, file_path, table_name))
+            task = asyncio.create_task(_process_wrapper(username, file_id, file_path))
             active_tasks.add(task)
             task.add_done_callback(active_tasks.discard)
             
@@ -108,9 +165,8 @@ async def resume_pending_tasks():
             ).fetchall()
             for row in rows:
                 file_id, file_path = row
-                table_name = f"file_{file_id.replace('-', '_')}"
                 conn.execute("UPDATE excel_files SET status = 'pending' WHERE id = ?", [file_id])
-                task_queue.put_nowait((username, file_id, file_path, table_name))
+                task_queue.put_nowait((username, file_id, file_path))
         except Exception:
             pass
         finally:

@@ -20,6 +20,7 @@ export interface Settings {
   username: string;
   created_at: string;
   max_concurrent_uploads: number;
+  result_row_limit: number;
 }
 
 export interface TestLLMRequest {

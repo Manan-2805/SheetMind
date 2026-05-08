@@ -4,10 +4,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import models.chat_models as chat_models
+from schemas.artifact_schemas import ArtifactExportResponse
 from schemas.chat_schemas import (
     ChatMessageResponse,
     ChatSessionCreate,
     ChatSessionResponse,
+    ChatSessionUpdate,
+    ResultTable,
     SendMessageRequest,
 )
 
@@ -49,9 +52,6 @@ async def create_message(
     )
 
 
-from schemas.chat_schemas import ChatSessionUpdate
-
-
 @router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
 async def update_session(session_id: str, body: ChatSessionUpdate) -> ChatSessionResponse:
     return chat_models.update_session(session_id, title=body.title, is_favorite=body.is_favorite)
@@ -65,6 +65,26 @@ async def delete_session(session_id: str):
 
 class FeedbackRequest(BaseModel):
     feedback: str  # "like" | "dislike"
+
+
+@router.get("/messages/{message_id}/data", response_model=ResultTable)
+async def get_message_data(message_id: str) -> ResultTable:
+    try:
+        return chat_models.get_message_data(message_id)
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status, detail=message)
+
+
+@router.post("/messages/{message_id}/export", response_model=ArtifactExportResponse)
+async def export_message(message_id: str) -> ArtifactExportResponse:
+    try:
+        return chat_models.export_message(message_id)
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status, detail=message)
 
 
 @router.put("/messages/{message_id}/feedback")

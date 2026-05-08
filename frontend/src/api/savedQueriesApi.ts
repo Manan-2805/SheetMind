@@ -1,6 +1,8 @@
 import axios, { type AxiosResponse } from "axios";
 
 import type { CreateSavedQueryRequest, SavedQuery } from "@/types/SavedQuery";
+import type { ResultTable } from "@/types/ChatMessage";
+import type { ArtifactExport } from "@/types/Artifact";
 
 import { apiClient as client } from "./apiClient";
 
@@ -54,10 +56,75 @@ export async function deleteSavedQuery(id: string): Promise<void> {
   }
 }
 
-export async function runSavedQuery(id: string): Promise<{ inserted_query: string }> {
+export async function runSavedQuery(id: string): Promise<{
+  id: string;
+  label: string;
+  nl_query: string;
+  sql_query: string;
+  result: ResultTable;
+}> {
   try {
-    const res: AxiosResponse<{ inserted_query: string }> = await client.post(
+    const res: AxiosResponse<{
+      id: string;
+      label: string;
+      nl_query: string;
+      sql_query: string;
+      result: ResultTable;
+    }> = await client.post(
       `/saved-queries/${id}/run`
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function exportSavedQuery(id: string): Promise<ArtifactExport> {
+  try {
+    const res: AxiosResponse<ArtifactExport> = await client.post(
+      `/saved-queries/${id}/export`
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function toggleFavorite(id: string): Promise<SavedQuery> {
+  try {
+    const res: AxiosResponse<SavedQuery> = await client.put(
+      `/saved-queries/${id}/favorite`
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function renameSavedQuery(id: string, label: string): Promise<SavedQuery> {
+  try {
+    const res: AxiosResponse<SavedQuery> = await client.put(
+      `/saved-queries/${id}`,
+      { label }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function searchSavedQueries(
+  q?: string,
+  from?: string,
+  to?: string
+): Promise<SavedQuery[]> {
+  try {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const res: AxiosResponse<SavedQuery[]> = await client.get(
+      `/saved-queries${params.toString() ? `?${params.toString()}` : ""}`
     );
     return res.data;
   } catch (error) {

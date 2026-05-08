@@ -1,4 +1,4 @@
-import type { ApexOptions } from "apexcharts";
+import type { ApexChart, ApexOptions } from "apexcharts";
 
 import type { Theme } from "@/types/Settings";
 
@@ -18,7 +18,10 @@ interface BuildChartOptionsParams {
   theme: Theme;
   title?: string;
   categories?: string[];
+  labels?: string[];
   height?: number;
+  colors?: string[];
+  chartId?: string;
 }
 
 export function buildChartOptions({
@@ -26,7 +29,10 @@ export function buildChartOptions({
   theme,
   title,
   categories,
+  labels,
   height = 300,
+  colors,
+  chartId,
 }: BuildChartOptionsParams): ApexOptions {
   const isDark = theme === "dark" || theme === "system";
   const textColor = isDark ? "#A1A1AA" : "#52525B";
@@ -35,19 +41,21 @@ export function buildChartOptions({
 
   const baseOptions: ApexOptions = {
     chart: {
+      id: chartId,
       background: "transparent",
       toolbar: { show: false },
       animations: {
         enabled: true,
-        easing: "easeinout",
         speed: 400,
       },
+      height,
+      type: mapChartType(type),
       fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
     },
     theme: {
       mode: isDark ? "dark" : "light",
     },
-    colors: [accentColor, "#A78BFA", "#C4B5FD", "#DDD6FE", "#EDE9FE"],
+    colors: colors ?? [accentColor, "#A78BFA", "#C4B5FD", "#DDD6FE", "#EDE9FE"],
     grid: {
       borderColor,
       strokeDashArray: 3,
@@ -76,17 +84,18 @@ export function buildChartOptions({
       labels: { colors: textColor },
       fontSize: "12px",
     },
+    labels: type === "pie" || type === "donut" ? labels : undefined,
     title: title
       ? {
-          text: title,
-          style: {
-            fontSize: "14px",
-            fontWeight: "600",
-            color: isDark ? "#F4F4F5" : "#09090B",
-            fontFamily: "Inter, sans-serif",
-          },
-          margin: 12,
-        }
+        text: title,
+        style: {
+          fontSize: "14px",
+          fontWeight: "600",
+          color: isDark ? "#F4F4F5" : "#09090B",
+          fontFamily: "Inter, sans-serif",
+        },
+        margin: 12,
+      }
       : undefined,
     plotOptions: buildPlotOptions(type),
     dataLabels: {
@@ -100,28 +109,21 @@ export function buildChartOptions({
     fill:
       type === "area"
         ? {
-            type: "gradient",
-            gradient: {
-              shadeIntensity: 1,
-              opacityFrom: 0.4,
-              opacityTo: 0.05,
-              stops: [0, 100],
-            },
-          }
+          type: "gradient",
+          gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.4,
+            opacityTo: 0.05,
+            stops: [0, 100],
+          },
+        }
         : undefined,
-    chart: {
-      background: "transparent",
-      toolbar: { show: false },
-      height,
-      type: mapChartType(type),
-      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-    },
   };
 
   return baseOptions;
 }
 
-function mapChartType(type: ChartType): string {
+function mapChartType(type: ChartType): ApexChart["type"] {
   if (type === "horizontal-bar") return "bar";
   if (type === "histogram") return "bar";
   return type;

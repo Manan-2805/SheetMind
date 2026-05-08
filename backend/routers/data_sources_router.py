@@ -1,7 +1,8 @@
 import os
 from datetime import datetime, timezone
+
 import aiofiles
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, File, UploadFile, HTTPException, Query
 
 import models.data_source_models as ds_models
 from schemas.common_schemas import SuccessResponse
@@ -49,13 +50,11 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
         [file_id, filename, stored_path, now, file_size, "pending"]
     )
     
-    table_name = f"file_{file_id.replace('-', '_')}"
-    
     # Trigger background task
     from services.background_tasks import task_queue
     from dependencies import current_username
     username = current_username.get("default")
-    task_queue.put_nowait((username, file_id, stored_path, table_name))
+    task_queue.put_nowait((username, file_id, stored_path))
     
     # Return response
     return DataSourceResponse(
@@ -63,7 +62,7 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
         original_filename=filename,
         stored_path=stored_path,
         uploaded_at=now,
-        num_sheets=1,
+        num_sheets=0,
         file_size_bytes=file_size,
         status="pending",
         sheets=[],
@@ -75,5 +74,8 @@ async def delete_data_source(source_id: str) -> SuccessResponse:
     return SuccessResponse(success=True)
 
 @router.get("/{source_id}/preview", response_model=PreviewResponse)
-async def preview_data_source(source_id: str) -> PreviewResponse:
-    return ds_models.get_preview(source_id)
+async def preview_data_source(
+    source_id: str,
+    sheet: str | None = Query(default=None),
+) -> PreviewResponse:
+    return ds_models.get_preview(source_id, sheet)
