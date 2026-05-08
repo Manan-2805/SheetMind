@@ -49,6 +49,7 @@ async def create_message(
         session_id=session_id,
         content=body.content,
         referenced_files=body.referenced_files,
+        parent_user_message_id=body.parent_user_message_id,
     )
 
 
@@ -96,13 +97,22 @@ async def set_message_feedback(message_id: str, body: FeedbackRequest):
 class RegenerateRequest(BaseModel):
     content: str
     referenced_files: list[str] = []
+    reason: str = ""
+    instruction: str = ""
+    parent_user_message_id: str | None = None
 
 
 @router.post("/sessions/{session_id}/regenerate", response_model=ChatMessageResponse)
 async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMessageResponse:
+    # Build a combined prompt from content, reason, and instruction
+    combined_content = body.content
+    if body.reason or body.instruction:
+        combined_content += f"\n\nRegeneration requested because: {body.reason}\nInstruction: {body.instruction}"
+        
     return await chat_models.regenerate_response(
         session_id=session_id,
-        content=body.content,
+        content=combined_content,
         referenced_files=body.referenced_files,
+        parent_user_message_id=body.parent_user_message_id,
     )
 

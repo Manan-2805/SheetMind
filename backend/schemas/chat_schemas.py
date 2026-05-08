@@ -41,11 +41,14 @@ class ChatMessageResponse(BaseModel):
     nl_summary: Optional[str] = None
     referenced_files: Optional[list[str]] = None
     session_title: Optional[str] = None  # set on first message so frontend can update sidebar title
+    parent_user_message_id: Optional[str] = None
+    feedback: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):
     content: str
     referenced_files: list[str] = []
+    parent_user_message_id: Optional[str] = None
 
 
 class ChatSessionCreate(BaseModel):

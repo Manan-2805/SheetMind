@@ -9,7 +9,7 @@ import {
 } from "@/api/dataSourcesApi";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkeletonTable } from "@/components/skeletons/SkeletonTable";
-import { ChatResultTable } from "@/components/chat/ChatResultTable";
+import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
 import {
   Dialog,
   DialogContent,
@@ -422,24 +422,24 @@ export function DataSourcesPage() {
 
       <Dialog open={previewId !== null} onOpenChange={(o) => !o && setPreviewId(null)}>
         <DialogContent
-          className="max-w-4xl"
+          className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-6"
           style={{
             backgroundColor: "var(--color-bg-elevated)",
             border: "1px solid var(--color-border-default)",
             color: "var(--color-text-primary)",
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="flex-none">
             <DialogTitle style={{ color: "var(--color-text-primary)" }}>
               Preview — {previewSource?.original_filename}
               {previewSheet ? ` · ${previewSheet}` : ""}
             </DialogTitle>
           </DialogHeader>
-          <div className="mt-2">
+          <div className="flex-1 min-h-0 mt-4 border rounded-xl overflow-hidden" style={{ borderColor: "var(--color-border-default)" }}>
             {isLoadingPreview ? (
-              <SkeletonTable />
+              <div className="p-4"><SkeletonTable /></div>
             ) : previewResultTable ? (
-              <ChatResultTable data={previewResultTable} />
+              <ExcelPreviewGrid result={previewResultTable} />
             ) : null}
           </div>
         </DialogContent>

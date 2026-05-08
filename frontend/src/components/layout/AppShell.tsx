@@ -39,14 +39,23 @@ export function AppShell() {
 
   // Sync route param with chat session
   useEffect(() => {
-    const match = location.pathname.match(/^\/chat\/([^/]+)$/);
-    if (match && match[1] !== "new") {
+    const match = location.pathname.match(/^\/([^/]+)$/);
+    // Ignore routes that are named paths
+    const isNamedPath = [
+      "data-sources", "settings", "saved-queries", "artifacts"
+    ].includes(match?.[1] ?? "");
+    
+    if (match && match[1] !== "" && !isNamedPath) {
       const sessionId = match[1];
       if (sessionId !== activeSessionId) {
         selectSession(sessionId);
       }
+    } else if (location.pathname === "/" && activeSessionId) {
+      // If we go back to root and there is an active session, let's start a new chat?
+      // Or just leave it. Usually "/" means new chat
+      startNewChat();
     }
-  }, [location.pathname, activeSessionId, selectSession]);
+  }, [location.pathname, activeSessionId, selectSession, startNewChat]);
 
   const getActiveView = (): ActiveView => {
     if (location.pathname.startsWith("/data-sources")) return "data-sources";
@@ -57,7 +66,7 @@ export function AppShell() {
   };
 
   const handleViewChange = useCallback((view: ActiveView) => {
-    if (view === "chat") navigate("/chat/new");
+    if (view === "chat") navigate("/");
     if (view === "data-sources") navigate("/data-sources");
     if (view === "saved-queries") navigate("/saved-queries");
     if (view === "artifacts") navigate("/artifacts");
@@ -74,13 +83,13 @@ export function AppShell() {
 
   const handleNewChat = useCallback(() => {
     startNewChat();
-    navigate("/chat/new");
+    navigate("/");
     setActiveDrawer(null);
   }, [startNewChat, navigate]);
 
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
-      navigate(`/chat/${sessionId}`);
+      navigate(`/${sessionId}`);
       // selectSession is called by the useEffect above
     },
     [navigate]
@@ -117,8 +126,12 @@ export function AppShell() {
 
         <main className="flex flex-1 flex-col overflow-hidden">
           <Routes>
-            <Route path="/" element={<Navigate to="/chat/new" replace />} />
-            <Route path="/chat/*" element={
+            <Route path="/data-sources" element={<DataSourcesPage />} />
+            <Route path="/saved-queries" element={<SavedQueriesPage />} />
+            <Route path="/artifacts" element={<ArtifactsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            
+            <Route path="/:sessionId" element={
               <ChatPage
                 onNewChat={handleNewChat}
                 messages={messages}
@@ -131,10 +144,21 @@ export function AppShell() {
                 onRegeneratedMessage={handleRegeneratedMessage}
               />
             } />
-            <Route path="/data-sources" element={<DataSourcesPage />} />
-            <Route path="/saved-queries" element={<SavedQueriesPage />} />
-            <Route path="/artifacts" element={<ArtifactsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/" element={
+              <ChatPage
+                onNewChat={handleNewChat}
+                messages={messages}
+                isLoadingMessages={isLoadingMessages}
+                isSending={isSending}
+                sendChatMessage={handleChatSent}
+                loadSessions={loadSessions}
+                startNewChat={startNewChat}
+                activeSessionId={activeSessionId}
+                onRegeneratedMessage={handleRegeneratedMessage}
+              />
+            } />
+            
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
 

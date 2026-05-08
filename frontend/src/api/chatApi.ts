@@ -57,12 +57,13 @@ export async function createSession(): Promise<ChatSession> {
 export async function sendMessage(
   sessionId: string,
   content: string,
-  referencedFiles: string[]
+  referencedFiles: string[],
+  parentUserMessageId?: string
 ): Promise<ChatMessage> {
   try {
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/messages`,
-      { content, referenced_files: referencedFiles }
+      { content, referenced_files: referencedFiles, parent_user_message_id: parentUserMessageId }
     );
     return res.data;
   } catch (error) {
@@ -101,12 +102,15 @@ export async function setMessageFeedback(
 export async function regenerateMessage(
   sessionId: string,
   content: string,
-  referencedFiles: string[]
+  referencedFiles: string[],
+  reason: string = "",
+  instruction: string = "",
+  parentUserMessageId?: string
 ): Promise<ChatMessage> {
   try {
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/regenerate`,
-      { content, referenced_files: referencedFiles }
+      { content, referenced_files: referencedFiles, reason, instruction, parent_user_message_id: parentUserMessageId }
     );
     return res.data;
   } catch (error) {

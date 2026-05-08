@@ -68,3 +68,25 @@ export function downloadArtifactUrl(id: string): string {
   const base = client.defaults.baseURL ?? "";
   return `${base}/artifacts/${id}/download`;
 }
+
+export async function downloadArtifact(id: string, filename: string): Promise<void> {
+  try {
+    const res = await client.get(`/artifacts/${id}/download`, {
+      responseType: "blob",
+    });
+    
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    handleError(error);
+  }
+}

@@ -29,6 +29,8 @@ export interface ChatMessage {
   referenced_files?: string[];
   is_typing?: boolean;
   session_title?: string;
+  feedback?: string;
+  parent_user_message_id?: string;
 }
 
 export interface ChatSession {

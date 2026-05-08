@@ -66,15 +66,36 @@ export function ChatMessageActions({
             render={
               <button
                 onClick={handlers[key]}
-                className="rounded p-1 transition-colors duration-[120ms]"
-                style={{ color: "var(--color-text-tertiary)" }}
+                className={`rounded p-1 transition-colors duration-[120ms] ${
+                  (key === "thumbUp" && message.feedback === "like") ||
+                  (key === "thumbDown" && message.feedback === "dislike")
+                    ? "bg-white/10 text-white"
+                    : ""
+                }`}
+                style={{
+                  color:
+                    (key === "thumbUp" && message.feedback === "like") ||
+                    (key === "thumbDown" && message.feedback === "dislike")
+                      ? "var(--color-accent)"
+                      : "var(--color-text-tertiary)",
+                }}
                 onMouseEnter={(e) => {
+                  if (
+                    (key === "thumbUp" && message.feedback === "like") ||
+                    (key === "thumbDown" && message.feedback === "dislike")
+                  )
+                    return;
                   (e.currentTarget as HTMLButtonElement).style.color =
                     "var(--color-text-primary)";
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                     "var(--color-bg-hover)";
                 }}
                 onMouseLeave={(e) => {
+                  if (
+                    (key === "thumbUp" && message.feedback === "like") ||
+                    (key === "thumbDown" && message.feedback === "dislike")
+                  )
+                    return;
                   (e.currentTarget as HTMLButtonElement).style.color =
                     "var(--color-text-tertiary)";
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor =

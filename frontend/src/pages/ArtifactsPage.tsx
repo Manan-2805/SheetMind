@@ -3,7 +3,7 @@ import { Download, LineChart, Trash2, X, Check } from "lucide-react";
 
 import {
     deleteArtifact,
-    downloadArtifactUrl,
+    downloadArtifact,
     getArtifactData,
     getArtifacts,
     renameArtifact,
@@ -30,6 +30,8 @@ export function ArtifactsPage() {
     const [editingTitle, setEditingTitle] = useState("");
     const [activeResult, setActiveResult] = useState<ArtifactResult | null>(null);
     const [loadingChartId, setLoadingChartId] = useState<string | null>(null);
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+    const [previewArtifact, setPreviewArtifact] = useState<{ id: string; title: string; filename: string } | null>(null);
 
     const loadArtifacts = useCallback(async () => {
         setIsLoading(true);
@@ -98,6 +100,22 @@ export function ArtifactsPage() {
         } finally {
             setLoadingChartId(null);
         }
+    };
+
+    const handleDownload = async (artifact: ArtifactExport) => {
+        setDownloadingId(artifact.id);
+        try {
+            await downloadArtifact(artifact.id, artifact.filename);
+        } catch (err: unknown) {
+            const e = err as { message?: string };
+            addToast({ type: "error", title: "Error", description: e?.message || "Failed to download artifact" });
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
+    const handlePreview = (artifact: ArtifactExport) => {
+        setPreviewArtifact({ id: artifact.id, title: artifact.title, filename: artifact.filename });
     };
 
     return (
@@ -175,16 +193,22 @@ export function ArtifactsPage() {
                                             </p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <a
-                                                href={downloadArtifactUrl(artifact.id)}
-                                                download
-                                                rel="noopener noreferrer"
+                                            <button
+                                                onClick={() => handleDownload(artifact)}
+                                                disabled={downloadingId === artifact.id}
+                                                className="flex items-center gap-2 rounded-lg px-3 py-2 text-body-em transition-all duration-[120ms]"
+                                                style={{ backgroundColor: "var(--color-bg-hover)", color: "var(--color-text-secondary)", border: "1px solid var(--color-border-default)", opacity: downloadingId === artifact.id ? 0.7 : 1 }}
+                                            >
+                                                <Download size={14} />
+                                                {downloadingId === artifact.id ? "..." : "Download"}
+                                            </button>
+                                            <button
+                                                onClick={() => handlePreview(artifact)}
                                                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-body-em transition-all duration-[120ms]"
                                                 style={{ backgroundColor: "var(--color-bg-hover)", color: "var(--color-text-secondary)", border: "1px solid var(--color-border-default)" }}
                                             >
-                                                <Download size={14} />
-                                                Download
-                                            </a>
+                                                Preview
+                                            </button>
                                             <button
                                                 onClick={() => handleGenerateChart(artifact)}
                                                 disabled={isLoadingChart}
@@ -241,6 +265,60 @@ export function ArtifactsPage() {
                 subtitle={activeResult?.subtitle}
                 result={activeResult?.result ?? null}
             />
+
+            {previewArtifact && (
+                <ArtifactPreviewModal
+                    open={!!previewArtifact}
+                    onClose={() => setPreviewArtifact(null)}
+                    artifact={previewArtifact}
+                />
+            )}
         </div>
+    );
+}
+
+// Separate component for the preview modal to keep the main component clean
+import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+function ArtifactPreviewModal({ open, onClose, artifact }: { open: boolean, onClose: () => void, artifact: { id: string; title: string; filename: string } | null }) {
+    const { addToast } = useToast();
+    const [result, setResult] = useState<ResultTable | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!open || !artifact) return;
+        setLoading(true);
+        getArtifactData(artifact.id)
+            .then(setResult)
+            .catch((err: unknown) => {
+                const e = err as { message?: string };
+                addToast({ type: "error", title: "Error", description: e?.message || "Failed to load artifact data" });
+            })
+            .finally(() => setLoading(false));
+    }, [open, artifact, addToast]);
+
+    return (
+        <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+            <DialogContent
+                className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-6"
+                style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
+            >
+                <DialogHeader className="flex-none">
+                    <DialogTitle style={{ color: "var(--color-text-primary)" }}>{artifact?.title || "Artifact Preview"}</DialogTitle>
+                    <DialogDescription style={{ color: "var(--color-text-tertiary)" }}>{artifact?.filename}</DialogDescription>
+                </DialogHeader>
+
+                <div className="flex-1 min-h-0 mt-4 border rounded-xl overflow-hidden" style={{ borderColor: "var(--color-border-default)" }}>
+                    {loading ? (
+                        <div className="w-full h-full flex items-center justify-center text-body" style={{ color: "var(--color-text-tertiary)" }}>Loading preview...</div>
+                    ) : result ? (
+                        <ExcelPreviewGrid result={result} />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-body" style={{ color: "var(--color-text-tertiary)" }}>Failed to load data</div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }

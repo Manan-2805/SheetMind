@@ -544,8 +544,8 @@ I ran the following SQL query:
 And got these results (showing up to 100 rows):
 {results_str}
 
-Please provide a concise, natural language summary of these results to answer the user's question directly.
-Do not mention the SQL query itself, just interpret the data."""
+Provide an extremely concise, natural language summary of these results to answer the user's question directly.
+Maximum 2 sentences. Do not use filler words. Do not mention the SQL query itself, just interpret the data."""
 
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -625,14 +625,15 @@ async def create_message(
     session_id: str,
     content: str,
     referenced_files: list[str],
+    parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
     import uuid
     now = _now()
     conn = get_connection()
     user_msg_id = f"msg-{uuid.uuid4().hex[:8]}-u"
     conn.execute(
-        "INSERT INTO chat_messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-        [user_msg_id, session_id, "user", content, now]
+        "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [user_msg_id, session_id, "user", content, now, parent_user_message_id]
     )
     
     # 1. Fetch Schema - use referenced files if provided, else parse from content / fallback to all
@@ -721,9 +722,9 @@ async def create_message(
     
     conn.execute(
         """INSERT INTO chat_messages 
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows)]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), user_msg_id]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
     
@@ -740,6 +741,7 @@ async def create_message(
         result_data=result_table,
         referenced_files=effective_refs,
         session_title=session_title,
+        parent_user_message_id=user_msg_id,
     )
 
 
@@ -747,6 +749,7 @@ async def regenerate_response(
     session_id: str,
     content: str,
     referenced_files: list[str],
+    parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
     """Re-run SQL generation + execution for an existing user query without inserting a new user message."""
     import uuid
@@ -807,9 +810,9 @@ async def regenerate_response(
 
     conn.execute(
         """INSERT INTO chat_messages
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows)]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), parent_user_message_id]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
@@ -825,4 +828,5 @@ async def regenerate_response(
         result_row_count=len(result_rows),
         result_data=result_table,
         referenced_files=effective_refs,
+        parent_user_message_id=parent_user_message_id,
     )

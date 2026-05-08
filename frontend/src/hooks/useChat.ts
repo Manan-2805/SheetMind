@@ -77,7 +77,7 @@ export function useChat() {
           setSessions((prev) => [session, ...prev]);
           sessionId = session.id;
           setActiveSessionId(sessionId);
-          navigate(`/chat/${sessionId}`, { replace: true });
+          navigate(`/${sessionId}`, { replace: true });
         } catch (err: unknown) {
           const e = err as { message?: string };
           addToast({

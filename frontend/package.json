@@ -12,6 +12,8 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@fontsource-variable/geist": "^5.2.8",
+    "ag-grid-community": "^35.2.1",
+    "ag-grid-react": "^35.2.1",
     "apexcharts": "^5.10.6",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",
@@ -20,7 +22,6 @@
     "react": "^19.2.5",
     "react-apexcharts": "^2.1.0",
     "react-dom": "^19.2.5",
-    "react-router-dom": "^7.15.0",
     "shadcn": "^4.6.0",
     "tailwind-merge": "^3.5.0",
     "textarea-caret": "^3.1.0",

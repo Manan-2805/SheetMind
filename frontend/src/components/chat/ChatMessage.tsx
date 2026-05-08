@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
+
 import { ChatMessageActions } from "./ChatMessageActions";
 import { ChatResultTable } from "./ChatResultTable";
 import { TypingIndicator } from "./TypingIndicator";
 
-import type { ChatMessage as ChatMessageType } from "@/types/ChatMessage";
+import { getMessageData } from "@/api/chatApi";
+import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 import { formatRelativeTime } from "@/utils/formatDate";
 
 interface ChatMessageProps {
@@ -26,6 +29,19 @@ export function ChatMessage({
   onStar,
   onViewSQL,
 }: ChatMessageProps) {
+  const [localData, setLocalData] = useState<ResultTable | null>(message.result_data || null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+
+  useEffect(() => {
+    if (message.role === "assistant" && message.sql_query && !message.result_data && !localData && !isLoadingData && !message.is_typing) {
+      setIsLoadingData(true);
+      getMessageData(message.id)
+        .then(setLocalData)
+        .catch(console.error)
+        .finally(() => setIsLoadingData(false));
+    }
+  }, [message, localData, isLoadingData]);
+
   if (message.is_typing) {
     return <TypingIndicator />;
   }
@@ -78,9 +94,11 @@ export function ChatMessage({
           }}
         />
 
-        {message.result_data && (
-          <ChatResultTable data={message.result_data} />
-        )}
+        {isLoadingData ? (
+          <p className="text-body italic" style={{ color: "var(--color-text-tertiary)" }}>Loading table data...</p>
+        ) : (message.result_data || localData) ? (
+          <ChatResultTable data={message.result_data || localData!} />
+        ) : null}
 
         {message.nl_summary && (
           <p

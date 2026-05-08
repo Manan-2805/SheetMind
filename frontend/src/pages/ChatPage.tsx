@@ -4,6 +4,8 @@ import { Sparkles, X } from "lucide-react";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
+import { FeedbackModal } from "@/components/chat/FeedbackModal";
+import { RegenerateModal } from "@/components/chat/RegenerateModal";
 import { QueryResultPanel } from "@/components/QueryResultPanel";
 import { SkeletonChatMessage } from "@/components/skeletons/SkeletonChatMessage";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
@@ -50,6 +52,8 @@ export function ChatPage({
   const [activeResult, setActiveResult] = useState<{ message: ChatMessageType; result: ResultTable } | null>(null);
   const [isLoadingResult, setIsLoadingResult] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState<{ msg: ChatMessageType, type: "like" | "dislike" } | null>(null);
+  const [regenerateModal, setRegenerateModal] = useState<ChatMessageType | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -80,37 +84,42 @@ export function ChatPage({
     setInputValue(text);
   };
 
-  const handleThumbUp = useCallback(async (msg: ChatMessageType) => {
+  const handleThumbUp = useCallback((msg: ChatMessageType) => {
+    if (msg.feedback === "like") return;
+    setFeedbackModal({ msg, type: "like" });
+  }, []);
+
+  const handleThumbDown = useCallback((msg: ChatMessageType) => {
+    if (msg.feedback === "dislike") return;
+    setFeedbackModal({ msg, type: "dislike" });
+  }, []);
+
+  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike", reason: string) => {
+    if (!feedbackModal) return;
     try {
-      await setMessageFeedback(msg.id, "like");
-      addToast({ type: "success", title: "Feedback saved", description: "Marked as helpful" });
+      await setMessageFeedback(feedbackModal.msg.id, type); // Assuming API handles reason eventually, for now just type
+      feedbackModal.msg.feedback = type; // Optimistic update
+      addToast({ type: "success", title: "Feedback saved", description: "Thank you for your feedback!" });
     } catch {
       addToast({ type: "error", title: "Error", description: "Could not save feedback" });
     }
-  }, [addToast]);
+  }, [feedbackModal, addToast]);
 
-  const handleThumbDown = useCallback(async (msg: ChatMessageType) => {
-    try {
-      await setMessageFeedback(msg.id, "dislike");
-      addToast({ type: "success", title: "Feedback saved", description: "Marked as not helpful" });
-    } catch {
-      addToast({ type: "error", title: "Error", description: "Could not save feedback" });
-    }
-  }, [addToast]);
-
-  const handleRegenerate = useCallback(async () => {
+  const handleRegenerate = useCallback((msg: ChatMessageType) => {
     if (!activeSessionId) return;
-    const userMessages = messages.filter((m) => m.role === "user");
-    const userMsg = userMessages[userMessages.length - 1];
-    if (!userMsg) return;
+    setRegenerateModal(msg);
+  }, [activeSessionId]);
+
+  const handleRegenerateSubmit = useCallback(async (reason: string, instruction: string) => {
+    if (!activeSessionId || !regenerateModal) return;
     try {
       addToast({ type: "success", title: "Regenerating...", description: "Running query again" });
-      const newMsg = await regenerateMessage(activeSessionId, userMsg.content, userMsg.referenced_files ?? []);
+      const newMsg = await regenerateMessage(activeSessionId, regenerateModal.content, regenerateModal.referenced_files ?? [], reason, instruction, regenerateModal.id);
       if (onRegeneratedMessage) onRegeneratedMessage(newMsg);
     } catch {
       addToast({ type: "error", title: "Error", description: "Could not regenerate response" });
     }
-  }, [activeSessionId, messages, onRegeneratedMessage, addToast]);
+  }, [activeSessionId, regenerateModal, onRegeneratedMessage, addToast]);
 
   const handleViewChart = useCallback(async (msg: ChatMessageType) => {
     if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
@@ -219,7 +228,11 @@ export function ChatPage({
                 <ChatMessage
                   key={msg.id}
                   message={msg}
-                  onRegenerate={() => handleRegenerate()}
+                  onRegenerate={() => {
+                    const idx = messages.findIndex(m => m.id === msg.id);
+                    const userMsg = messages.slice(0, idx).reverse().find(m => m.role === "user");
+                    if (userMsg) handleRegenerate(userMsg);
+                  }}
                   onThumbUp={() => handleThumbUp(msg)}
                   onThumbDown={() => handleThumbDown(msg)}
                   onViewChart={() => handleViewChart(msg)}
@@ -501,6 +514,19 @@ export function ChatPage({
           exportLabel="Export to Excel"
         />
       )}
+
+      <FeedbackModal
+        isOpen={!!feedbackModal}
+        onClose={() => setFeedbackModal(null)}
+        onSubmit={handleFeedbackSubmit}
+        type={feedbackModal?.type || "like"}
+      />
+
+      <RegenerateModal
+        isOpen={!!regenerateModal}
+        onClose={() => setRegenerateModal(null)}
+        onSubmit={handleRegenerateSubmit}
+      />
     </div>
   );
 }
