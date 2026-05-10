@@ -177,7 +177,8 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
     result = conn.execute("""
         SELECT id, session_id, role, content, created_at, sql_generated, 
                sql_execution_ms, llm_generation_ms, token_count_input, 
-               token_count_output, confidence_score, result_row_count
+               token_count_output, confidence_score, result_row_count,
+               parent_user_message_id, feedback, result_data_json, version
         FROM chat_messages
         WHERE session_id = ?
         ORDER BY created_at ASC
@@ -185,8 +186,13 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
     
     messages = []
     for row in result:
-        # We don't store result_data in DB currently to save space, but we could serialize it as JSON
-        # For this version we will return what we have
+        res_data = None
+        if row[14]:
+            try:
+                res_data = ResultTable(**json.loads(row[14]))
+            except Exception:
+                pass
+
         messages.append(ChatMessageResponse(
             id=row[0],
             session_id=row[1],
@@ -199,7 +205,11 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
             token_count_input=row[8],
             token_count_output=row[9],
             confidence_score=row[10],
-            result_row_count=row[11]
+            result_row_count=row[11],
+            parent_user_message_id=row[12],
+            feedback=row[13],
+            result_data=res_data,
+            version=row[15] or 1
         ))
     return messages
 
@@ -272,11 +282,18 @@ def _extract_json_sql(raw: str) -> tuple[str, str]:
     return text, ""
 
 
-def _write_debug_prompt(prompt: str) -> None:
-    debug_dir = get_debug_prompts_dir()
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-    debug_path = debug_dir / f"prompt_{timestamp}.txt"
-    debug_path.write_text(prompt, encoding="utf-8")
+def _write_debug_prompt(prompt: str, label: str = "PROMPT") -> None:
+    debug_file = "llm_prompt_debug.txt"
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(debug_file, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"[{timestamp}] {label}\n")
+            f.write(f"{'='*80}\n")
+            f.write(prompt)
+            f.write("\n")
+    except Exception as e:
+        print(f"Failed to write debug prompt: {e}")
 
 
 def _split_reference(value: str) -> tuple[str, str | None]:
@@ -382,25 +399,8 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
                         })
                         seen_tables.add(table_name)
 
-    if not tables:
-        all_rows = conn.execute(
-            """
-            SELECT f.original_filename, s.sheet_name, s.table_name
-            FROM excel_files f
-            JOIN excel_sheets s ON s.excel_file_id = f.id
-            WHERE f.status = 'completed'
-            ORDER BY f.uploaded_at DESC, s.sheet_name ASC
-            """
-        ).fetchall()
-        for filename, sheet_name, table_name in all_rows:
-            if table_name not in seen_tables:
-                tables.append({
-                    "filename": str(filename),
-                    "sheet_name": str(sheet_name),
-                    "table_name": str(table_name),
-                })
-                seen_tables.add(str(table_name))
-
+    # Removed fallback to all tables to avoid confusing the LLM.
+    # Only explicitly referenced files/sheets (via #) are included in the schema context.
     return tables, effective_refs
 
 
@@ -490,13 +490,15 @@ def export_message(message_id: str):
     )
 
 
-async def generate_sql(content: str, schema_info: str) -> tuple[str, str]:
+async def generate_sql(content: str, schema_info: str, context: str | None = None) -> tuple[str, str]:
     """Returns (sql, llm_message) where llm_message is optional context from the LLM."""
+    context_str = f"\n\nCONTEXT FROM PREVIOUS ATTEMPT:\n{context}" if context else ""
+    
     prompt = f"""You are an expert DuckDB SQL generator.
 
 The following DuckDB tables are available (use ONLY these exact table names in your SQL, never use file names or sheet names):
 
-{schema_info}
+{schema_info}{context_str}
 
 CRITICAL RULES:
 - Use ONLY the exact "DuckDB Table Name" values shown above (e.g. file_abc123_def456) in your FROM clause.
@@ -507,7 +509,7 @@ Required JSON format:
 {{"sql": "<the complete DuckDB SQL query>", "message": "<optional one-sentence note, or null>"}}
 
 User question: "{content}"""""
-    _write_debug_prompt(prompt)
+    _write_debug_prompt(prompt, "SQL GENERATION")
 
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -546,6 +548,7 @@ And got these results (showing up to 100 rows):
 
 Provide an extremely concise, natural language summary of these results to answer the user's question directly.
 Maximum 2 sentences. Do not use filler words. Do not mention the SQL query itself, just interpret the data."""
+    _write_debug_prompt(prompt, "NL SUMMARY")
 
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -574,6 +577,7 @@ Maximum 2 sentences. Do not use filler words. Do not mention the SQL query itsel
 
 async def generate_title(content: str) -> str:
     prompt = f"""Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: "{content}". Do not use quotes or prefixes, just the title text."""
+    _write_debug_prompt(prompt, "TITLE GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -600,6 +604,7 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
 The user asked: "{nl_query}"
 The SQL generated: {sql_query[:200]}
 Return ONLY the label text, no quotes, no punctuation at end."""
+    _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -720,11 +725,13 @@ async def create_message(
     now2 = _now()
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-a"
     
+    res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
+    
     conn.execute(
         """INSERT INTO chat_messages 
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), user_msg_id]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id, result_data_json, version) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), user_msg_id, res_data_json, 1]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
     
@@ -758,9 +765,25 @@ async def regenerate_response(
     tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
     schema_info = _build_schema_info(conn, tables)
 
+    # Fetch previous context for better regeneration
+    context = ""
+    if parent_user_message_id:
+        prev_user = conn.execute("SELECT content FROM chat_messages WHERE id = ?", [parent_user_message_id]).fetchone()
+        prev_assistant = conn.execute(
+            "SELECT sql_generated, content FROM chat_messages WHERE parent_user_message_id = ? ORDER BY version DESC LIMIT 1",
+            [parent_user_message_id]
+        ).fetchone()
+        
+        if prev_user:
+            context += f"Original User Question: {prev_user[0]}\n"
+        if prev_assistant:
+            context += f"Previous SQL Attempt: {prev_assistant[0]}\n"
+            if "Failed" in str(prev_assistant[1]) or "ERROR" in str(prev_assistant[0]):
+                context += f"Previous Execution Error: {prev_assistant[1]}\n"
+
     t0 = time.time()
     try:
-        sql_result, _llm_msg = await generate_sql(content, schema_info)
+        sql_result, _llm_msg = await generate_sql(content, schema_info, context=context)
         sql = sql_result.strip()
     except Exception as e:
         sql = f"ERROR: Failed to generate SQL: {str(e)}"
@@ -808,11 +831,20 @@ async def regenerate_response(
     now2 = _now()
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-r"
 
+    # Get latest version for this parent
+    v_row = conn.execute(
+        "SELECT MAX(version) FROM chat_messages WHERE parent_user_message_id = ?",
+        [parent_user_message_id]
+    ).fetchone()
+    next_version = (v_row[0] or 1) + 1 if v_row and v_row[0] else 1
+
+    res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
+
     conn.execute(
         """INSERT INTO chat_messages
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), parent_user_message_id]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id, result_data_json, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), parent_user_message_id, res_data_json, next_version]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
@@ -829,4 +861,5 @@ async def regenerate_response(
         result_data=result_table,
         referenced_files=effective_refs,
         parent_user_message_id=parent_user_message_id,
+        version=next_version
     )

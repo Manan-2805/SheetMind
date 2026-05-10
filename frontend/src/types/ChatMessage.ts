@@ -31,6 +31,7 @@ export interface ChatMessage {
   session_title?: string;
   feedback?: string;
   parent_user_message_id?: string;
+  version?: number;
 }
 
 export interface ChatSession {

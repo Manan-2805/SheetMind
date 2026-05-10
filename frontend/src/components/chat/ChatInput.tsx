@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Hash, Send } from "lucide-react";
 
+import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import { FileAutocomplete } from "./FileAutocomplete";
 
 interface ChatInputProps {
@@ -19,9 +20,14 @@ export function ChatInput({
   placeholder = "Ask anything about your data...",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [showAutocomplete, setShowAutocomplete] = useState(false);
-  const [autocompleteQuery, setAutocompleteQuery] = useState("");
-  const [triggerIndex, setTriggerIndex] = useState(0);
+  const {
+    showAutocomplete,
+    autocompleteQuery,
+    triggerIndex,
+    files,
+    detectTrigger,
+    dismiss: dismissAutocomplete,
+  } = useFileAutocomplete();
 
   const MIN_HEIGHT = 44;
   const MAX_HEIGHT = 160;
@@ -33,29 +39,9 @@ export function ChatInput({
     ta.style.height = `${Math.min(Math.max(ta.scrollHeight, MIN_HEIGHT), MAX_HEIGHT)}px`;
   }, [value]);
 
-  const detectHashTrigger = useCallback(
-    (text: string, cursorPos: number) => {
-      const beforeCursor = text.slice(0, cursorPos);
-      const lastHash = beforeCursor.lastIndexOf("#");
-      if (lastHash === -1) {
-        setShowAutocomplete(false);
-        return;
-      }
-      const afterHash = beforeCursor.slice(lastHash + 1);
-      if (/\s/.test(afterHash)) {
-        setShowAutocomplete(false);
-        return;
-      }
-      setTriggerIndex(lastHash);
-      setAutocompleteQuery(afterHash);
-      setShowAutocomplete(true);
-    },
-    []
-  );
-
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
-    detectHashTrigger(e.target.value, e.target.selectionStart ?? 0);
+    detectTrigger(e.target.value, e.target.selectionStart ?? 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -74,7 +60,7 @@ export function ChatInput({
     const pos = ta.selectionStart ?? value.length;
     const next = value.slice(0, pos) + "#" + value.slice(pos);
     onChange(next);
-    detectHashTrigger(next, pos + 1);
+    detectTrigger(next, pos + 1);
     setTimeout(() => {
       ta.setSelectionRange(pos + 1, pos + 1);
       ta.focus();
@@ -85,7 +71,7 @@ export function ChatInput({
     const before = value.slice(0, triggerIndex);
     const after = value.slice(textareaRef.current?.selectionStart ?? value.length);
     onChange(`${before}#${insertValue} ${after}`);
-    setShowAutocomplete(false);
+    dismissAutocomplete();
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
@@ -96,10 +82,11 @@ export function ChatInput({
       {showAutocomplete && (
         <div className="relative">
           <FileAutocomplete
+            files={files}
             triggerIndex={triggerIndex}
             query={autocompleteQuery}
             onSelect={handleAutocompleteSelect}
-            onDismiss={() => setShowAutocomplete(false)}
+            onDismiss={dismissAutocomplete}
             anchorRef={textareaRef}
           />
         </div>

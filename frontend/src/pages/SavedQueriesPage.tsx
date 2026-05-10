@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Play, Search, Star, Trash2, X } from "lucide-react";
+import { Check, Play, Search, Star, X } from "lucide-react";
 
 import {
     deleteSavedQuery,
@@ -11,6 +11,7 @@ import {
 } from "@/api/savedQueriesApi";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { QueryResultPanel } from "@/components/QueryResultPanel";
+import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
 import { useToast } from "@/hooks/useToast";
 import type { ResultTable } from "@/types/ChatMessage";
 import type { SavedQuery } from "@/types/SavedQuery";
@@ -38,6 +39,7 @@ export function SavedQueriesPage() {
     const [activeResult, setActiveResult] = useState<RunResult | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [runningId, setRunningId] = useState<string | null>(null);
+    const [chartModalOpen, setChartModalOpen] = useState(false);
 
     const filters = useMemo(() => {
         const from = dateFrom ? new Date(dateFrom) : null;
@@ -120,6 +122,7 @@ export function SavedQueriesPage() {
         try {
             const res = await runSavedQuery(query.id);
             setActiveResult(res);
+            setChartModalOpen(false);
         } catch (err: unknown) {
             const e = err as { message?: string };
             addToast({ type: "error", title: "Error", description: e?.message });
@@ -144,184 +147,241 @@ export function SavedQueriesPage() {
 
     return (
         <div
-            className="flex h-full flex-col overflow-y-auto scrollbar-thin"
+            className="flex h-full flex-col lg:flex-row overflow-hidden"
             style={{ backgroundColor: "var(--color-bg-base)" }}
         >
-            <div className="mx-auto w-full max-w-6xl px-6 py-8">
-                <div
-                    className="mb-6 rounded-2xl p-6"
-                    style={{
-                        background: "linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-base) 100%)",
-                        border: "1px solid var(--color-border-default)",
-                    }}
-                >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                            <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
-                                Saved Queries
-                            </h1>
-                            <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
-                                Search, run, and manage your reusable SQL queries.
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setFavoriteOnly((prev) => !prev)}
-                            className="rounded-full px-4 py-2 text-body-em transition-all duration-[120ms]"
-                            style={{
-                                backgroundColor: favoriteOnly ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
-                                color: favoriteOnly ? "var(--color-accent)" : "var(--color-text-secondary)",
-                                border: "1px solid var(--color-border-default)",
-                            }}
-                        >
-                            {favoriteOnly ? "Showing favorites" : "All queries"}
-                        </button>
-                    </div>
-
-                    <div className="mt-5 grid gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
-                        <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)" }}>
-                            <Search size={16} style={{ color: "var(--color-text-tertiary)" }} />
-                            <input
-                                value={searchText}
-                                onChange={(e) => setSearchText(e.target.value)}
-                                placeholder="Search by label or query text"
-                                className="w-full bg-transparent text-body outline-none"
-                                style={{ color: "var(--color-text-primary)" }}
-                            />
-                        </div>
-                        <input
-                            type="date"
-                            value={dateFrom}
-                            onChange={(e) => setDateFrom(e.target.value)}
-                            className="rounded-xl px-3 py-2 text-body outline-none"
-                            style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-primary)" }}
-                        />
-                        <input
-                            type="date"
-                            value={dateTo}
-                            onChange={(e) => setDateTo(e.target.value)}
-                            className="rounded-xl px-3 py-2 text-body outline-none"
-                            style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-primary)" }}
-                        />
-                        <button
-                            onClick={() => { setSearchText(""); setDateFrom(""); setDateTo(""); }}
-                            className="rounded-xl px-3 py-2 text-body-em"
-                            style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", backgroundColor: "transparent" }}
-                        >
-                            Reset
-                        </button>
-                    </div>
-                </div>
-
-                {isLoading ? (
-                    <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>Loading...</p>
-                ) : queries.length === 0 ? (
+            {/* Left Panel: Filters and List */}
+            <div
+                className="w-full lg:w-[400px] xl:w-[450px] h-[350px] lg:h-full flex-shrink-0 flex flex-col overflow-y-auto scrollbar-thin"
+                style={{ borderRight: "1px solid var(--color-border-default)" }}
+            >
+                <div className="p-6">
                     <div
-                        className="rounded-xl p-6 text-center text-body"
-                        style={{ border: "1px dashed var(--color-border-default)", color: "var(--color-text-tertiary)" }}
+                        className="mb-6 rounded-2xl p-5"
+                        style={{
+                            background: "linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg-base) 100%)",
+                            border: "1px solid var(--color-border-default)",
+                        }}
                     >
-                        No saved queries found.
-                    </div>
-                ) : (
-                    <div className="grid gap-4">
-                        {queries.map((query) => {
-                            const isEditing = editingId === query.id;
-                            return (
-                                <div
-                                    key={query.id}
-                                    className="rounded-2xl p-5"
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
+                                        Saved Queries
+                                    </h1>
+                                    <p className="text-body mt-1 text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+                                        Manage reusable SQL queries.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setFavoriteOnly((prev) => !prev)}
+                                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-[120ms]"
                                     style={{
-                                        backgroundColor: "var(--color-bg-elevated)",
+                                        backgroundColor: favoriteOnly ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+                                        color: favoriteOnly ? "var(--color-accent)" : "var(--color-text-secondary)",
                                         border: "1px solid var(--color-border-default)",
                                     }}
                                 >
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div className="min-w-0 flex-1">
+                                    {favoriteOnly ? "Favorites" : "All"}
+                                </button>
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)" }}>
+                                    <Search size={14} style={{ color: "var(--color-text-tertiary)" }} />
+                                    <input
+                                        value={searchText}
+                                        onChange={(e) => setSearchText(e.target.value)}
+                                        placeholder="Search..."
+                                        className="w-full bg-transparent text-sm outline-none"
+                                        style={{ color: "var(--color-text-primary)" }}
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="date"
+                                        value={dateFrom}
+                                        onChange={(e) => setDateFrom(e.target.value)}
+                                        className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-primary)" }}
+                                    />
+                                    <input
+                                        type="date"
+                                        value={dateTo}
+                                        onChange={(e) => setDateTo(e.target.value)}
+                                        className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-primary)" }}
+                                    />
+                                </div>
+                                {(searchText || dateFrom || dateTo) && (
+                                    <button
+                                        onClick={() => { setSearchText(""); setDateFrom(""); setDateTo(""); }}
+                                        className="rounded-xl px-3 py-1.5 text-xs font-medium"
+                                        style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", backgroundColor: "transparent" }}
+                                    >
+                                        Reset Filters
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {isLoading ? (
+                        <p className="text-body text-sm" style={{ color: "var(--color-text-tertiary)" }}>Loading...</p>
+                    ) : queries.length === 0 ? (
+                        <div
+                            className="rounded-xl p-6 text-center text-sm"
+                            style={{ border: "1px dashed var(--color-border-default)", color: "var(--color-text-tertiary)" }}
+                        >
+                            No saved queries found.
+                        </div>
+                    ) : (
+                        <div className="grid gap-3">
+                            {queries.map((query) => {
+                                const isEditing = editingId === query.id;
+                                const isActive = activeResult?.id === query.id;
+                                return (
+                                    <div
+                                        key={query.id}
+                                        className="rounded-xl p-4 transition-all duration-[120ms]"
+                                        style={{
+                                            backgroundColor: isActive ? "var(--color-bg-hover)" : "var(--color-bg-elevated)",
+                                            border: isActive ? "1px solid var(--color-accent)" : "1px solid var(--color-border-default)",
+                                        }}
+                                    >
+                                        <div className="flex flex-col gap-3">
                                             {isEditing ? (
                                                 <div className="flex items-center gap-2">
                                                     <input
                                                         value={editingLabel}
                                                         onChange={(e) => setEditingLabel(e.target.value)}
-                                                        className="w-full rounded-lg px-3 py-2 text-body outline-none"
+                                                        className="w-full rounded-lg px-2 py-1 text-sm outline-none"
                                                         style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-primary)" }}
                                                     />
                                                     <button
                                                         onClick={() => confirmRename(query)}
-                                                        className="rounded-lg p-2"
+                                                        className="rounded p-1.5"
                                                         style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
-                                                        aria-label="Save"
                                                     >
-                                                        <Check size={14} />
+                                                        <Check size={12} />
                                                     </button>
                                                     <button
                                                         onClick={cancelRename}
-                                                        className="rounded-lg p-2"
+                                                        className="rounded p-1.5"
                                                         style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)" }}
-                                                        aria-label="Cancel"
                                                     >
-                                                        <X size={14} />
+                                                        <X size={12} />
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => handleToggleFavorite(query)}
-                                                        className="rounded-full p-1"
-                                                        style={{ color: query.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
-                                                        aria-label="Toggle favorite"
-                                                    >
-                                                        <Star size={16} fill={query.is_favorite ? "currentColor" : "none"} />
-                                                    </button>
-                                                    <p className="text-body-em truncate" style={{ color: "var(--color-text-primary)" }}>
-                                                        {query.label}
-                                                    </p>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleToggleFavorite(query)}
+                                                                className="rounded-full p-1 -ml-1"
+                                                                style={{ color: query.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                                                            >
+                                                                <Star size={14} fill={query.is_favorite ? "currentColor" : "none"} />
+                                                            </button>
+                                                            <p className="text-sm font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
+                                                                {query.label}
+                                                            </p>
+                                                        </div>
+                                                        <p
+                                                            className="text-xs mt-1"
+                                                            style={{ color: "var(--color-text-secondary)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                                                        >
+                                                            {query.nl_query}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             )}
-                                            <p
-                                                className="text-body mt-2"
-                                                style={{ color: "var(--color-text-secondary)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
-                                            >
-                                                {query.nl_query}
-                                            </p>
-                                        </div>
 
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => handleRun(query)}
-                                                disabled={runningId === query.id}
-                                                className="flex items-center gap-2 rounded-lg px-3 py-2 text-body-em transition-all duration-[120ms]"
-                                                style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: runningId === query.id ? 0.7 : 1 }}
-                                            >
-                                                <Play size={14} />
-                                                {runningId === query.id ? "Running..." : "Run"}
-                                            </button>
-                                            {!isEditing && (
-                                                <button
-                                                    onClick={() => startRename(query)}
-                                                    className="rounded-lg px-3 py-2 text-body-em"
-                                                    style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)" }}
-                                                >
-                                                    Rename
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => setDeleteId(query.id)}
-                                                className="rounded-lg px-3 py-2 text-body-em"
-                                                style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-tertiary)" }}
-                                                aria-label="Delete query"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                            <div className="flex items-center justify-between mt-1">
+                                                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--color-text-tertiary)" }}>
+                                                    <span>{query.use_count} runs</span>
+                                                    <span>•</span>
+                                                    <span>{formatAbsoluteDate(query.last_used_at)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    {!isEditing && (
+                                                        <button
+                                                            onClick={() => startRename(query)}
+                                                            className="rounded px-2 py-1 text-xs font-medium"
+                                                            style={{ color: "var(--color-text-secondary)" }}
+                                                        >
+                                                            Rename
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => setDeleteId(query.id)}
+                                                        className="rounded px-2 py-1 text-xs font-medium"
+                                                        style={{ color: "var(--color-text-tertiary)" }}
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRun(query)}
+                                                        disabled={runningId === query.id}
+                                                        className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                                                        style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: runningId === query.id ? 0.7 : 1 }}
+                                                    >
+                                                        <Play size={12} fill="currentColor" />
+                                                        Run
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
 
-                                    <div className="mt-4 flex flex-wrap items-center gap-3 text-ui-label" style={{ color: "var(--color-text-tertiary)" }}>
-                                        <span>Created {formatAbsoluteDate(query.created_at)}</span>
-                                        <span>Last used {formatAbsoluteDate(query.last_used_at)}</span>
-                                        <span>{query.use_count} runs</span>
-                                    </div>
-                                </div>
-                            );
-                        })}
+            {/* Right Panel: Result Table */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--color-bg-base)]">
+                {activeResult ? (
+                    <div className="flex-1 flex flex-col p-6 overflow-hidden">
+                        <div className="mb-4 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>{activeResult.label}</h2>
+                                <p className="text-sm mt-1" style={{ color: "var(--color-text-tertiary)" }}>{activeResult.nl_query}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setChartModalOpen(true)}
+                                    className="rounded-lg px-4 py-2 text-sm font-medium transition-all duration-[120ms]"
+                                    style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-elevated)", color: "var(--color-text-secondary)" }}
+                                >
+                                    Build Chart
+                                </button>
+                                <button
+                                    onClick={handleExport}
+                                    disabled={isExporting}
+                                    className="rounded-lg px-4 py-2 text-sm font-medium transition-all duration-[120ms]"
+                                    style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isExporting ? 0.7 : 1 }}
+                                >
+                                    {isExporting ? "Exporting..." : "Export Excel"}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-hidden rounded-xl" style={{ border: "1px solid var(--color-border-default)" }}>
+                            <ExcelPreviewGrid result={activeResult.result} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+                                <Play size={24} style={{ color: "var(--color-text-tertiary)" }} />
+                            </div>
+                            <p className="text-lg font-medium" style={{ color: "var(--color-text-secondary)" }}>No Query Selected</p>
+                            <p className="text-sm mt-1" style={{ color: "var(--color-text-tertiary)" }}>Run a saved query from the left panel to see results</p>
+                        </div>
                     </div>
                 )}
             </div>
@@ -337,8 +397,8 @@ export function SavedQueriesPage() {
             />
 
             <QueryResultPanel
-                open={activeResult !== null}
-                onClose={() => setActiveResult(null)}
+                open={chartModalOpen}
+                onClose={() => setChartModalOpen(false)}
                 title={activeResult?.label ?? ""}
                 subtitle={activeResult?.nl_query}
                 result={activeResult?.result ?? null}

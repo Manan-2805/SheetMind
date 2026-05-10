@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import ApexCharts, { type ApexAxisChartSeries, type ApexNonAxisChartSeries } from "apexcharts";
-import { Download, Play } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, Play, Loader2 } from "lucide-react";
 
-import { ChartRenderer } from "@/components/charts/ChartRenderer";
+import { generateChart } from "@/api/chatApi";
 import {
     Dialog,
     DialogContent,
@@ -60,6 +59,9 @@ interface QueryResultPanelProps {
     title: string;
     subtitle?: string;
     result: ResultTable | null;
+    onExport?: () => void;
+    exporting?: boolean;
+    exportLabel?: string;
 }
 
 function toNumber(value: unknown): number | null {
@@ -78,18 +80,10 @@ export function QueryResultPanel({
     subtitle,
     result,
 }: QueryResultPanelProps) {
-    const chartIdRef = useRef(`chart-${Math.random().toString(36).slice(2, 9)}`);
     const [chartType, setChartType] = useState<ChartType>("bar");
     const [paletteIndex, setPaletteIndex] = useState(0);
     const [xKey, setXKey] = useState<string | null>(null);
     const [yKey, setYKey] = useState<string | null>(null);
-    
-    const [committedConfig, setCommittedConfig] = useState<{
-        type: ChartType;
-        x: string | null;
-        y: string | null;
-        palette: number;
-    } | null>(null);
 
     const columnMeta = useMemo(() => {
         if (!result) return { numeric: [], categorical: [] };
@@ -109,98 +103,67 @@ export function QueryResultPanel({
         return { numeric, categorical };
     }, [result]);
 
+    const [chartImageUrl, setChartImageUrl] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
     useEffect(() => {
         if (!result) return;
         const firstNumeric = columnMeta.numeric[0] ?? result.columns[0]?.key ?? null;
         const firstCategory = columnMeta.categorical[0] ?? result.columns[0]?.key ?? null;
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setXKey(firstCategory);
         setYKey(firstNumeric);
-        setCommittedConfig(null);
+        setChartImageUrl(null);
     }, [result, columnMeta]);
 
-    const handleGenerate = () => {
-        setCommittedConfig({
-            type: chartType,
-            x: xKey,
-            y: yKey,
-            palette: paletteIndex
-        });
-    };
-
-    const chartData = useMemo<{
-        series: ApexAxisChartSeries | ApexNonAxisChartSeries | null;
-        categories: string[];
-        labels: string[];
-        error: string | null;
-    }>(() => {
-        if (!result || !committedConfig) return { series: null, categories: [], labels: [], error: null };
-
-        const { type, x: cXKey, y: cYKey } = committedConfig;
-
-        if (["bar", "horizontal-bar", "line", "area"].includes(type)) {
-            if (!cXKey || !cYKey) return { series: null, categories: [], labels: [], error: "Select X and Y axes." };
-            const categories: string[] = [];
-            const categoryIndex = new Map<string, number>();
-            const dataArr: number[] = [];
-
-            result.rows.forEach((row) => {
-                const xVal = row[cXKey];
-                const yVal = toNumber(row[cYKey]);
-                if (yVal === null) return;
-                const category = xVal === null || xVal === undefined ? "Unknown" : String(xVal);
-                if (!categoryIndex.has(category)) {
-                    categoryIndex.set(category, categories.length);
-                    categories.push(category);
-                    dataArr.push(0);
-                }
-                dataArr[categoryIndex.get(category)!] += yVal;
+    const handleGenerate = async () => {
+        if (!result || !xKey || !yKey) return;
+        setIsGenerating(true);
+        try {
+            const blob = await generateChart({
+                data: result.rows,
+                chart_type: chartType,
+                x_key: xKey,
+                y_key: yKey,
+                title: title || "Chart",
+                colors: PALETTES[paletteIndex].colors,
             });
-
-            return { series: [{ name: "Series", data: dataArr }], categories, labels: [], error: dataArr.length ? null : "No numeric data." };
-        }
-
-        if (["pie", "donut"].includes(type)) {
-            if (!cXKey || !cYKey) return { series: null, categories: [], labels: [], error: "Select X (label) and Y (value)." };
-            const totals = new Map<string, number>();
-            result.rows.forEach((row) => {
-                const label = row[cXKey];
-                const val = toNumber(row[cYKey]);
-                if (val === null) return;
-                const key = label === null || label === undefined ? "Unknown" : String(label);
-                totals.set(key, (totals.get(key) ?? 0) + val);
-            });
-            const labels = Array.from(totals.keys());
-            const series = labels.map((label) => totals.get(label) ?? 0);
-            return { series, categories: [], labels, error: series.length ? null : "No numeric data." };
-        }
-
-        if (type === "scatter") {
-            if (!cXKey || !cYKey) return { series: null, categories: [], labels: [], error: "Select X and Y axes." };
-            const points: { x: number; y: number }[] = [];
-            result.rows.forEach((row) => {
-                const xVal = toNumber(row[cXKey]);
-                const yVal = toNumber(row[cYKey]);
-                if (xVal === null || yVal === null) return;
-                points.push({ x: xVal, y: yVal });
-            });
-            return { series: [{ name: "Series", data: points }], categories: [], labels: [], error: points.length ? null : "No numeric data." };
-        }
-
-        return { series: null, categories: [], labels: [], error: "Unsupported chart type." };
-    }, [result, committedConfig]);
-
-    const handleDownload = (type: "PNG" | "SVG") => {
-        if (!chartData.series) return;
-        if (type === "PNG") {
-            ApexCharts.exec(chartIdRef.current, "downloadPNG");
-        } else {
-            ApexCharts.exec(chartIdRef.current, "downloadSVG");
+            if (blob) {
+                const url = URL.createObjectURL(blob);
+                setChartImageUrl(url);
+            }
+        } catch (error) {
+            console.error("Failed to generate chart", error);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
-    const hasChart = chartData.series !== null && !chartData.error;
-    const activePalette = committedConfig ? PALETTES[committedConfig.palette] : PALETTES[paletteIndex];
+    const handleDownload = async (format: "PNG" | "SVG") => {
+        if (!result || !xKey || !yKey) return;
+        try {
+            const blob = await generateChart({
+                data: result.rows,
+                chart_type: chartType,
+                x_key: xKey,
+                y_key: yKey,
+                title: title || "Chart",
+                colors: PALETTES[paletteIndex].colors,
+                output_format: format.toLowerCase(),
+            });
+            if (blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `chart.${format.toLowerCase()}`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (error) {
+            console.error("Failed to download chart", error);
+        }
+    };
 
     return (
         <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
@@ -258,10 +221,13 @@ export function QueryResultPanel({
                                         <SelectValue placeholder="Select numeric column" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {(columnMeta.numeric.length ? columnMeta.numeric : result.columns.map((c) => c.key)).map((key) => {
-                                            const col = result.columns.find((c) => c.key === key);
-                                            return <SelectItem key={key} value={key}>{col?.label ?? key}</SelectItem>;
-                                        })}
+                                        {result.columns
+                                            .filter((col) => col.key !== xKey)
+                                            .map((col) => (
+                                                <SelectItem key={col.key} value={col.key}>
+                                                    {col.label}
+                                                </SelectItem>
+                                            ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -292,26 +258,18 @@ export function QueryResultPanel({
                             <div className="mt-2">
                                 <button
                                     onClick={handleGenerate}
+                                    disabled={isGenerating}
                                     className="flex w-full items-center justify-center gap-2 rounded-lg py-2 text-body-em transition-all duration-[120ms] active:scale-[0.98]"
-                                    style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
+                                    style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isGenerating ? 0.7 : 1 }}
                                 >
-                                    <Play size={16} />
-                                    Generate Chart
+                                    {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                                    {isGenerating ? "Generating..." : "Generate Chart"}
                                 </button>
                             </div>
                         </div>
 
                         <div className="flex flex-col gap-4">
-                            {chartData.error && (
-                                <div
-                                    className="rounded-xl p-4 text-body"
-                                    style={{ backgroundColor: "var(--color-bg-hover)", border: "1px dashed var(--color-border-default)", color: "var(--color-text-tertiary)" }}
-                                >
-                                    {chartData.error}
-                                </div>
-                            )}
-
-                            {!committedConfig && !chartData.error && (
+                            {!chartImageUrl && !isGenerating && (
                                 <div
                                     className="flex h-[320px] items-center justify-center rounded-xl text-body"
                                     style={{ border: "1px dashed var(--color-border-default)", color: "var(--color-text-tertiary)" }}
@@ -320,22 +278,26 @@ export function QueryResultPanel({
                                 </div>
                             )}
 
-                            {hasChart && committedConfig && (
-                                <div className="rounded-xl p-4" style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)" }}>
-                                    <ChartRenderer
-                                        type={committedConfig.type === "horizontal-bar" ? "horizontal-bar" : committedConfig.type}
-                                        series={chartData.series ?? []}
-                                        categories={chartData.categories}
-                                        labels={chartData.labels}
-                                        title={title || "Chart"}
-                                        chartId={chartIdRef.current}
-                                        colors={activePalette.colors}
-                                        height={320}
+                            {isGenerating && (
+                                <div
+                                    className="flex h-[320px] items-center justify-center rounded-xl text-body"
+                                    style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)", color: "var(--color-text-tertiary)" }}
+                                >
+                                    <Loader2 size={32} className="animate-spin text-accent" />
+                                </div>
+                            )}
+
+                            {chartImageUrl && !isGenerating && (
+                                <div className="rounded-xl p-4 overflow-hidden flex items-center justify-center bg-white" style={{ border: "1px solid var(--color-border-subtle)", height: "320px" }}>
+                                    <img 
+                                        src={chartImageUrl} 
+                                        alt="Generated Chart" 
+                                        className="max-w-full max-h-full object-contain"
                                     />
                                 </div>
                             )}
 
-                            {hasChart && committedConfig && (
+                            {chartImageUrl && (
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => handleDownload("PNG")}

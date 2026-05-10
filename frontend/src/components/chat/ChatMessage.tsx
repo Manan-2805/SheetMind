@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ChatMessageActions } from "./ChatMessageActions";
@@ -9,7 +10,7 @@ import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMe
 import { formatRelativeTime } from "@/utils/formatDate";
 
 interface ChatMessageProps {
-  message: ChatMessageType;
+  message: ChatMessageType & { versions?: ChatMessageType[] };
   onRegenerate?: () => void;
   onThumbUp?: () => void;
   onThumbDown?: () => void;
@@ -17,6 +18,7 @@ interface ChatMessageProps {
   onDownload?: () => void;
   onStar?: () => void;
   onViewSQL?: () => void;
+  onVersionChange?: (delta: number) => void;
 }
 
 export function ChatMessage({ 
@@ -28,19 +30,24 @@ export function ChatMessage({
   onDownload,
   onStar,
   onViewSQL,
+  onVersionChange,
 }: ChatMessageProps) {
   const [localData, setLocalData] = useState<ResultTable | null>(message.result_data || null);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
 
   useEffect(() => {
-    if (message.role === "assistant" && message.sql_query && !message.result_data && !localData && !isLoadingData && !message.is_typing) {
+    if (message.role === "assistant" && message.sql_generated && !message.sql_generated.startsWith("ERROR") && !message.result_data && !localData && !isLoadingData && !message.is_typing && !fetchAttempted) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setFetchAttempted(true);
       setIsLoadingData(true);
+      /* eslint-enable react-hooks/set-state-in-effect */
       getMessageData(message.id)
         .then(setLocalData)
         .catch(console.error)
         .finally(() => setIsLoadingData(false));
     }
-  }, [message, localData, isLoadingData]);
+  }, [message, localData, isLoadingData, fetchAttempted]);
 
   if (message.is_typing) {
     return <TypingIndicator />;
@@ -75,13 +82,39 @@ export function ChatMessage({
       </div>
 
       <div className="flex flex-1 flex-col gap-2 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-ui-label font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            SheetMind
-          </span>
-          <span className="text-ui-label" style={{ color: "var(--color-text-tertiary)" }}>
-            {formatRelativeTime(message.created_at)}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-ui-label font-semibold" style={{ color: "var(--color-text-primary)" }}>
+              SheetMind
+            </span>
+            <span className="text-ui-label" style={{ color: "var(--color-text-tertiary)" }}>
+              {formatRelativeTime(message.created_at)}
+            </span>
+          </div>
+
+          {message.versions && message.versions.length > 1 && (
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={() => onVersionChange?.(-1)}
+                disabled={(message.versions.findIndex(v => v.id === message.id)) === 0}
+                className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30"
+                style={{ color: "var(--color-text-tertiary)" }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="text-[10px] font-medium" style={{ color: "var(--color-text-tertiary)" }}>
+                {(message.versions.findIndex(v => v.id === message.id)) + 1} / {message.versions.length}
+              </span>
+              <button
+                onClick={() => onVersionChange?.(1)}
+                disabled={(message.versions.findIndex(v => v.id === message.id)) === message.versions.length - 1}
+                className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30"
+                style={{ color: "var(--color-text-tertiary)" }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         <p

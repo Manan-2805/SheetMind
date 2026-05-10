@@ -43,6 +43,7 @@ class ChatMessageResponse(BaseModel):
     session_title: Optional[str] = None  # set on first message so frontend can update sidebar title
     parent_user_message_id: Optional[str] = None
     feedback: Optional[str] = None
+    version: Optional[int] = 1
 
 
 class SendMessageRequest(BaseModel):

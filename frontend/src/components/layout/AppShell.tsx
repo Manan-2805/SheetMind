@@ -99,12 +99,12 @@ export function AppShell() {
     await sendChatMessage(content, files);
   }, [sendChatMessage]);
 
-  // When a message is sent in a "new" chat, we should ideally navigate to the new session ID.
-  // We will handle this in useChat to return the new session ID and navigate there.
-  // We'll update useChat to optionally take a navigate callback, or we handle it here.
+  const handleUpdateMessage = useCallback((msg: import("@/types/ChatMessage").ChatMessage) => {
+    setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+  }, [setMessages]);
 
   return (
-    <TooltipProvider delayDuration={500}>
+    <TooltipProvider delay={500}>
       <div
         className="flex h-screen overflow-hidden"
         style={{ backgroundColor: "var(--color-bg-base)" }}
@@ -142,6 +142,7 @@ export function AppShell() {
                 startNewChat={startNewChat}
                 activeSessionId={activeSessionId}
                 onRegeneratedMessage={handleRegeneratedMessage}
+                onUpdateMessage={handleUpdateMessage}
               />
             } />
             <Route path="/" element={
@@ -155,6 +156,7 @@ export function AppShell() {
                 startNewChat={startNewChat}
                 activeSessionId={activeSessionId}
                 onRegeneratedMessage={handleRegeneratedMessage}
+                onUpdateMessage={handleUpdateMessage}
               />
             } />
             

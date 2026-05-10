@@ -139,3 +139,22 @@ export async function exportMessage(messageId: string): Promise<ArtifactExport> 
     handleError(error);
   }
 }
+
+export async function generateChart(params: {
+  data: Record<string, unknown>[];
+  chart_type: string;
+  x_key: string;
+  y_key: string;
+  title?: string;
+  colors?: string[];
+  output_format?: string;
+}): Promise<Blob> {
+  try {
+    const res = await client.post("/chat/charts/generate", params, {
+      responseType: "blob",
+    });
+    return res.data as Blob;
+  } catch (error) {
+    handleError(error);
+  }
+}

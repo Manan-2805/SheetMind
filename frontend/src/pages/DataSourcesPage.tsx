@@ -52,8 +52,10 @@ export function DataSourcesPage() {
     }
   }, [addToast]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:8000/api/ws/datasources");
@@ -85,7 +87,7 @@ export function DataSourcesPage() {
       }
     };
     return () => ws.close();
-  }, []);
+  }, [load]);
 
   const handleUpload = async (files: FileList) => {
     const fileArr = Array.from(files);
@@ -174,12 +176,44 @@ export function DataSourcesPage() {
       style={{ backgroundColor: "var(--color-bg-base)" }}
     >
       <div className="mx-auto w-full max-w-5xl px-6 py-8">
-        <h1
-          className="text-page-heading mb-6"
-          style={{ color: "var(--color-text-primary)" }}
-        >
-          Data Sources
-        </h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1
+            className="text-page-heading"
+            style={{ color: "var(--color-text-primary)" }}
+          >
+            Data Sources
+          </h1>
+          <button
+            onClick={() => void load()}
+            disabled={isLoading}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms]"
+            style={{
+              backgroundColor: "var(--color-bg-hover)",
+              border: "1px solid var(--color-border-default)",
+              color: "var(--color-text-secondary)",
+              opacity: isLoading ? 0.7 : 1,
+            }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={isLoading ? "animate-spin" : ""}
+            >
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 21v-5h5" />
+            </svg>
+            Refresh
+          </button>
+        </div>
 
         <div
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}

@@ -85,7 +85,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             confidence_score INTEGER,
             result_row_count INTEGER,
             feedback VARCHAR,
-            parent_user_message_id VARCHAR
+            parent_user_message_id VARCHAR,
+            result_data_json VARCHAR,
+            version INTEGER DEFAULT 1
         )
     """)
 
@@ -130,3 +132,5 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT DEFAULT 0")
     _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS title VARCHAR")
     _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS parent_user_message_id VARCHAR")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS result_data_json VARCHAR")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1")

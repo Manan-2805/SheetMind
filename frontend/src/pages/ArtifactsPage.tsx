@@ -46,7 +46,10 @@ export function ArtifactsPage() {
         }
     }, [addToast]);
 
-    useEffect(() => { void loadArtifacts(); }, [loadArtifacts]);
+    useEffect(() => { 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void loadArtifacts(); 
+    }, [loadArtifacts]);
 
     const startRename = (artifact: ArtifactExport) => {
         setEditingId(artifact.id);
@@ -288,6 +291,7 @@ function ArtifactPreviewModal({ open, onClose, artifact }: { open: boolean, onCl
 
     useEffect(() => {
         if (!open || !artifact) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
         getArtifactData(artifact.id)
             .then(setResult)

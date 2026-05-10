@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
+import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
+
+ModuleRegistry.registerModules([AllCommunityModule]);
 
 import type { ResultTable } from "@/types/ChatMessage";
 import { useTheme } from "@/hooks/useTheme";

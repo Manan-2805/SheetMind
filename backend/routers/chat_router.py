@@ -1,9 +1,10 @@
-import asyncio
-
+from typing import Any
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import models.chat_models as chat_models
+import services.chart_service as chart_service
 from schemas.artifact_schemas import ArtifactExportResponse
 from schemas.chat_schemas import (
     ChatMessageResponse,
@@ -15,6 +16,33 @@ from schemas.chat_schemas import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+class ChartGenerateRequest(BaseModel):
+    data: list[dict[str, Any]]
+    chart_type: str
+    x_key: str
+    y_key: str
+    title: str = "Chart"
+    colors: list[str] | None = None
+    output_format: str = "png"
+
+
+@router.post("/charts/generate")
+async def generate_chart_endpoint(body: ChartGenerateRequest):
+    try:
+        buf = chart_service.generate_chart(
+            data=body.data,
+            chart_type=body.chart_type,
+            x_key=body.x_key,
+            y_key=body.y_key,
+            title=body.title,
+            colors=body.colors,
+            output_format=body.output_format
+        )
+        media_type = "image/png" if body.output_format == "png" else "image/svg+xml"
+        return StreamingResponse(buf, media_type=media_type)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])

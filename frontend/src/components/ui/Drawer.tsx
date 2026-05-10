@@ -38,6 +38,13 @@ export function Drawer({
 
   return (
     <>
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/20"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
       <div
         ref={drawerRef}
         className={cn("fixed top-0 z-40 flex h-full flex-col", className)}

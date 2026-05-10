@@ -15,6 +15,7 @@ export interface DataSource {
   num_sheets: number;
   file_size_bytes: number;
   sheets: ExcelSheet[];
+  status: string;
 }
 
 export interface DataSourcePreview {

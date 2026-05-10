@@ -54,7 +54,8 @@ export function ChartRenderer({
       style={{ border: "1px solid var(--color-border-default)" }}
     >
       <ReactApexChart
-        type={mapType(type) as ApexCharts.ChartType}
+        key={type}
+        type={mapType(type) as "bar" | "line" | "area" | "pie" | "donut" | "scatter" | "heatmap"}
         series={series}
         options={options}
         height={height}

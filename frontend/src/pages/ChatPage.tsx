@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
@@ -20,9 +20,10 @@ interface ChatPageProps {
   isSending: boolean;
   sendChatMessage: (content: string, files?: string[]) => Promise<void>;
   loadSessions: () => Promise<void>;
-  startNewChat: () => Promise<unknown>;
+  startNewChat: () => void | Promise<unknown>;
   activeSessionId: string | null;
   onRegeneratedMessage?: (msg: ChatMessageType) => void;
+  onUpdateMessage?: (msg: ChatMessageType) => void;
   onNewChat?: () => void;
 }
 
@@ -39,6 +40,7 @@ export function ChatPage({
   loadSessions,
   activeSessionId,
   onRegeneratedMessage,
+  onUpdateMessage,
 }: ChatPageProps) {
   const [inputValue, setInputValue] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -94,16 +96,16 @@ export function ChatPage({
     setFeedbackModal({ msg, type: "dislike" });
   }, []);
 
-  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike", reason: string) => {
-    if (!feedbackModal) return;
+  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike") => {
+    if (!feedbackModal || !onUpdateMessage) return;
     try {
       await setMessageFeedback(feedbackModal.msg.id, type); // Assuming API handles reason eventually, for now just type
-      feedbackModal.msg.feedback = type; // Optimistic update
+      onUpdateMessage({ ...feedbackModal.msg, feedback: type });
       addToast({ type: "success", title: "Feedback saved", description: "Thank you for your feedback!" });
     } catch {
       addToast({ type: "error", title: "Error", description: "Could not save feedback" });
     }
-  }, [feedbackModal, addToast]);
+  }, [feedbackModal, addToast, onUpdateMessage]);
 
   const handleRegenerate = useCallback((msg: ChatMessageType) => {
     if (!activeSessionId) return;
@@ -209,6 +211,56 @@ export function ChatPage({
     }
   };
 
+  const [activeVersions, setActiveVersions] = useState<Record<string, number>>({});
+
+  const groupedMessages = useMemo(() => {
+    const groups: (ChatMessageType & { versions?: ChatMessageType[] })[] = [];
+    const assistantGroups: Record<string, ChatMessageType[]> = {};
+
+    // First, collect all assistant messages by their parent
+    messages.forEach((msg) => {
+      if (msg.role === "assistant" && msg.parent_user_message_id) {
+        if (!assistantGroups[msg.parent_user_message_id]) {
+          assistantGroups[msg.parent_user_message_id] = [];
+        }
+        assistantGroups[msg.parent_user_message_id].push(msg);
+      }
+    });
+
+    // Now build the final list
+    messages.forEach((msg) => {
+      if (msg.role === "user") {
+        groups.push(msg);
+        const versions = assistantGroups[msg.id];
+        if (versions && versions.length > 0) {
+          // Sort versions by created_at or version number
+          const sortedVersions = [...versions].sort((a, b) => (a.version || 0) - (b.version || 0));
+          const activeIdx = activeVersions[msg.id] ?? sortedVersions.length - 1;
+          const clampedIdx = Math.max(0, Math.min(activeIdx, sortedVersions.length - 1));
+          
+          const activeMsg = { ...sortedVersions[clampedIdx], versions: sortedVersions };
+          groups.push(activeMsg);
+        }
+      } else if (msg.role === "assistant" && !msg.parent_user_message_id) {
+        // Fallback for assistant messages without parent
+        groups.push(msg);
+      }
+    });
+
+    return groups;
+  }, [messages, activeVersions]);
+
+  const handleVersionChange = (parentMsgId: string, delta: number) => {
+    const versions = groupedMessages.find((m: ChatMessageType & { versions?: ChatMessageType[] }) => m.parent_user_message_id === parentMsgId)?.versions;
+    if (!versions) return;
+    
+    setActiveVersions((prev: Record<string, number>) => {
+      const currentIdx = prev[parentMsgId] ?? versions.length - 1;
+      const nextIdx = Math.max(0, Math.min(currentIdx + delta, versions.length - 1));
+      return { ...prev, [parentMsgId]: nextIdx };
+    });
+  };
+
   const isEmpty = messages.length === 0 && !isLoadingMessages;
 
   return (
@@ -224,13 +276,12 @@ export function ChatPage({
         ) : (
           <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
             <div className="mx-auto max-w-3xl">
-              {messages.map((msg) => (
+              {groupedMessages.map((msg: ChatMessageType & { versions?: ChatMessageType[] }) => (
                 <ChatMessage
                   key={msg.id}
                   message={msg}
                   onRegenerate={() => {
-                    const idx = messages.findIndex(m => m.id === msg.id);
-                    const userMsg = messages.slice(0, idx).reverse().find(m => m.role === "user");
+                    const userMsg = groupedMessages.find((m: ChatMessageType) => m.id === msg.parent_user_message_id);
                     if (userMsg) handleRegenerate(userMsg);
                   }}
                   onThumbUp={() => handleThumbUp(msg)}
@@ -239,6 +290,7 @@ export function ChatPage({
                   onDownload={() => handleExport(msg)}
                   onViewSQL={() => handleViewSQL(msg)}
                   onStar={() => handleOpenSaveModal(msg)}
+                  onVersionChange={(delta: number) => msg.parent_user_message_id && handleVersionChange(msg.parent_user_message_id, delta)}
                 />
               ))}
               <div ref={bottomRef} />
@@ -518,7 +570,7 @@ export function ChatPage({
       <FeedbackModal
         isOpen={!!feedbackModal}
         onClose={() => setFeedbackModal(null)}
-        onSubmit={handleFeedbackSubmit}
+        onSubmit={(type) => handleFeedbackSubmit(type)}
         type={feedbackModal?.type || "like"}
       />
 

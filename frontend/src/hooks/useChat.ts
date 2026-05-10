@@ -64,7 +64,6 @@ export function useChat() {
   const startNewChat = useCallback(() => {
     setActiveSessionId(null);
     setMessages([]);
-    return null;
   }, []);
 
   const sendChatMessage = useCallback(

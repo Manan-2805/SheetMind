@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
+import { useCallback, useEffect, useState } from "react";
 import { listForAutocomplete } from "@/api/dataSourcesApi";
 import type { AutocompleteFile } from "@/types/DataSource";
+
+let cachedFiles: AutocompleteFile[] | null = null;
+let isFetching = false;
 
 interface UseFileAutocompleteReturn {
   showAutocomplete: boolean;
@@ -10,22 +12,35 @@ interface UseFileAutocompleteReturn {
   files: AutocompleteFile[];
   dismiss: () => void;
   detectTrigger: (text: string, cursorPos: number) => void;
+  refresh: () => void;
 }
 
 export function useFileAutocomplete(): UseFileAutocompleteReturn {
-  const [files, setFiles] = useState<AutocompleteFile[]>([]);
+  const [files, setFiles] = useState<AutocompleteFile[]>(cachedFiles || []);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteQuery, setAutocompleteQuery] = useState("");
   const [triggerIndex, setTriggerIndex] = useState(0);
-  const fetched = useRef(false);
+
+  const fetchFiles = useCallback(async () => {
+    if (isFetching) return;
+    isFetching = true;
+    try {
+      const res = await listForAutocomplete();
+      cachedFiles = res.files;
+      setFiles(res.files);
+    } catch (err) {
+      console.error("Failed to fetch autocomplete files", err);
+    } finally {
+      isFetching = false;
+    }
+  }, []);
 
   useEffect(() => {
-    if (fetched.current) return;
-    fetched.current = true;
-    listForAutocomplete()
-      .then((res) => setFiles(res.files))
-      .catch(() => {});
-  }, []);
+    if (!cachedFiles) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchFiles();
+    }
+  }, [fetchFiles]);
 
   const detectTrigger = useCallback(
     (text: string, cursorPos: number) => {
@@ -56,5 +71,6 @@ export function useFileAutocomplete(): UseFileAutocompleteReturn {
     files,
     dismiss,
     detectTrigger,
+    refresh: fetchFiles,
   };
 }
