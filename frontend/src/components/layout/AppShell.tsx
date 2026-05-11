@@ -30,12 +30,12 @@ export function AppShell() {
     selectSession,
     startNewChat,
     sendChatMessage,
+    deleteMessageBranch,
+    editMessage,
+    regenerateResponse,
     setMessages,
+    followups,
   } = useChat();
-
-  const handleRegeneratedMessage = useCallback((msg: import("@/types/ChatMessage").ChatMessage) => {
-    setMessages((prev) => [...prev.filter((m) => !m.is_typing), msg]);
-  }, [setMessages]);
 
   // Sync route param with chat session
   useEffect(() => {
@@ -51,8 +51,6 @@ export function AppShell() {
         selectSession(sessionId);
       }
     } else if (location.pathname === "/" && activeSessionId) {
-      // If we go back to root and there is an active session, let's start a new chat?
-      // Or just leave it. Usually "/" means new chat
       startNewChat();
     }
   }, [location.pathname, activeSessionId, selectSession, startNewChat]);
@@ -90,7 +88,6 @@ export function AppShell() {
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
       navigate(`/${sessionId}`);
-      // selectSession is called by the useEffect above
     },
     [navigate]
   );
@@ -139,10 +136,13 @@ export function AppShell() {
                 isSending={isSending}
                 sendChatMessage={handleChatSent}
                 loadSessions={loadSessions}
-                startNewChat={startNewChat}
                 activeSessionId={activeSessionId}
-                onRegeneratedMessage={handleRegeneratedMessage}
                 onUpdateMessage={handleUpdateMessage}
+                onDeleteMessage={deleteMessageBranch}
+                onEditMessage={editMessage}
+                onRegenerateSubmit={regenerateResponse}
+                followups={followups}
+                onFollowupClick={(text) => sendChatMessage(text)}
               />
             } />
             <Route path="/" element={
@@ -153,10 +153,13 @@ export function AppShell() {
                 isSending={isSending}
                 sendChatMessage={handleChatSent}
                 loadSessions={loadSessions}
-                startNewChat={startNewChat}
                 activeSessionId={activeSessionId}
-                onRegeneratedMessage={handleRegeneratedMessage}
                 onUpdateMessage={handleUpdateMessage}
+                onDeleteMessage={deleteMessageBranch}
+                onEditMessage={editMessage}
+                onRegenerateSubmit={regenerateResponse}
+                followups={followups}
+                onFollowupClick={(text) => sendChatMessage(text)}
               />
             } />
             

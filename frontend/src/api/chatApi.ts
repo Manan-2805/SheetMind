@@ -158,3 +158,28 @@ export async function generateChart(params: {
     handleError(error);
   }
 }
+
+export async function deleteMessageBranch(sessionId: string, messageId: string): Promise<void> {
+  try {
+    await client.delete(`/chat/sessions/${sessionId}/messages/${messageId}`);
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function editMessage(
+  sessionId: string,
+  messageId: string,
+  content: string,
+  referencedFiles: string[]
+): Promise<ChatMessage> {
+  try {
+    const res: AxiosResponse<ChatMessage> = await client.put(
+      `/chat/sessions/${sessionId}/messages/${messageId}`,
+      { content, referenced_files: referencedFiles }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}

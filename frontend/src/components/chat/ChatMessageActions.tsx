@@ -7,6 +7,9 @@ import {
   ThumbsDown,
   ThumbsUp,
   Info,
+  Copy,
+  Edit2,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -25,17 +28,23 @@ interface ChatMessageActionsProps {
   onDownload?: () => void;
   onStar?: () => void;
   onViewSQL?: () => void;
+  onCopy?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   message: ChatMessage;
 }
 
 const ACTIONS = [
-  { icon: RotateCcw, label: "Regenerate", key: "regenerate" as const },
-  { icon: ThumbsUp, label: "Good response", key: "thumbUp" as const },
-  { icon: ThumbsDown, label: "Bad response", key: "thumbDown" as const },
-  { icon: BarChart2, label: "View as chart", key: "chart" as const },
-  { icon: Download, label: "Export to Excel", key: "download" as const },
-  { icon: Star, label: "Save query", key: "star" as const },
-  { icon: Code2, label: "View SQL", key: "sql" as const },
+  { icon: RotateCcw, label: "Regenerate", key: "regenerate" as const, role: "assistant" },
+  { icon: Copy, label: "Copy", key: "copy" as const, role: "both" },
+  { icon: Edit2, label: "Edit", key: "edit" as const, role: "user" },
+  { icon: Trash2, label: "Delete", key: "delete" as const, role: "user" },
+  { icon: ThumbsUp, label: "Good response", key: "thumbUp" as const, role: "assistant" },
+  { icon: ThumbsDown, label: "Bad response", key: "thumbDown" as const, role: "assistant" },
+  { icon: BarChart2, label: "View as chart", key: "chart" as const, role: "assistant" },
+  { icon: Download, label: "Export to Excel", key: "download" as const, role: "assistant" },
+  { icon: Star, label: "Save query", key: "star" as const, role: "assistant" },
+  { icon: Code2, label: "View SQL", key: "sql" as const, role: "assistant" },
 ];
 
 export function ChatMessageActions({
@@ -46,6 +55,9 @@ export function ChatMessageActions({
   onDownload,
   onStar,
   onViewSQL,
+  onCopy,
+  onEdit,
+  onDelete,
   message,
 }: ChatMessageActionsProps) {
   const handlers = {
@@ -56,69 +68,73 @@ export function ChatMessageActions({
     download: onDownload,
     star: onStar,
     sql: onViewSQL,
+    copy: onCopy,
+    edit: onEdit,
+    delete: onDelete,
   };
+
+  const filteredActions = ACTIONS.filter(a => 
+    a.role === "both" || a.role === message.role
+  );
 
   return (
     <div className="flex items-center gap-0.5 mt-1">
-      {ACTIONS.map(({ icon: Icon, label, key }) => (
-        <Tooltip key={key}>
-          <TooltipTrigger
-            render={
-              <button
-                onClick={handlers[key]}
-                className={`rounded p-1 transition-colors duration-[120ms] ${
-                  (key === "thumbUp" && message.feedback === "like") ||
-                  (key === "thumbDown" && message.feedback === "dislike")
-                    ? "bg-white/10 text-white"
-                    : ""
-                }`}
-                style={{
-                  color:
-                    (key === "thumbUp" && message.feedback === "like") ||
-                    (key === "thumbDown" && message.feedback === "dislike")
+      {filteredActions.map(({ icon: Icon, label, key }) => {
+        const isFeedbackAction = key === "thumbUp" || key === "thumbDown";
+        const isSelected = (key === "thumbUp" && message.feedback === "like") ||
+                          (key === "thumbDown" && message.feedback === "dislike");
+        const isDisabled = isFeedbackAction && !!message.feedback;
+
+        return (
+          <Tooltip key={key}>
+            <TooltipTrigger
+              render={
+                <button
+                  onClick={isDisabled ? undefined : handlers[key]}
+                  disabled={isDisabled}
+                  className={`rounded p-1 transition-colors duration-[120ms] ${
+                    isSelected ? "bg-white/10" : ""
+                  }`}
+                  style={{
+                    color: isSelected
                       ? "var(--color-accent)"
                       : "var(--color-text-tertiary)",
-                }}
-                onMouseEnter={(e) => {
-                  if (
-                    (key === "thumbUp" && message.feedback === "like") ||
-                    (key === "thumbDown" && message.feedback === "dislike")
-                  )
-                    return;
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "var(--color-text-primary)";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                    "var(--color-bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (
-                    (key === "thumbUp" && message.feedback === "like") ||
-                    (key === "thumbDown" && message.feedback === "dislike")
-                  )
-                    return;
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "var(--color-text-tertiary)";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                    "transparent";
-                }}
-                aria-label={label}
-              >
-                <Icon size={14} />
-              </button>
-            }
-          />
-          <TooltipContent
-            style={{
-              backgroundColor: "var(--color-bg-active)",
-              border: "1px solid var(--color-border-default)",
-              color: "var(--color-text-primary)",
-              fontSize: "11px",
-            }}
-          >
-            {label}
-          </TooltipContent>
-        </Tooltip>
-      ))}
+                    opacity: isDisabled && !isSelected ? 0.3 : 1,
+                    cursor: isDisabled ? "default" : "pointer",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isDisabled || isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "var(--color-text-primary)";
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                      "var(--color-bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isDisabled || isSelected) return;
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "var(--color-text-tertiary)";
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                      "transparent";
+                  }}
+                  aria-label={label}
+                >
+                  <Icon size={14} />
+                </button>
+              }
+            />
+            <TooltipContent
+              style={{
+                backgroundColor: "var(--color-bg-active)",
+                border: "1px solid var(--color-border-default)",
+                color: "var(--color-text-primary)",
+                fontSize: "11px",
+              }}
+            >
+              {label}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
 
       {/* Info Hover Tooltip */}
       {(message.token_count_input != null || message.sql_execution_ms != null || message.confidence_score != null) && (

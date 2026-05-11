@@ -121,6 +121,8 @@ export function SettingsPage() {
   const [ollamaSelectedModel, setOllamaSelectedModel] = useState<string>("");
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState<number>(1);
   const [resultRowLimit, setResultRowLimit] = useState<number>(500);
+  const [openaiMaxTokens, setOpenaiMaxTokens] = useState<number>(4000);
+  const [ollamaMaxTokens, setOllamaMaxTokens] = useState<number>(4000);
 
   useEffect(() => {
     getSettings()
@@ -132,6 +134,8 @@ export function SettingsPage() {
         setOllamaSelectedModel(s.ollama.model || "");
         setMaxConcurrentUploads(s.max_concurrent_uploads || 1);
         setResultRowLimit(s.result_row_limit || 500);
+        setOpenaiMaxTokens(s.openai.max_input_tokens || 4000);
+        setOllamaMaxTokens(s.ollama.max_input_tokens || 4000);
       })
       .catch((err: { message?: string }) => {
         addToast({ type: "error", title: "Error", description: err.message });
@@ -177,8 +181,8 @@ export function SettingsPage() {
     try {
       await updateSettings({
         llm_provider: llmProvider,
-        openai: { api_key: apiKey, model: openaiModel },
-        ollama: { url: ollamaUrl, model: ollamaSelectedModel },
+        openai: { api_key: apiKey, model: openaiModel, max_input_tokens: openaiMaxTokens },
+        ollama: { url: ollamaUrl, model: ollamaSelectedModel, max_input_tokens: ollamaMaxTokens },
       });
       addToast({ type: "success", title: "Saved", description: `LLM provider set to ${llmProvider}` });
     } catch (err: unknown) {
@@ -384,6 +388,28 @@ export function SettingsPage() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
+                      MAX INPUT TOKENS
+                    </label>
+                    <input
+                      type="number"
+                      min="500"
+                      max="128000"
+                      step="500"
+                      value={openaiMaxTokens}
+                      onChange={(e) => setOpenaiMaxTokens(parseInt(e.target.value) || 4000)}
+                      className="w-full max-w-[120px] rounded-lg px-3 py-2 text-body outline-none"
+                      style={{
+                        backgroundColor: "var(--color-bg-hover)",
+                        border: "1px solid var(--color-border-default)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    />
+                    <p className="text-ui-label mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+                      Token budget for conversation history.
+                    </p>
+                  </div>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={handleTestLLM}
@@ -469,6 +495,28 @@ export function SettingsPage() {
                         <option key={m.name} value={m.name}>{m.name}</option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
+                      MAX INPUT TOKENS
+                    </label>
+                    <input
+                      type="number"
+                      min="500"
+                      max="128000"
+                      step="500"
+                      value={ollamaMaxTokens}
+                      onChange={(e) => setOllamaMaxTokens(parseInt(e.target.value) || 4000)}
+                      className="w-full max-w-[120px] rounded-lg px-3 py-2 text-body outline-none"
+                      style={{
+                        backgroundColor: "var(--color-bg-hover)",
+                        border: "1px solid var(--color-border-default)",
+                        color: "var(--color-text-primary)",
+                      }}
+                    />
+                    <p className="text-ui-label mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+                      Token budget for conversation history.
+                    </p>
                   </div>
                   <div>
                     <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>

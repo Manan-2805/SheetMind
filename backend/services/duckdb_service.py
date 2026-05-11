@@ -87,7 +87,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             feedback VARCHAR,
             parent_user_message_id VARCHAR,
             result_data_json VARCHAR,
-            version INTEGER DEFAULT 1
+            version INTEGER DEFAULT 1,
+            followups_json VARCHAR,
+            chart_suggestion VARCHAR
         )
     """)
 
@@ -134,3 +136,9 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS parent_user_message_id VARCHAR")
     _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS result_data_json VARCHAR")
     _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sql_gen_ms INTEGER")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS summary_gen_ms INTEGER")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS total_ms INTEGER")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS model_name VARCHAR")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS followups_json VARCHAR")
+    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS chart_suggestion VARCHAR")

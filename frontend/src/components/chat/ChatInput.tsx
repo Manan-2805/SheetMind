@@ -1,15 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Hash, Send } from "lucide-react";
 
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
+import { useToast } from "@/hooks/useToast";
+import { extractReferencedFiles } from "@/utils/chatReferences";
 import { FileAutocomplete } from "./FileAutocomplete";
 
 interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (content: string, referencedFiles: string[]) => void;
   isLoading: boolean;
   placeholder?: string;
+  followups?: string[];
+  onFollowupClick?: (text: string) => void;
 }
 
 export function ChatInput({
@@ -18,7 +22,10 @@ export function ChatInput({
   onSend,
   isLoading,
   placeholder = "Ask anything about your data...",
+  followups = [],
+  onFollowupClick,
 }: ChatInputProps) {
+  const { addToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const {
     showAutocomplete,
@@ -31,6 +38,12 @@ export function ChatInput({
 
   const MIN_HEIGHT = 44;
   const MAX_HEIGHT = 160;
+
+  const referencedFiles = useMemo(
+    () => extractReferencedFiles(value, files),
+    [value, files]
+  );
+
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -50,7 +63,9 @@ export function ChatInput({
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!isLoading && value.trim()) onSend();
+      if (isLoading) return;
+      if (!value.trim()) return;
+      onSend(value.trim(), referencedFiles);
     }
   };
 
@@ -75,7 +90,11 @@ export function ChatInput({
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const canSend = value.trim().length > 0 && !isLoading;
+  const handleSendClick = () => {
+    if (isLoading) return;
+    if (!value.trim()) return;
+    onSend(value.trim(), referencedFiles);
+  };
 
   return (
     <div className="relative">
@@ -92,6 +111,33 @@ export function ChatInput({
         </div>
       )}
 
+      {followups.length > 0 && !isLoading && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {followups.map((text, i) => (
+            <button
+              key={i}
+              onClick={() => onFollowupClick?.(text)}
+              className="rounded-full px-4 py-1.5 text-ui-label transition-all duration-[120ms] border animate-in fade-in slide-in-from-bottom-1 hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                borderColor: "var(--color-border-default)",
+                color: "var(--color-text-secondary)",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-accent)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border-default)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
+              }}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
         className="rounded-2xl border shadow-sm focus-within:ring-2 focus-within:ring-[color:var(--color-accent)] focus-within:ring-offset-2 focus-within:ring-offset-[color:var(--color-bg-base)]"
         style={{
@@ -99,10 +145,10 @@ export function ChatInput({
           borderColor: "var(--color-border-default)",
         }}
       >
-        <div className="flex items-end gap-2 px-4 py-3">
+        <div className="flex items-start gap-2 px-4 py-3">
           <button
             onClick={handleHashButtonClick}
-            className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-[120ms]"
+            className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-[120ms]"
             style={{
               color: "var(--color-text-tertiary)",
               backgroundColor: "transparent",
@@ -133,27 +179,27 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             rows={1}
-            className="flex-1 resize-none bg-transparent text-body outline-none scrollbar-thin placeholder:text-[color:var(--color-text-tertiary)]"
+            className="flex-1 resize-none bg-transparent py-2 text-body outline-none scrollbar-thin placeholder:text-[color:var(--color-text-tertiary)]"
             style={{
               minHeight: MIN_HEIGHT,
               maxHeight: MAX_HEIGHT,
               color: "var(--color-text-primary)",
               caretColor: "var(--color-accent)",
             }}
+            disabled={isLoading}
             aria-label="Chat message input"
             aria-multiline="true"
           />
 
           <button
-            onClick={onSend}
-            disabled={!canSend}
-            className="mb-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-[120ms] active:scale-[0.97]"
+            onClick={handleSendClick}
+            className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-[120ms] active:scale-[0.97]"
             style={{
-              backgroundColor: canSend
+              backgroundColor: value.trim()
                 ? "var(--color-accent)"
                 : "var(--color-bg-hover)",
-              color: canSend ? "#fff" : "var(--color-text-tertiary)",
-              cursor: canSend ? "pointer" : "not-allowed",
+              color: value.trim() ? "#fff" : "var(--color-text-tertiary)",
+              cursor: "pointer",
             }}
             aria-label="Send message"
           >

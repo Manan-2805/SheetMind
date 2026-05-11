@@ -19,6 +19,9 @@ interface ChatMessageProps {
   onStar?: () => void;
   onViewSQL?: () => void;
   onVersionChange?: (delta: number) => void;
+  onCopy?: () => void;
+  onEdit?: (id: string, content: string, files: string[]) => void;
+  onDelete?: () => void;
 }
 
 export function ChatMessage({ 
@@ -31,6 +34,9 @@ export function ChatMessage({
   onStar,
   onViewSQL,
   onVersionChange,
+  onCopy,
+  onEdit,
+  onDelete,
 }: ChatMessageProps) {
   const [localData, setLocalData] = useState<ResultTable | null>(message.result_data || null);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -49,24 +55,91 @@ export function ChatMessage({
     }
   }, [message, localData, isLoadingData, fetchAttempted]);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+
+  const handleSaveEdit = () => {
+    if (editContent.trim() && editContent !== message.content) {
+      onEdit?.(message.id, editContent, message.referenced_files || []);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditContent(message.content);
+    setIsEditing(false);
+  };
+
   if (message.is_typing) {
     return <TypingIndicator />;
   }
 
   if (message.role === "user") {
     return (
-      <div className="flex justify-end py-2">
-        <div
-          className="max-w-[60%] rounded-xl px-4 py-2.5 text-body"
-          style={{
-            backgroundColor: "var(--color-bg-hover)",
-            color: "var(--color-text-primary)",
-            borderBottomRightRadius: "2px",
-            border: "1px solid var(--color-border-default)",
-          }}
-        >
-          <p className="whitespace-pre-wrap">{message.content}</p>
-        </div>
+      <div className="flex flex-col items-end py-2">
+        {isEditing ? (
+          <div className="w-full max-w-[80%] flex flex-col gap-2">
+            <textarea
+              autoFocus
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="w-full rounded-xl px-4 py-3 text-body outline-none border focus:ring-2 focus:ring-[var(--color-accent)] focus:ring-offset-1 focus:ring-offset-[var(--color-bg-base)] transition-all resize-none scrollbar-thin"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                color: "var(--color-text-primary)",
+                borderColor: "var(--color-border-default)",
+                minHeight: "100px",
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSaveEdit();
+                if (e.key === "Escape") handleCancelEdit();
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCancelEdit}
+                className="px-3 py-1.5 rounded-lg text-ui-label font-medium transition-colors"
+                style={{
+                  backgroundColor: "var(--color-bg-hover)",
+                  color: "var(--color-text-secondary)",
+                  border: "1px solid var(--color-border-default)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="px-3 py-1.5 rounded-lg text-ui-label font-medium transition-all active:scale-[0.98]"
+                style={{
+                  backgroundColor: "var(--color-accent)",
+                  color: "#fff",
+                }}
+              >
+                Save & Resend
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div
+              className="max-w-[60%] rounded-xl px-4 py-2.5 text-body"
+              style={{
+                backgroundColor: "var(--color-bg-hover)",
+                color: "var(--color-text-primary)",
+                borderBottomRightRadius: "2px",
+                border: "1px solid var(--color-border-default)",
+              }}
+            >
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+            <ChatMessageActions 
+              message={message}
+              onCopy={onCopy}
+              onEdit={() => setIsEditing(true)}
+              onDelete={onDelete}
+            />
+          </>
+        )}
       </div>
     );
   }
@@ -151,6 +224,7 @@ export function ChatMessage({
           onDownload={onDownload}
           onStar={onStar}
           onViewSQL={onViewSQL}
+          onCopy={onCopy}
         />
       </div>
     </div>

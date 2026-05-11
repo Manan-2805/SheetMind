@@ -144,3 +144,30 @@ async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMe
         parent_user_message_id=body.parent_user_message_id,
     )
 
+
+class EditMessageRequest(BaseModel):
+    content: str
+    referenced_files: list[str] = []
+
+
+@router.put("/sessions/{session_id}/messages/{message_id}", response_model=ChatMessageResponse)
+async def edit_message(session_id: str, message_id: str, body: EditMessageRequest) -> ChatMessageResponse:
+    try:
+        return await chat_models.edit_user_message(
+            session_id=session_id,
+            message_id=message_id,
+            new_content=body.content,
+            referenced_files=body.referenced_files
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/sessions/{session_id}/messages/{message_id}")
+async def delete_message_branch(session_id: str, message_id: str):
+    try:
+        chat_models.delete_message_branch(session_id, message_id)
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+

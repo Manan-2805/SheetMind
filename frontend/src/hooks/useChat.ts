@@ -3,8 +3,11 @@ import { useNavigate } from "react-router-dom";
 
 import {
   createSession,
+  deleteMessageBranch,
+  editMessage,
   getMessages,
   getSessions,
+  regenerateMessage,
   sendMessage,
 } from "@/api/chatApi";
 import { useToast } from "@/hooks/useToast";
@@ -21,6 +24,7 @@ export function useChat() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [followups, setFollowups] = useState<string[]>([]);
 
   const loadSessions = useCallback(async () => {
     setIsLoadingSessions(true);
@@ -47,6 +51,12 @@ export function useChat() {
       try {
         const data = await getMessages(sessionId);
         setMessages(data);
+        const lastMsg = data[data.length - 1];
+        if (lastMsg?.role === "assistant" && lastMsg.followups) {
+          setFollowups(lastMsg.followups);
+        } else {
+          setFollowups([]);
+        }
       } catch (err: unknown) {
         const e = err as { message?: string };
         addToast({
@@ -116,6 +126,9 @@ export function useChat() {
             .filter((m) => m.id !== TYPING_ID)
             .concat(response)
         );
+        if (response.followups) {
+          setFollowups(response.followups);
+        }
         setSessions((prev) =>
           prev.map((s) =>
             s.id === sessionId
@@ -142,6 +155,97 @@ export function useChat() {
     [activeSessionId, addToast, navigate]
   );
 
+  const deleteMessageBranchHandler = useCallback(async (messageId: string) => {
+    if (!activeSessionId) return;
+    try {
+      await deleteMessageBranch(activeSessionId, messageId);
+      const msgToDelete = messages.find(m => m.id === messageId);
+      if (msgToDelete) {
+        setMessages(prev => prev.filter(m => m.created_at < msgToDelete.created_at));
+      }
+      addToast({ type: "success", title: "Deleted", description: "Message branch removed" });
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to delete" });
+    }
+  }, [activeSessionId, messages, addToast]);
+
+  const editMessageHandler = useCallback(async (messageId: string, content: string, referencedFiles: string[]) => {
+    if (!activeSessionId) return;
+    
+    const typingMessage: ChatMessage = {
+      id: TYPING_ID,
+      session_id: activeSessionId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString(),
+      is_typing: true,
+    };
+
+    const targetMsg = messages.find(m => m.id === messageId);
+    if (!targetMsg) return;
+
+    // Optimistically update: delete everything after targetMsg time and add typing
+    setMessages(prev => [
+      ...prev.filter(m => m.created_at < targetMsg.created_at),
+      { ...targetMsg, content, referenced_files: referencedFiles, created_at: new Date().toISOString() },
+      typingMessage
+    ]);
+    setFollowups([]);
+    setIsSending(true);
+
+    try {
+      const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
+      setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
+      if (response.followups) {
+        setFollowups(response.followups);
+      }
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setMessages(prev => prev.filter(m => m.id !== TYPING_ID));
+      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to edit" });
+      // Re-load to sync state
+      const data = await getMessages(activeSessionId);
+      setMessages(data);
+    } finally {
+      setIsSending(false);
+    }
+  }, [activeSessionId, messages, addToast]);
+
+  const regenerateResponseHandler = useCallback(async (msg: ChatMessage, reason: string, instruction: string) => {
+    if (!activeSessionId) return;
+
+    const typingMessage: ChatMessage = {
+      id: TYPING_ID,
+      session_id: activeSessionId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString(),
+      is_typing: true,
+    };
+
+    setMessages(prev => [...prev.filter(m => !m.is_typing), typingMessage]);
+    setIsSending(true);
+
+    try {
+      const response = await regenerateMessage(
+        activeSessionId, 
+        msg.content, 
+        msg.referenced_files ?? [], 
+        reason, 
+        instruction, 
+        msg.id
+      );
+      setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setMessages(prev => prev.filter(m => m.id !== TYPING_ID));
+      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to regenerate" });
+    } finally {
+      setIsSending(false);
+    }
+  }, [activeSessionId, addToast]);
+
   return {
     sessions,
     activeSessionId,
@@ -153,7 +257,12 @@ export function useChat() {
     selectSession,
     startNewChat,
     sendChatMessage,
+    deleteMessageBranch: deleteMessageBranchHandler,
+    editMessage: editMessageHandler,
+    regenerateResponse: regenerateResponseHandler,
     setActiveSessionId,
     setMessages,
+    followups,
+    setFollowups,
   };
 }

@@ -6,11 +6,13 @@ from pydantic import BaseModel
 class OpenAISettingsSchema(BaseModel):
     api_key: str = ""
     model: str = "gpt-4o"
+    max_input_tokens: int = 6000
 
 
 class OllamaSettingsSchema(BaseModel):
     url: str = "http://localhost:11434"
     model: str = ""
+    max_input_tokens: int = 3000
 
 
 class SettingsResponse(BaseModel):

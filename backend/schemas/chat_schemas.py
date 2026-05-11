@@ -44,6 +44,12 @@ class ChatMessageResponse(BaseModel):
     parent_user_message_id: Optional[str] = None
     feedback: Optional[str] = None
     version: Optional[int] = 1
+    sql_gen_ms: Optional[int] = None
+    summary_gen_ms: Optional[int] = None
+    total_ms: Optional[int] = None
+    model_name: Optional[str] = None
+    followups: Optional[list[str]] = None
+    chart_suggestion: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):

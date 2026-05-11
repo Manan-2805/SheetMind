@@ -178,7 +178,9 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
         SELECT id, session_id, role, content, created_at, sql_generated, 
                sql_execution_ms, llm_generation_ms, token_count_input, 
                token_count_output, confidence_score, result_row_count,
-               parent_user_message_id, feedback, result_data_json, version
+               parent_user_message_id, feedback, result_data_json, version,
+               sql_gen_ms, summary_gen_ms, total_ms, model_name,
+               followups_json, chart_suggestion
         FROM chat_messages
         WHERE session_id = ?
         ORDER BY created_at ASC
@@ -209,7 +211,13 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
             parent_user_message_id=row[12],
             feedback=row[13],
             result_data=res_data,
-            version=row[15] or 1
+            version=row[15] or 1,
+            sql_gen_ms=row[16],
+            summary_gen_ms=row[17],
+            total_ms=row[18],
+            model_name=row[19],
+            followups=json.loads(row[20]) if row[20] else None,
+            chart_suggestion=row[21]
         ))
     return messages
 
@@ -255,6 +263,104 @@ def delete_session(session_id: str):
     conn.execute("DELETE FROM chat_sessions WHERE id = ?", [session_id])
 
 
+def estimate_tokens(text: str) -> int:
+    """
+    Fast approximation without loading a tokenizer library.
+    Rule: 1 token ≈ 4 characters for English + SQL mixed content.
+    Add 10% buffer for safety.
+    """
+    return int((len(text) / 4) * 1.1)
+
+
+def build_sql_prompt(
+    current_question: str,
+    schema_info: str,
+    turn_history: list[dict],  # last 4 turns from DB, oldest first
+    max_input_tokens: int,     # from user settings
+) -> list[dict]:
+
+    system_content = """You are an expert DuckDB SQL analyst embedded in
+SheetMind, a data querying desktop application.
+
+Your job:
+- Understand the user's question in the context of the conversation history.
+- Generate a precise DuckDB SQL query when the question requires data retrieval
+  or manipulation.
+- Ask clarifying questions when the question is ambiguous or missing required
+  information. Do not guess schema or column names.
+- Respond conversationally when no SQL is needed (greetings, explanations,
+  follow-ups to your own questions).
+
+Available DuckDB tables:
+{schema_info}
+
+STRICT RULES — violating any of these is an error:
+1. Use ONLY the exact table name strings shown above (e.g. file_abc123_sheet1).
+   Never use file names, sheet names, or any other identifiers in SQL.
+2. sql must ALWAYS be a string. Never return null or None.
+   Use "" (empty string) when no SQL is appropriate.
+3. message must ALWAYS be a non-empty string. Use it to:
+   - Explain what the SQL does (when sql is present)
+   - Ask the user for missing information (when sql is "")
+   - Respond conversationally (when no data is needed)
+4. When the question references previous results ("filter that", "sort this",
+   "add region to this"), build on the last SQL query in conversation history.
+5. When no tables are available or referenced, ask the user to attach a file
+   using #filename in their message.
+6. Never fabricate column names. If unsure, ask.
+7. Respond ONLY with a valid JSON object. No prose, no markdown fences.
+
+Required response format:
+{{
+  "sql": "<complete DuckDB SQL query, or empty string>",
+  "message": "<explanation, clarification question, or conversational reply>",
+  "confidence": <integer 1 to 5>,
+  "chart_suggestion": "<bar|line|pie|scatter|area|null>"
+}}""".format(schema_info=schema_info)
+
+    messages = [{"role": "system", "content": system_content}]
+
+    # Build history entries, add until token budget is reached
+    history_blocks = []
+    for turn in turn_history:  # oldest to newest, max 4 turns
+        user_block = {"role": "user", "content": turn["user_message"]}
+        
+        assistant_parts = []
+        if turn.get("bot_message"):
+            assistant_parts.append(turn["bot_message"])
+        if turn.get("sql_generated"):
+            assistant_parts.append(f"[SQL: {turn['sql_generated']}]")
+        if turn.get("sql_error"):
+            assistant_parts.append(f"[Error: {turn['sql_error']}]")
+        if turn.get("feedback"):
+            assistant_parts.append(f"[User feedback: {turn['feedback']}]")
+        
+        assistant_block = {
+            "role": "assistant",
+            "content": "\n".join(assistant_parts)
+        }
+        history_blocks.append((user_block, assistant_block))
+
+    # Token-aware history insertion
+    base_tokens = estimate_tokens(system_content) + estimate_tokens(current_question)
+    token_budget = max_input_tokens - base_tokens - 500  # 500 reserve for response
+
+    inserted = []
+    for user_block, assistant_block in reversed(history_blocks):
+        cost = estimate_tokens(user_block["content"]) + estimate_tokens(assistant_block["content"])
+        if cost > token_budget:
+            break
+        inserted.insert(0, (user_block, assistant_block))
+        token_budget -= cost
+
+    for user_block, assistant_block in inserted:
+        messages.append(user_block)
+        messages.append(assistant_block)
+
+    messages.append({"role": "user", "content": current_question})
+    return messages
+
+
 def set_message_feedback(message_id: str, feedback: str) -> None:
     conn = get_connection()
     conn.execute(
@@ -262,24 +368,33 @@ def set_message_feedback(message_id: str, feedback: str) -> None:
         [feedback, message_id]
     )
 
-def _extract_json_sql(raw: str) -> tuple[str, str]:
-    """Parse JSON response {sql, message} from LLM. Returns (sql, message)."""
+def _extract_json_sql(raw: str) -> dict[str, Any]:
+    """Parse JSON response from LLM. Returns a dict with sql, message, confidence, chart_suggestion."""
     text = raw.strip()
     # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        # Find start and end of json block
+        start_idx = 1
+        end_idx = len(lines)
+        if lines[-1].strip() == "```":
+            end_idx = -1
+        text = "\n".join(lines[start_idx:end_idx])
+    
+    # Clean up any leading/trailing non-json characters (sometimes LLMs add prose)
+    if "{" in text and "}" in text:
+        text = text[text.find("{"):text.rfind("}")+1]
+
     try:
         data = json.loads(text)
-        return str(data.get("sql", "")).strip(), str(data.get("message") or "")
+        return {
+            "sql": str(data.get("sql", "")).strip(),
+            "message": str(data.get("message") or ""),
+            "confidence": data.get("confidence", 3),
+            "chart_suggestion": data.get("chart_suggestion")
+        }
     except json.JSONDecodeError:
-        pass
-    # Fallback: extract first SELECT/WITH/INSERT block
-    import re
-    match = re.search(r"((?:SELECT|WITH|INSERT|UPDATE|DELETE)[\s\S]+?)(?:```|$)", text, re.IGNORECASE)
-    if match:
-        return match.group(1).strip(), ""
-    return text, ""
+        raise ValueError("Invalid JSON response from LLM")
 
 
 def _write_debug_prompt(prompt: str, label: str = "PROMPT") -> None:
@@ -354,6 +469,7 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
     if effective_refs:
         for ref in effective_refs:
             filename, sheet_name = _split_reference(ref)
+            # 1. Verify file exists and belongs to user (status=completed)
             file_row = conn.execute(
                 "SELECT id FROM excel_files WHERE original_filename = ? AND status = 'completed'",
                 [filename],
@@ -361,6 +477,8 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
             if not file_row:
                 continue
             file_id = str(file_row[0])
+
+            # 2. Query only from excel_sheets to get valid table_names
             if sheet_name:
                 sheet_row = conn.execute(
                     """
@@ -372,7 +490,8 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
                 ).fetchone()
                 if sheet_row:
                     table_name = sheet_row[1]
-                    if table_name not in seen_tables:
+                    # DOUBLE CHECK: table_name must start with file_ (SheetMind naming convention)
+                    if table_name and table_name.startswith("file_") and table_name not in seen_tables:
                         tables.append({
                             "filename": filename,
                             "sheet_name": sheet_row[0],
@@ -391,7 +510,7 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
                 ).fetchall()
                 for sheet_row in sheet_rows:
                     table_name = sheet_row[1]
-                    if table_name not in seen_tables:
+                    if table_name and table_name.startswith("file_") and table_name not in seen_tables:
                         tables.append({
                             "filename": filename,
                             "sheet_name": sheet_row[0],
@@ -490,37 +609,104 @@ def export_message(message_id: str):
     )
 
 
-async def generate_sql(content: str, schema_info: str, context: str | None = None) -> tuple[str, str]:
-    """Returns (sql, llm_message) where llm_message is optional context from the LLM."""
-    context_str = f"\n\nCONTEXT FROM PREVIOUS ATTEMPT:\n{context}" if context else ""
-    
-    prompt = f"""You are an expert DuckDB SQL generator.
+async def generate_sql(messages: list[dict]) -> dict[str, Any]:
+    """Returns a dict with {sql, message, confidence, chart_suggestion, model, input_tokens, output_tokens}."""
+    settings = get_settings()
+    model_name = "unknown"
 
-The following DuckDB tables are available (use ONLY these exact table names in your SQL, never use file names or sheet names):
+    fallback_res = {
+        "sql": "",
+        "message": "I had trouble formatting my response. Please try rephrasing your question.",
+        "confidence": 1,
+        "chart_suggestion": None,
+        "model": "fallback",
+        "input_tokens": 0,
+        "output_tokens": 0
+    }
 
-{schema_info}{context_str}
+    for attempt in range(2):
+        try:
+            input_tokens = 0
+            output_tokens = 0
+            content_out = ""
 
-CRITICAL RULES:
-- Use ONLY the exact "DuckDB Table Name" values shown above (e.g. file_abc123_def456) in your FROM clause.
-- Do NOT use file names, sheet names, or any other identifiers.
-- Respond with ONLY a valid JSON object, no prose, no markdown fences.
+            if settings.llm_provider == "openai":
+                client = AsyncOpenAI(api_key=settings.openai.api_key)
+                model_name = settings.openai.model
+                response = await client.chat.completions.create(
+                    model=model_name,
+                    messages=messages if attempt == 0 else messages + [{"role": "user", "content": "Your last response was not valid JSON. Respond ONLY with the JSON object."}],
+                    temperature=0,
+                    response_format={"type": "json_object"},
+                )
+                content_out = response.choices[0].message.content or "{}"
+                input_tokens = response.usage.prompt_tokens if response.usage else 0
+                output_tokens = response.usage.completion_tokens if response.usage else 0
+            else:
+                url = settings.ollama.url.rstrip("/")
+                model_name = settings.ollama.model
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        f"{url}/api/generate",
+                        json={
+                            "model": model_name,
+                            "prompt": "\n".join([f"{m['role']}: {m['content']}" for m in messages]) if attempt == 0 else "\n".join([f"{m['role']}: {m['content']}" for m in messages]) + "\nuser: Your last response was not valid JSON. Respond ONLY with the JSON object.",
+                            "stream": False,
+                            "format": "json",
+                        },
+                        timeout=60.0
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    content_out = data["response"]
+                    input_tokens = data.get("prompt_eval_count", 0)
+                    output_tokens = data.get("eval_count", 0)
 
-Required JSON format:
-{{"sql": "<the complete DuckDB SQL query>", "message": "<optional one-sentence note, or null>"}}
+            res = _extract_json_sql(content_out)
+            res.update({
+                "model": model_name,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens
+            })
+            return res
 
-User question: "{content}"""""
-    _write_debug_prompt(prompt, "SQL GENERATION")
+        except Exception as e:
+            print(f"SQL Generation Attempt {attempt + 1} failed: {str(e)}")
+            if attempt == 1:
+                print(f"Final failure. Raw output: {content_out if 'content_out' in locals() else 'N/A'}")
+                fallback_res.update({"model": model_name})
+                return fallback_res
+
+    return fallback_res
+async def generate_nl_summary(result_rows: list, columns: list, user_question: str) -> dict[str, Any]:
+    prompt = f"""Summarize this query result in 1-2 sentences in plain English.
+Be specific about numbers. Do not use technical terms.
+
+User asked: {user_question}
+Columns: {columns}
+First 5 rows: {result_rows[:5]}
+Total rows: {len(result_rows)}
+
+Respond with only the summary sentence. No JSON."""
+    _write_debug_prompt(prompt, "NL SUMMARY")
 
     settings = get_settings()
+    input_tokens = 0
+    output_tokens = 0
+
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
+        # Use gpt-4o-mini for summary if available, otherwise default
+        model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
         response = await client.chat.completions.create(
-            model=settings.openai.model,
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            response_format={"type": "json_object"},
+            max_tokens=120
         )
-        return _extract_json_sql(response.choices[0].message.content or "")
+        input_tokens = response.usage.prompt_tokens if response.usage else 0
+        output_tokens = response.usage.completion_tokens if response.usage else 0
+        return {"summary": response.choices[0].message.content.strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
     else:
         url = settings.ollama.url.rstrip("/")
         async with httpx.AsyncClient() as client:
@@ -530,53 +716,77 @@ User question: "{content}"""""
                     "model": settings.ollama.model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json",
+                    "options": {"temperature": 0, "num_predict": 120}
                 },
                 timeout=60.0
             )
             resp.raise_for_status()
-            return _extract_json_sql(resp.json()["response"])
+            data = resp.json()
+            input_tokens = data.get("prompt_eval_count", 0)
+            output_tokens = data.get("eval_count", 0)
+            return {"summary": data["response"].strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
 
-async def generate_nl_summary(content: str, sql: str, results: list) -> str:
-    results_str = json.dumps(results[:100], default=str)
-    prompt = f"""You are a helpful data analyst assistant. 
-The user asked: "{content}"
-I ran the following SQL query:
-{sql}
-And got these results (showing up to 100 rows):
-{results_str}
 
-Provide an extremely concise, natural language summary of these results to answer the user's question directly.
-Maximum 2 sentences. Do not use filler words. Do not mention the SQL query itself, just interpret the data."""
-    _write_debug_prompt(prompt, "NL SUMMARY")
+async def generate_followups(result_rows: list, columns: list, user_question: str) -> list[str]:
+    """Generates 3 follow-up questions. Completely silent on failure."""
+    try:
+        prompt = f"""Generate exactly 3 short follow-up questions a user might ask
+next based on this data query result. Each question must be answerable from the
+same data. Each question must be under 12 words. Return ONLY a JSON array of
+3 strings. No prose, no markdown.
 
-    settings = get_settings()
-    if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3
-        )
-        return response.choices[0].message.content.strip()
-    else:
-        url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/generate",
-                json={
-                    "model": settings.ollama.model,
-                    "prompt": prompt,
-                    "stream": False
-                },
-                timeout=60.0
+User asked: {user_question}
+Columns: {columns}
+Row count: {len(result_rows)}"""
+
+        settings = get_settings()
+        if settings.llm_provider == "openai":
+            client = AsyncOpenAI(api_key=settings.openai.api_key)
+            model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=150,
+                response_format={"type": "json_object"} if model.startswith("gpt-") else None
             )
-            resp.raise_for_status()
-            return resp.json()["response"].strip()
+            text = response.choices[0].message.content or "[]"
+        else:
+            url = settings.ollama.url.rstrip("/")
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{url}/api/generate",
+                    json={
+                        "model": settings.ollama.model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "format": "json"
+                    },
+                    timeout=5.0 # Aggressive timeout
+                )
+                resp.raise_for_status()
+                text = resp.json()["response"]
+        
+        # Simple cleanup if not pure json
+        if "[" in text and "]" in text:
+            text = text[text.find("["):text.rfind("]")+1]
+        
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data[:3]
+        if isinstance(data, dict):
+            # Sometimes LLMs wrap it in an object
+            for val in data.values():
+                if isinstance(val, list):
+                    return val[:3]
+        return []
+    except Exception as e:
+        print(f"Silent follow-up failure: {e}")
+        return []
 
 
 async def generate_title(content: str) -> str:
-    prompt = f"""Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: "{content}". Do not use quotes or prefixes, just the title text."""
+    prompt = f"Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: \"{content}\". Do not use quotes or prefixes, just the title text."
     _write_debug_prompt(prompt, "TITLE GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -600,10 +810,7 @@ async def generate_title(content: str) -> str:
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
-    prompt = f"""Create a short, human-readable label (max 6 words) for a saved SQL query.
-The user asked: "{nl_query}"
-The SQL generated: {sql_query[:200]}
-Return ONLY the label text, no quotes, no punctuation at end."""
+    prompt = f"Create a short, human-readable label (max 6 words) for a saved SQL query.\nThe user asked: \"{nl_query}\"\nThe SQL generated: {sql_query[:200]}\nReturn ONLY the label text, no quotes, no punctuation at end."
     _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
@@ -633,108 +840,156 @@ async def create_message(
     parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
     import uuid
+    import asyncio
     now = _now()
     conn = get_connection()
     user_msg_id = f"msg-{uuid.uuid4().hex[:8]}-u"
+    
+    # Insert user message
     conn.execute(
         "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id) VALUES (?, ?, ?, ?, ?, ?)",
         [user_msg_id, session_id, "user", content, now, parent_user_message_id]
     )
     
-    # 1. Fetch Schema - use referenced files if provided, else parse from content / fallback to all
+    settings = get_settings()
     tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
     schema_info = _build_schema_info(conn, tables)
 
-    # Check if first message AND session still has default title (guard against re-triggering)
-    msg_count = conn.execute(
-        "SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]
-    ).fetchone()[0]
-    sess_row = conn.execute(
-        "SELECT title FROM chat_sessions WHERE id = ?", [session_id]
-    ).fetchone()
+    # Fetch history for context (last 4 turns)
+    history_rows = conn.execute("""
+        SELECT content, sql_generated, role, feedback, id
+        FROM chat_messages 
+        WHERE session_id = ? AND id != ?
+        ORDER BY created_at DESC LIMIT 8
+    """, [session_id, user_msg_id]).fetchall()
+    
+    turns = []
+    i = 0
+    while i < len(history_rows):
+        msg = history_rows[i]
+        if msg[2] == "assistant":
+            assistant_content = msg[0]
+            sql = msg[1]
+            feedback = msg[3]
+            if i + 1 < len(history_rows) and history_rows[i+1][2] == "user":
+                user_content = history_rows[i+1][0]
+                turns.append({
+                    "user_message": user_content,
+                    "bot_message": assistant_content,
+                    "sql_generated": sql,
+                    "feedback": feedback
+                })
+                i += 2
+            else:
+                turns.append({
+                    "user_message": "",
+                    "bot_message": assistant_content,
+                    "sql_generated": sql,
+                    "feedback": feedback
+                })
+                i += 1
+        else:
+            turns.append({"user_message": msg[0]})
+            i += 1
+            
+    turns.reverse()
+    
+    max_input_tokens = 6000
+    if settings.llm_provider == "openai":
+        max_input_tokens = settings.openai.max_input_tokens
+    else:
+        max_input_tokens = settings.ollama.max_input_tokens
+
+    messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
+    
+    msg_count = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]).fetchone()[0]
+    sess_row = conn.execute("SELECT title FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
     current_title = sess_row[0] if sess_row else ""
     is_first = msg_count == 1 and current_title in ("New conversation", "", None)
 
-    # 2. Generate SQL and potentially Title
     t0 = time.time()
-    session_title: str | None = None
-    llm_message: str = ""
-    try:
-        if is_first:
-            import asyncio
-            (sql_result, llm_message), title = await asyncio.gather(
-                generate_sql(content, schema_info),
-                generate_title(content)
-            )
-            conn.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id])
-            session_title = title
-        else:
-            sql_result, llm_message = await generate_sql(content, schema_info)
+    session_title = None
+    if is_first:
+        title_task = generate_title(content)
+        sql_task = generate_sql(messages)
+        title, sql_res = await asyncio.gather(title_task, sql_task)
+        conn.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id])
+        session_title = title
+    else:
+        sql_res = await generate_sql(messages)
 
-        sql = sql_result.strip()
-    except Exception as e:
-        sql = f"ERROR: Failed to generate SQL: {str(e)}"
-        llm_message = ""
-    t1 = time.time()
-    llm_ms = int((t1 - t0) * 1000)
+    sql = sql_res.get("sql") or ""
+    llm_message = sql_res.get("message") or ""
+    model_name = sql_res.get("model") or "unknown"
+    confidence = sql_res.get("confidence", 3)
+    chart_suggestion = sql_res.get("chart_suggestion")
+    total_input_tokens = sql_res.get("input_tokens", 0)
+    total_output_tokens = sql_res.get("output_tokens", 0)
+    sql_gen_ms = int((time.time() - t0) * 1000)
 
-    # 3. Execute SQL
-    sql_ms = 0
+    sql_exec_ms = 0
+    summary_gen_ms = 0
     result_table = None
     result_rows = []
-    # Use LLM message as fallback if SQL failed to generate
-    nl_summary = llm_message if (sql.startswith("ERROR") and llm_message) else "Could not generate or execute SQL successfully."
+    nl_summary = llm_message or "I'm sorry, I couldn't process that request."
 
-    if not sql.startswith("ERROR"):
+    if sql:
         t2 = time.time()
         try:
             df = conn.execute(sql).fetchdf()
-            sql_ms = int((time.time() - t2) * 1000)
-            
-            # Format results
+            sql_exec_ms = int((time.time() - t2) * 1000)
             columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
             rows = df.to_dict('records')
-            
-            # clean NaNs
             clean_rows = []
             for r in rows:
-                clean_r = {}
-                for k, v in r.items():
-                    clean_r[k] = None if pd.isna(v) else v
+                clean_r = {k: (None if pd.isna(v) else v) for k, v in r.items()}
                 clean_rows.append(clean_r)
             
             total_rows = len(clean_rows)
             row_limit = _get_result_row_limit()
-            visible_rows = clean_rows[:row_limit]
-            result_table = ResultTable(columns=columns, rows=visible_rows, total_rows=total_rows)
+            result_table = ResultTable(columns=columns, rows=clean_rows[:row_limit], total_rows=total_rows)
             result_rows = clean_rows
             
-            # 4. Generate NL Summary
             t3 = time.time()
             try:
-                nl_summary = await generate_nl_summary(content, sql, result_rows)
+                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], content)
+                nl_summary = summary_res["summary"]
+                total_input_tokens += summary_res.get("input_tokens", 0)
+                total_output_tokens += summary_res.get("output_tokens", 0)
             except Exception as e:
-                nl_summary = f"Generated SQL executed successfully, but failed to generate summary: {str(e)}"
-            llm_ms += int((time.time() - t3) * 1000)
+                nl_summary = f"Results found, but summary failed: {e}"
+            summary_gen_ms = int((time.time() - t3) * 1000)
             
         except Exception as e:
-            sql_ms = int((time.time() - t2) * 1000)
-            nl_summary = f"SQL Execution Failed: {str(e)}"
+            sql_exec_ms = int((time.time() - t2) * 1000)
+            nl_summary = f"SQL Error: {str(e)}"
 
-    # 5. Save assistant message
-    now2 = _now()
+    total_ms = int((time.time() - t0) * 1000)
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-a"
+    now2 = _now()
     
     res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
-    
     conn.execute(
         """INSERT INTO chat_messages 
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id, result_data_json, version) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), user_msg_id, res_data_json, 1]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
+         token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_suggestion) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
+         total_input_tokens, total_output_tokens, len(result_rows), user_msg_id, res_data_json, 1,
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_suggestion]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
-    
+
+    async def _bg_followups():
+        if result_rows:
+            fups = await generate_followups(result_rows, [c.key for c in columns], content)
+            if fups:
+                conn_bg = get_connection()
+                conn_bg.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(fups), assistant_msg_id])
+
+    asyncio.create_task(_bg_followups())
+
     return ChatMessageResponse(
         id=assistant_msg_id,
         session_id=session_id,
@@ -742,13 +997,21 @@ async def create_message(
         content=nl_summary,
         created_at=now2,
         sql_generated=sql,
-        sql_execution_ms=sql_ms,
-        llm_generation_ms=llm_ms,
+        sql_execution_ms=sql_exec_ms,
+        llm_generation_ms=sql_gen_ms + summary_gen_ms,
+        token_count_input=total_input_tokens,
+        token_count_output=total_output_tokens,
         result_row_count=len(result_rows),
         result_data=result_table,
         referenced_files=effective_refs,
         session_title=session_title,
         parent_user_message_id=user_msg_id,
+        sql_gen_ms=sql_gen_ms,
+        summary_gen_ms=summary_gen_ms,
+        total_ms=total_ms,
+        model_name=model_name,
+        confidence_score=confidence,
+        chart_suggestion=chart_suggestion
     )
 
 
@@ -760,93 +1023,119 @@ async def regenerate_response(
 ) -> ChatMessageResponse:
     """Re-run SQL generation + execution for an existing user query without inserting a new user message."""
     import uuid
+    import asyncio
     conn = get_connection()
 
     tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
     schema_info = _build_schema_info(conn, tables)
 
-    # Fetch previous context for better regeneration
-    context = ""
-    if parent_user_message_id:
-        prev_user = conn.execute("SELECT content FROM chat_messages WHERE id = ?", [parent_user_message_id]).fetchone()
-        prev_assistant = conn.execute(
-            "SELECT sql_generated, content FROM chat_messages WHERE parent_user_message_id = ? ORDER BY version DESC LIMIT 1",
-            [parent_user_message_id]
-        ).fetchone()
-        
-        if prev_user:
-            context += f"Original User Question: {prev_user[0]}\n"
-        if prev_assistant:
-            context += f"Previous SQL Attempt: {prev_assistant[0]}\n"
-            if "Failed" in str(prev_assistant[1]) or "ERROR" in str(prev_assistant[0]):
-                context += f"Previous Execution Error: {prev_assistant[1]}\n"
+    history_rows = conn.execute("""
+        SELECT content, sql_generated, role, feedback, id
+        FROM chat_messages 
+        WHERE session_id = ? AND id != ?
+        ORDER BY created_at DESC LIMIT 8
+    """, [session_id, parent_user_message_id]).fetchall()
+    
+    turns = []
+    i = 0
+    while i < len(history_rows):
+        msg = history_rows[i]
+        if msg[2] == "assistant":
+            assistant_content = msg[0]
+            sql = msg[1]
+            feedback = msg[3]
+            if i + 1 < len(history_rows) and history_rows[i+1][2] == "user":
+                user_content = history_rows[i+1][0]
+                turns.append({"user_message": user_content, "bot_message": assistant_content, "sql_generated": sql, "feedback": feedback})
+                i += 2
+            else:
+                turns.append({"user_message": "", "bot_message": assistant_content, "sql_generated": sql, "feedback": feedback})
+                i += 1
+        else:
+            turns.append({"user_message": msg[0]})
+            i += 1
+    turns.reverse()
+    
+    settings = get_settings()
+    max_input_tokens = 6000
+    if settings.llm_provider == "openai":
+        max_input_tokens = settings.openai.max_input_tokens
+    else:
+        max_input_tokens = settings.ollama.max_input_tokens
+
+    messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
 
     t0 = time.time()
-    try:
-        sql_result, _llm_msg = await generate_sql(content, schema_info, context=context)
-        sql = sql_result.strip()
-    except Exception as e:
-        sql = f"ERROR: Failed to generate SQL: {str(e)}"
-    t1 = time.time()
-    llm_ms = int((t1 - t0) * 1000)
+    sql_res = await generate_sql(messages)
+    sql = sql_res.get("sql") or ""
+    llm_message = sql_res.get("message") or ""
+    model_name = sql_res.get("model") or "unknown"
+    confidence = sql_res.get("confidence", 3)
+    chart_suggestion = sql_res.get("chart_suggestion")
+    total_input_tokens = sql_res.get("input_tokens", 0)
+    total_output_tokens = sql_res.get("output_tokens", 0)
+    sql_gen_ms = int((time.time() - t0) * 1000)
 
-    sql_ms = 0
+    sql_exec_ms = 0
+    summary_gen_ms = 0
     result_table = None
     result_rows = []
-    nl_summary = "Could not generate or execute SQL successfully."
+    nl_summary = llm_message or "I'm sorry, I couldn't process that request."
 
-    if not sql.startswith("ERROR"):
+    if sql:
         t2 = time.time()
         try:
             df = conn.execute(sql).fetchdf()
-            sql_ms = int((time.time() - t2) * 1000)
-
+            sql_exec_ms = int((time.time() - t2) * 1000)
             columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
             rows = df.to_dict('records')
-
-            clean_rows = []
-            for r in rows:
-                clean_r = {}
-                for k, v in r.items():
-                    clean_r[k] = None if pd.isna(v) else v
-                clean_rows.append(clean_r)
-
+            clean_rows = [{k: (None if pd.isna(v) else v) for k, v in r.items()} for r in rows]
             total_rows = len(clean_rows)
             row_limit = _get_result_row_limit()
-            visible_rows = clean_rows[:row_limit]
-            result_table = ResultTable(columns=columns, rows=visible_rows, total_rows=total_rows)
+            result_table = ResultTable(columns=columns, rows=clean_rows[:row_limit], total_rows=total_rows)
             result_rows = clean_rows
-
+            
             t3 = time.time()
             try:
-                nl_summary = await generate_nl_summary(content, sql, result_rows)
+                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], content)
+                nl_summary = summary_res["summary"]
+                total_input_tokens += summary_res.get("input_tokens", 0)
+                total_output_tokens += summary_res.get("output_tokens", 0)
             except Exception as e:
-                nl_summary = f"SQL executed, but failed to generate summary: {str(e)}"
-            llm_ms += int((time.time() - t3) * 1000)
-
+                nl_summary = f"Results found, but summary failed: {e}"
+            summary_gen_ms = int((time.time() - t3) * 1000)
         except Exception as e:
-            sql_ms = int((time.time() - t2) * 1000)
-            nl_summary = f"SQL Execution Failed: {str(e)}"
+            sql_exec_ms = int((time.time() - t2) * 1000)
+            nl_summary = f"SQL Error: {str(e)}"
 
+    total_ms = int((time.time() - t0) * 1000)
     now2 = _now()
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-r"
 
-    # Get latest version for this parent
-    v_row = conn.execute(
-        "SELECT MAX(version) FROM chat_messages WHERE parent_user_message_id = ?",
-        [parent_user_message_id]
-    ).fetchone()
+    v_row = conn.execute("SELECT MAX(version) FROM chat_messages WHERE parent_user_message_id = ?", [parent_user_message_id]).fetchone()
     next_version = (v_row[0] or 1) + 1 if v_row and v_row[0] else 1
 
     res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
-
     conn.execute(
         """INSERT INTO chat_messages
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, result_row_count, parent_user_message_id, result_data_json, version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_ms, llm_ms, len(result_rows), parent_user_message_id, res_data_json, next_version]
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
+         token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_suggestion)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
+         total_input_tokens, total_output_tokens, len(result_rows), parent_user_message_id, res_data_json, next_version,
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_suggestion]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
+
+    async def _bg_followups():
+        if result_rows:
+            fups = await generate_followups(result_rows, [c.key for c in columns], content)
+            if fups:
+                conn_bg = get_connection()
+                conn_bg.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(fups), assistant_msg_id])
+
+    asyncio.create_task(_bg_followups())
 
     return ChatMessageResponse(
         id=assistant_msg_id,
@@ -855,11 +1144,41 @@ async def regenerate_response(
         content=nl_summary,
         created_at=now2,
         sql_generated=sql,
-        sql_execution_ms=sql_ms,
-        llm_generation_ms=llm_ms,
+        sql_execution_ms=sql_exec_ms,
+        llm_generation_ms=sql_gen_ms + summary_gen_ms,
+        token_count_input=total_input_tokens,
+        token_count_output=total_output_tokens,
         result_row_count=len(result_rows),
         result_data=result_table,
         referenced_files=effective_refs,
         parent_user_message_id=parent_user_message_id,
-        version=next_version
+        version=next_version,
+        sql_gen_ms=sql_gen_ms,
+        summary_gen_ms=summary_gen_ms,
+        total_ms=total_ms,
+        model_name=model_name,
+        confidence_score=confidence,
+        chart_suggestion=chart_suggestion
     )
+
+
+def delete_message_branch(session_id: str, message_id: str) -> None:
+    """Deletes a message and all subsequent messages in the same session."""
+    conn = get_connection()
+    row = conn.execute("SELECT created_at FROM chat_messages WHERE id = ?", [message_id]).fetchone()
+    if not row:
+        raise ValueError("Message not found")
+    target_time = row[0]
+    conn.execute("DELETE FROM chat_messages WHERE session_id = ? AND created_at >= ?", [session_id, target_time])
+    conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [_now(), session_id])
+
+
+async def edit_user_message(session_id: str, message_id: str, new_content: str, referenced_files: list[str]) -> ChatMessageResponse:
+    """Edits a user message by deleting it and all subsequent messages, then re-sending."""
+    conn = get_connection()
+    row = conn.execute("SELECT created_at FROM chat_messages WHERE id = ?", [message_id]).fetchone()
+    if not row:
+        raise ValueError("Message not found")
+    target_time = row[0]
+    conn.execute("DELETE FROM chat_messages WHERE session_id = ? AND created_at >= ?", [session_id, target_time])
+    return await create_message(session_id, new_content, referenced_files)

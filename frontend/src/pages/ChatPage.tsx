@@ -10,7 +10,7 @@ import { QueryResultPanel } from "@/components/QueryResultPanel";
 import { SkeletonChatMessage } from "@/components/skeletons/SkeletonChatMessage";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 import { getDataSources } from "@/api/dataSourcesApi";
-import { exportMessage, getMessageData, regenerateMessage, setMessageFeedback } from "@/api/chatApi";
+import { exportMessage, getMessageData, setMessageFeedback } from "@/api/chatApi";
 import { createSavedQuery, generateLabel } from "@/api/savedQueriesApi";
 import { useToast } from "@/hooks/useToast";
 
@@ -22,9 +22,13 @@ interface ChatPageProps {
   loadSessions: () => Promise<void>;
   startNewChat: () => void | Promise<unknown>;
   activeSessionId: string | null;
-  onRegeneratedMessage?: (msg: ChatMessageType) => void;
   onUpdateMessage?: (msg: ChatMessageType) => void;
+  onDeleteMessage?: (id: string) => void;
+  onEditMessage?: (id: string, content: string, files: string[]) => void;
+  onRegenerateSubmit?: (msg: ChatMessageType, reason: string, instruction: string) => void;
   onNewChat?: () => void;
+  followups?: string[];
+  onFollowupClick?: (text: string) => void;
 }
 
 interface SaveQueryState {
@@ -39,8 +43,12 @@ export function ChatPage({
   sendChatMessage,
   loadSessions,
   activeSessionId,
-  onRegeneratedMessage,
   onUpdateMessage,
+  onDeleteMessage,
+  onEditMessage,
+  onRegenerateSubmit,
+  followups,
+  onFollowupClick,
 }: ChatPageProps) {
   const [inputValue, setInputValue] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -59,10 +67,14 @@ export function ChatPage({
   const { addToast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
     getDataSources().then((sources) => {
-      setHasFiles(sources && sources.length > 0);
-    }).catch(() => setHasFiles(false));
-  }, [messages]);
+      if (isMounted) setHasFiles(sources && sources.length > 0);
+    }).catch(() => {
+      if (isMounted) setHasFiles(false);
+    });
+    return () => { isMounted = false; };
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (isFirstLoad.current) {
@@ -87,19 +99,19 @@ export function ChatPage({
   };
 
   const handleThumbUp = useCallback((msg: ChatMessageType) => {
-    if (msg.feedback === "like") return;
+    if (msg.feedback) return; // Prevent if already set
     setFeedbackModal({ msg, type: "like" });
   }, []);
 
   const handleThumbDown = useCallback((msg: ChatMessageType) => {
-    if (msg.feedback === "dislike") return;
+    if (msg.feedback) return; // Prevent if already set
     setFeedbackModal({ msg, type: "dislike" });
   }, []);
 
   const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike") => {
     if (!feedbackModal || !onUpdateMessage) return;
     try {
-      await setMessageFeedback(feedbackModal.msg.id, type); // Assuming API handles reason eventually, for now just type
+      await setMessageFeedback(feedbackModal.msg.id, type);
       onUpdateMessage({ ...feedbackModal.msg, feedback: type });
       addToast({ type: "success", title: "Feedback saved", description: "Thank you for your feedback!" });
     } catch {
@@ -112,16 +124,36 @@ export function ChatPage({
     setRegenerateModal(msg);
   }, [activeSessionId]);
 
-  const handleRegenerateSubmit = useCallback(async (reason: string, instruction: string) => {
-    if (!activeSessionId || !regenerateModal) return;
-    try {
-      addToast({ type: "success", title: "Regenerating...", description: "Running query again" });
-      const newMsg = await regenerateMessage(activeSessionId, regenerateModal.content, regenerateModal.referenced_files ?? [], reason, instruction, regenerateModal.id);
-      if (onRegeneratedMessage) onRegeneratedMessage(newMsg);
-    } catch {
-      addToast({ type: "error", title: "Error", description: "Could not regenerate response" });
+  const handleRegenerateModalSubmit = useCallback(async (reason: string, instruction: string) => {
+    if (!activeSessionId || !regenerateModal || !onRegenerateSubmit) return;
+    onRegenerateSubmit(regenerateModal, reason, instruction);
+    setRegenerateModal(null);
+  }, [activeSessionId, regenerateModal, onRegenerateSubmit]);
+
+  const handleCopyMessage = useCallback((msg: ChatMessageType) => {
+    navigator.clipboard.writeText(msg.content);
+    addToast({ type: "success", title: "Copied", description: "Message copied to clipboard" });
+  }, [addToast]);
+
+  const handleDeleteMessage = useCallback((msg: ChatMessageType) => {
+    if (onDeleteMessage) {
+      onDeleteMessage(msg.id);
     }
-  }, [activeSessionId, regenerateModal, onRegeneratedMessage, addToast]);
+  }, [onDeleteMessage]);
+
+  const handleEditMessage = useCallback((msg: ChatMessageType) => {
+    // For now, editing just puts the text back in the input box and prepares a resend
+    // But we also need the API call to delete the branch.
+    // The useChat handler handles this.
+    if (onEditMessage) {
+      // In a real edit, we might want to let the user edit the text first in a modal or inline.
+      // But based on PRD, we'll just trigger the edit flow.
+      const newText = prompt("Edit your message:", msg.content);
+      if (newText !== null && newText !== msg.content) {
+        onEditMessage(msg.id, newText, msg.referenced_files ?? []);
+      }
+    }
+  }, [onEditMessage]);
 
   const handleViewChart = useCallback(async (msg: ChatMessageType) => {
     if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
@@ -281,7 +313,7 @@ export function ChatPage({
                   key={msg.id}
                   message={msg}
                   onRegenerate={() => {
-                    const userMsg = groupedMessages.find((m: ChatMessageType) => m.id === msg.parent_user_message_id);
+                    const userMsg = msg.role === "user" ? msg : groupedMessages.find((m: ChatMessageType) => m.id === msg.parent_user_message_id);
                     if (userMsg) handleRegenerate(userMsg);
                   }}
                   onThumbUp={() => handleThumbUp(msg)}
@@ -290,6 +322,9 @@ export function ChatPage({
                   onDownload={() => handleExport(msg)}
                   onViewSQL={() => handleViewSQL(msg)}
                   onStar={() => handleOpenSaveModal(msg)}
+                  onCopy={() => handleCopyMessage(msg)}
+                  onEdit={() => handleEditMessage(msg)}
+                  onDelete={() => handleDeleteMessage(msg)}
                   onVersionChange={(delta: number) => msg.parent_user_message_id && handleVersionChange(msg.parent_user_message_id, delta)}
                 />
               ))}
@@ -316,6 +351,8 @@ export function ChatPage({
               onChange={setInputValue}
               onSend={handleSend}
               isLoading={isSending || hasFiles === null}
+              followups={followups}
+              onFollowupClick={onFollowupClick}
             />
           )}
         </div>
@@ -577,7 +614,7 @@ export function ChatPage({
       <RegenerateModal
         isOpen={!!regenerateModal}
         onClose={() => setRegenerateModal(null)}
-        onSubmit={handleRegenerateSubmit}
+        onSubmit={handleRegenerateModalSubmit}
       />
     </div>
   );

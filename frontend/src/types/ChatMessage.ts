@@ -32,6 +32,10 @@ export interface ChatMessage {
   feedback?: string;
   parent_user_message_id?: string;
   version?: number;
+  sql_gen_ms?: number;
+  summary_gen_ms?: number;
+  total_ms?: number;
+  model_name?: string;
 }
 
 export interface ChatSession {
