@@ -94,6 +94,7 @@ async def delete_session(session_id: str):
 
 class FeedbackRequest(BaseModel):
     feedback: str  # "like" | "dislike"
+    reason: str | None = None
 
 
 @router.get("/messages/{message_id}/data", response_model=ResultTable)
@@ -118,8 +119,8 @@ async def export_message(message_id: str) -> ArtifactExportResponse:
 
 @router.put("/messages/{message_id}/feedback")
 async def set_message_feedback(message_id: str, body: FeedbackRequest):
-    chat_models.set_message_feedback(message_id, body.feedback)
-    return {"status": "success", "message_id": message_id, "feedback": body.feedback}
+    chat_models.set_message_feedback(message_id, body.feedback, body.reason)
+    return {"status": "success", "message_id": message_id, "feedback": body.feedback, "reason": body.reason}
 
 
 class RegenerateRequest(BaseModel):

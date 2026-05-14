@@ -51,6 +51,7 @@ export function ChatPage({
   onFollowupClick,
 }: ChatPageProps) {
   const [inputValue, setInputValue] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
   const [hasFiles, setHasFiles] = useState<boolean | null>(null);
@@ -84,8 +85,18 @@ export function ChatPage({
   }, [loadSessions]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    // Prevent the entire window from being shifted by browser's scroll-into-view behavior
+    window.scrollTo(0, 0);
+  }, [activeSessionId, isLoadingMessages]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [messages, isLoadingMessages]);
 
   const handleSend = async () => {
     const text = inputValue.trim();
@@ -108,11 +119,11 @@ export function ChatPage({
     setFeedbackModal({ msg, type: "dislike" });
   }, []);
 
-  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike") => {
+  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike", reason: string) => {
     if (!feedbackModal || !onUpdateMessage) return;
     try {
-      await setMessageFeedback(feedbackModal.msg.id, type);
-      onUpdateMessage({ ...feedbackModal.msg, feedback: type });
+      await setMessageFeedback(feedbackModal.msg.id, type, reason);
+      onUpdateMessage({ ...feedbackModal.msg, feedback: type, feedback_reason: reason });
       addToast({ type: "success", title: "Feedback saved", description: "Thank you for your feedback!" });
     } catch {
       addToast({ type: "error", title: "Error", description: "Could not save feedback" });
@@ -141,16 +152,11 @@ export function ChatPage({
     }
   }, [onDeleteMessage]);
 
-  const handleEditMessage = useCallback((msg: ChatMessageType) => {
-    // For now, editing just puts the text back in the input box and prepares a resend
-    // But we also need the API call to delete the branch.
-    // The useChat handler handles this.
+  const handleEditMessage = useCallback((msg: ChatMessageType, newContent?: string, newFiles?: string[]) => {
     if (onEditMessage) {
-      // In a real edit, we might want to let the user edit the text first in a modal or inline.
-      // But based on PRD, we'll just trigger the edit flow.
-      const newText = prompt("Edit your message:", msg.content);
-      if (newText !== null && newText !== msg.content) {
-        onEditMessage(msg.id, newText, msg.referenced_files ?? []);
+      if (newContent !== undefined) {
+        // This is called when saving from the inline editor
+        onEditMessage(msg.id, newContent, newFiles ?? msg.referenced_files ?? []);
       }
     }
   }, [onEditMessage]);
@@ -245,6 +251,34 @@ export function ChatPage({
 
   const [activeVersions, setActiveVersions] = useState<Record<string, number>>({});
 
+  // Whenever messages change (e.g. after regeneration), update activeVersions
+  // to point to the latest version index for each parent message
+  useEffect(() => {
+    const assistantGroups: Record<string, ChatMessageType[]> = {};
+    messages.forEach((msg) => {
+      if (msg.role === 'assistant' && msg.parent_user_message_id) {
+        if (!assistantGroups[msg.parent_user_message_id]) {
+          assistantGroups[msg.parent_user_message_id] = [];
+        }
+        assistantGroups[msg.parent_user_message_id].push(msg);
+      }
+    });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveVersions((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      Object.entries(assistantGroups).forEach(([parentId, versions]) => {
+        const latestIdx = versions.length - 1;
+        if (prev[parentId] !== latestIdx) {
+          next[parentId] = latestIdx;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [messages]);
+
   const groupedMessages = useMemo(() => {
     const groups: (ChatMessageType & { versions?: ChatMessageType[] })[] = [];
     const assistantGroups: Record<string, ChatMessageType[]> = {};
@@ -267,10 +301,12 @@ export function ChatPage({
         if (versions && versions.length > 0) {
           // Sort versions by created_at or version number
           const sortedVersions = [...versions].sort((a, b) => (a.version || 0) - (b.version || 0));
+          const typingVersion = sortedVersions.find(v => v.is_typing);
           const activeIdx = activeVersions[msg.id] ?? sortedVersions.length - 1;
           const clampedIdx = Math.max(0, Math.min(activeIdx, sortedVersions.length - 1));
-          
-          const activeMsg = { ...sortedVersions[clampedIdx], versions: sortedVersions };
+
+          const baseMsg = typingVersion || sortedVersions[clampedIdx];
+          const activeMsg = { ...baseMsg, versions: sortedVersions };
           groups.push(activeMsg);
         }
       } else if (msg.role === "assistant" && !msg.parent_user_message_id) {
@@ -285,7 +321,7 @@ export function ChatPage({
   const handleVersionChange = (parentMsgId: string, delta: number) => {
     const versions = groupedMessages.find((m: ChatMessageType & { versions?: ChatMessageType[] }) => m.parent_user_message_id === parentMsgId)?.versions;
     if (!versions) return;
-    
+
     setActiveVersions((prev: Record<string, number>) => {
       const currentIdx = prev[parentMsgId] ?? versions.length - 1;
       const nextIdx = Math.max(0, Math.min(currentIdx + delta, versions.length - 1));
@@ -296,17 +332,18 @@ export function ChatPage({
   const isEmpty = messages.length === 0 && !isLoadingMessages;
 
   return (
-    <div className="flex h-full flex-col" style={{ backgroundColor: "var(--color-bg-base)" }}>
+    <div className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: "var(--color-bg-base)" }}>
       <div className="flex flex-1 flex-col overflow-hidden">
         {isLoadingMessages ? (
-          <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
+            <SkeletonChatMessage />
             <SkeletonChatMessage />
             <SkeletonChatMessage />
           </div>
         ) : isEmpty ? (
           <ChatEmptyState onSuggestion={handleSuggestion} />
         ) : (
-          <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
             <div className="mx-auto max-w-3xl">
               {groupedMessages.map((msg: ChatMessageType & { versions?: ChatMessageType[] }) => (
                 <ChatMessage
@@ -323,7 +360,7 @@ export function ChatPage({
                   onViewSQL={() => handleViewSQL(msg)}
                   onStar={() => handleOpenSaveModal(msg)}
                   onCopy={() => handleCopyMessage(msg)}
-                  onEdit={() => handleEditMessage(msg)}
+                  onEdit={(_id, content, files) => handleEditMessage(msg, content, files)}
                   onDelete={() => handleDeleteMessage(msg)}
                   onVersionChange={(delta: number) => msg.parent_user_message_id && handleVersionChange(msg.parent_user_message_id, delta)}
                 />
@@ -607,7 +644,7 @@ export function ChatPage({
       <FeedbackModal
         isOpen={!!feedbackModal}
         onClose={() => setFeedbackModal(null)}
-        onSubmit={(type) => handleFeedbackSubmit(type)}
+        onSubmit={(type, reason) => handleFeedbackSubmit(type, reason)}
         type={feedbackModal?.type || "like"}
       />
 

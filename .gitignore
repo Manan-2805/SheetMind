@@ -3,3 +3,4 @@ Temp
 .vscode
 backend/sheetmind.duckdb.wal
 relational_excels
+debug_prompts

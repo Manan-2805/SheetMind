@@ -14,18 +14,9 @@ task_queue = asyncio.Queue()
 active_tasks = set()
 
 
-def _safe_table_name(file_id: str, sheet_name: str | None = None) -> str:
-    base = f"file_{file_id.replace('-', '_')}"
-    if sheet_name:
-        base = f"{base}_{sheet_name}"
-    safe = re.sub(r"[^0-9A-Za-z_]+", "_", base.strip())
-    safe = re.sub(r"_+", "_", safe).strip("_")
-    return safe.lower() if safe else f"file_{file_id.replace('-', '_')}"
+from services.excel_import_service import safe_table_name, clean_columns, import_df_to_duckdb, now_utc as _now
 
-
-def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    df.columns = [str(c).strip().replace(" ", "_").replace("-", "_") for c in df.columns]
-    return df
+# The queue stores tuples of (username, file_id, file_path)
 
 
 def process_excel_file_sync(username: str, file_id: str, file_path: str):
@@ -46,9 +37,9 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
             num_sheets = 0
 
             if file_path.endswith(".csv"):
-                df = _clean_columns(pd.read_csv(file_path))
-                table_name = _safe_table_name(file_id)
-                conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+                df = clean_columns(pd.read_csv(file_path))
+                table_name = safe_table_name(file_id)
+                import_df_to_duckdb(conn, df, table_name)
 
                 row_count = len(df)
                 col_count = len(df.columns)
@@ -67,9 +58,9 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
             else:
                 workbook = pd.read_excel(file_path, sheet_name=None)
                 for sheet_name, df in workbook.items():
-                    df = _clean_columns(df)
-                    table_name = _safe_table_name(file_id, sheet_name)
-                    conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+                    df = clean_columns(df)
+                    table_name = safe_table_name(file_id, sheet_name)
+                    import_df_to_duckdb(conn, df, table_name)
 
                     row_count = len(df)
                     col_count = len(df.columns)
@@ -111,8 +102,6 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
         current_username.reset(token)
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 async def _process_wrapper(username: str, file_id: str, file_path: str):

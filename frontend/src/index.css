@@ -145,6 +145,7 @@
     body,
     #root {
         height: 100%;
+        overflow: hidden;
         font-family: var(--font-sans);
         background-color: var(--color-bg-base);
         color: var(--color-text-primary);
@@ -333,5 +334,33 @@
     .scrollbar-thin::-webkit-scrollbar-thumb {
         background-color: var(--color-border-default);
         border-radius: 2px;
+    }
+
+    /* Bot message table styling */
+    .bot-message-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 13px;
+        background-color: var(--color-bg-elevated);
+        border: 1px solid var(--color-border-default);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .bot-message-content th {
+        background-color: var(--color-bg-hover);
+        color: var(--color-text-secondary);
+        font-weight: 500;
+        text-align: left;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--color-border-default);
+    }
+    .bot-message-content td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--color-border-subtle);
+        color: var(--color-text-primary);
+    }
+    .bot-message-content tr:last-child td {
+        border-bottom: none;
     }
 }

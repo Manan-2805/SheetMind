@@ -1,11 +1,12 @@
-import { Moon, Sun, LogOut } from "lucide-react";
 import {
   Bookmark,
   Clock,
   Database,
+  LogOut,
   Package,
   PenLine,
   Settings,
+  TableProperties,
 } from "lucide-react";
 
 import {
@@ -13,10 +14,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/utils/cn";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts";
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor";
 type ActiveDrawer = "history" | null;
 
 interface SidebarProps {
@@ -101,12 +101,6 @@ export function Sidebar({
   onDrawerToggle,
   onNewChat,
 }: SidebarProps) {
-  const { resolvedTheme, setTheme } = useTheme();
-
-  const toggleTheme = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  };
-
   const handleLogout = () => {
     localStorage.removeItem("sheetmind-username");
     window.location.reload();
@@ -169,57 +163,18 @@ export function Sidebar({
         onClick={() => onViewChange("data-sources")}
       />
       <SidebarButton
+        icon={TableProperties}
+        label="Excel Editor"
+        isActive={activeView === "excel-editor"}
+        onClick={() => onViewChange("excel-editor")}
+      />
+      <SidebarButton
         icon={Settings}
         label="Settings"
         isActive={activeView === "settings"}
         onClick={() => onViewChange("settings")}
       />
 
-      <div
-        className="my-1 w-6"
-        style={{
-          height: "1px",
-          backgroundColor: "var(--color-border-subtle)",
-        }}
-      />
-
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              onClick={toggleTheme}
-              className="flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-[120ms] active:scale-[0.97]"
-              style={{ color: "var(--color-text-tertiary)" }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                  "var(--color-bg-hover)";
-                (e.currentTarget as HTMLButtonElement).style.color =
-                  "var(--color-text-secondary)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                  "transparent";
-                (e.currentTarget as HTMLButtonElement).style.color =
-                  "var(--color-text-tertiary)";
-              }}
-              aria-label="Toggle theme"
-            >
-              {resolvedTheme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
-          }
-        />
-        <TooltipContent
-          side="right"
-          style={{
-            backgroundColor: "var(--color-bg-active)",
-            border: "1px solid var(--color-border-default)",
-            color: "var(--color-text-primary)",
-            fontSize: "12px",
-          }}
-        >
-          Toggle theme
-        </TooltipContent>
-      </Tooltip>
 
       <Tooltip>
         <TooltipTrigger

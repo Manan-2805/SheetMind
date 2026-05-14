@@ -10,6 +10,7 @@ import {
   Copy,
   Edit2,
   Trash2,
+  Table,
 } from "lucide-react";
 
 import {
@@ -31,12 +32,14 @@ interface ChatMessageActionsProps {
   onCopy?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onCopyTable?: () => void;
   message: ChatMessage;
 }
 
 const ACTIONS = [
   { icon: RotateCcw, label: "Regenerate", key: "regenerate" as const, role: "assistant" },
-  { icon: Copy, label: "Copy", key: "copy" as const, role: "both" },
+  { icon: Copy, label: "Copy Text", key: "copy" as const, role: "both" },
+  { icon: Table, label: "Copy Table (CSV)", key: "copyTable" as const, role: "assistant" },
   { icon: Edit2, label: "Edit", key: "edit" as const, role: "user" },
   { icon: Trash2, label: "Delete", key: "delete" as const, role: "user" },
   { icon: ThumbsUp, label: "Good response", key: "thumbUp" as const, role: "assistant" },
@@ -58,6 +61,7 @@ export function ChatMessageActions({
   onCopy,
   onEdit,
   onDelete,
+  onCopyTable,
   message,
 }: ChatMessageActionsProps) {
   const handlers = {
@@ -71,11 +75,14 @@ export function ChatMessageActions({
     copy: onCopy,
     edit: onEdit,
     delete: onDelete,
+    copyTable: onCopyTable,
   };
 
-  const filteredActions = ACTIONS.filter(a => 
-    a.role === "both" || a.role === message.role
-  );
+  const filteredActions = ACTIONS.filter(a => {
+    if (a.role !== "both" && a.role !== message.role) return false;
+    if (a.key === "copyTable" && !message.sql_generated) return false;
+    return true;
+  });
 
   return (
     <div className="flex items-center gap-0.5 mt-1">

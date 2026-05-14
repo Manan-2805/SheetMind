@@ -12,8 +12,9 @@ import { DataSourcesPage } from "@/pages/DataSourcesPage";
 import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
 import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { ExcelEditorPage } from "@/pages/ExcelEditorPage";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts";
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor";
 type ActiveDrawer = "history" | null;
 
 export function AppShell() {
@@ -42,24 +43,25 @@ export function AppShell() {
     const match = location.pathname.match(/^\/([^/]+)$/);
     // Ignore routes that are named paths
     const isNamedPath = [
-      "data-sources", "settings", "saved-queries", "artifacts"
+      "data-sources", "settings", "saved-queries", "artifacts", "excel-editor"
     ].includes(match?.[1] ?? "");
-    
+
     if (match && match[1] !== "" && !isNamedPath) {
       const sessionId = match[1];
-      if (sessionId !== activeSessionId) {
+      if (sessionId !== activeSessionId && !isSending) {
         selectSession(sessionId);
       }
-    } else if (location.pathname === "/" && activeSessionId) {
+    } else if (location.pathname === "/" && activeSessionId && !isSending) {
       startNewChat();
     }
-  }, [location.pathname, activeSessionId, selectSession, startNewChat]);
+  }, [location.pathname, activeSessionId, isSending, selectSession, startNewChat]);
 
   const getActiveView = (): ActiveView => {
     if (location.pathname.startsWith("/data-sources")) return "data-sources";
     if (location.pathname.startsWith("/saved-queries")) return "saved-queries";
     if (location.pathname.startsWith("/artifacts")) return "artifacts";
     if (location.pathname.startsWith("/settings")) return "settings";
+    if (location.pathname.startsWith("/excel-editor")) return "excel-editor";
     return "chat";
   };
 
@@ -69,6 +71,7 @@ export function AppShell() {
     if (view === "saved-queries") navigate("/saved-queries");
     if (view === "artifacts") navigate("/artifacts");
     if (view === "settings") navigate("/settings");
+    if (view === "excel-editor") navigate("/excel-editor");
     setActiveDrawer(null);
   }, [navigate]);
 
@@ -127,9 +130,11 @@ export function AppShell() {
             <Route path="/saved-queries" element={<SavedQueriesPage />} />
             <Route path="/artifacts" element={<ArtifactsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            
+            <Route path="/excel-editor" element={<ExcelEditorPage onViewChange={handleViewChange} />} />
+
             <Route path="/:sessionId" element={
               <ChatPage
+                key={activeSessionId ?? 'new'}
                 onNewChat={handleNewChat}
                 messages={messages}
                 isLoadingMessages={isLoadingMessages}
@@ -137,6 +142,7 @@ export function AppShell() {
                 sendChatMessage={handleChatSent}
                 loadSessions={loadSessions}
                 activeSessionId={activeSessionId}
+                startNewChat={startNewChat}
                 onUpdateMessage={handleUpdateMessage}
                 onDeleteMessage={deleteMessageBranch}
                 onEditMessage={editMessage}
@@ -147,6 +153,7 @@ export function AppShell() {
             } />
             <Route path="/" element={
               <ChatPage
+                key="new"
                 onNewChat={handleNewChat}
                 messages={messages}
                 isLoadingMessages={isLoadingMessages}
@@ -154,6 +161,7 @@ export function AppShell() {
                 sendChatMessage={handleChatSent}
                 loadSessions={loadSessions}
                 activeSessionId={activeSessionId}
+                startNewChat={startNewChat}
                 onUpdateMessage={handleUpdateMessage}
                 onDeleteMessage={deleteMessageBranch}
                 onEditMessage={editMessage}
@@ -162,7 +170,7 @@ export function AppShell() {
                 onFollowupClick={(text) => sendChatMessage(text)}
               />
             } />
-            
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

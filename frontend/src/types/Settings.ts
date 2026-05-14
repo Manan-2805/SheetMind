@@ -5,11 +5,13 @@ export type LLMProvider = "openai" | "ollama";
 export interface OpenAISettings {
   api_key: string;
   model: string;
+  max_input_tokens: number;
 }
 
 export interface OllamaSettings {
   url: string;
   model: string;
+  max_input_tokens: number;
 }
 
 export interface Settings {
@@ -21,6 +23,7 @@ export interface Settings {
   created_at: string;
   max_concurrent_uploads: number;
   result_row_limit: number;
+  max_input_tokens: number;
 }
 
 export interface TestLLMRequest {
@@ -33,6 +36,8 @@ export interface TestLLMResponse {
   success: boolean;
   provider: LLMProvider;
   latency_ms: number;
+  message: string;
+  models?: string[];
 }
 
 export interface PullModelResponse {

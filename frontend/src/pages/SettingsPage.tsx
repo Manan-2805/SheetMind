@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Save, RefreshCw, Zap } from "lucide-react";
 
 import {
   clearChatHistory,
@@ -9,30 +9,22 @@ import {
   testLLM,
   updateSettings,
 } from "@/api/settingsApi";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
 import type { LLMProvider, Theme } from "@/types/Settings";
 
-type NavSection = "appearance" | "llm" | "data";
-
-const NAV_ITEMS: { id: NavSection; label: string }[] = [
-  { id: "appearance", label: "Appearance" },
-  { id: "llm", label: "LLM Provider" },
-  { id: "data", label: "Data" },
-];
-
-const THEME_OPTIONS: { value: Theme; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-];
-
-const LLM_OPTIONS: { value: LLMProvider; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "ollama", label: "Ollama" },
-];
+function parseTestErrorMessage(raw: string): string {
+  // Try to extract message from Python openai error format:
+  // "Error code: 401 - {'error': {'message': '...', ...}}"
+  const match = raw.match(/'message':\s*'([^']+)'/);
+  if (match) return match[1];
+  // Try double-quoted JSON style
+  const jsonMatch = raw.match(/"message":\s*"([^"]+)"/);
+  if (jsonMatch) return jsonMatch[1];
+  // Return raw but truncate if very long
+  return raw.length > 200 ? raw.slice(0, 200) + '...' : raw;
+}
 
 interface DestructiveButtonProps {
   label: string;
@@ -85,7 +77,7 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
         onClick={handleClick}
         onBlur={() => { if (!isLoading) { cancel(); setIsConfirming(false); } }}
         disabled={isLoading}
-        className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
+        className="rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-[120ms] active:scale-[0.97]"
         style={{
           border: isConfirming
             ? "1px solid var(--color-destructive)"
@@ -93,7 +85,7 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
           color: isConfirming
             ? "var(--color-destructive)"
             : "var(--color-text-secondary)",
-          backgroundColor: "transparent",
+          backgroundColor: isConfirming ? "rgba(239, 68, 68, 0.1)" : "transparent",
         }}
       >
         {buttonText}
@@ -105,24 +97,36 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
 export function SettingsPage() {
   const { addToast } = useToast();
   const { theme, setTheme } = useTheme();
-  const [activeSection, setActiveSection] = useState<NavSection>("appearance");
+
   const [llmProvider, setLlmProvider] = useState<LLMProvider>("openai");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
+  const [openaiModels, setOpenaiModels] = useState<string[]>(["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]);
+
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
-  const [pullModelInput, setPullModelInput] = useState("");
-  const [isPulling, setIsPulling] = useState(false);
-  const [pullProgress, setPullProgress] = useState<{ status: string; completed?: number; total?: number } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
-  const [isSavingLLM, setIsSavingLLM] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
   const [ollamaSelectedModel, setOllamaSelectedModel] = useState<string>("");
+
   const [maxConcurrentUploads, setMaxConcurrentUploads] = useState<number>(1);
   const [resultRowLimit, setResultRowLimit] = useState<number>(500);
   const [openaiMaxTokens, setOpenaiMaxTokens] = useState<number>(4000);
   const [ollamaMaxTokens, setOllamaMaxTokens] = useState<number>(4000);
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [testStatus, setTestStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const refreshOllamaModels = async () => {
+    try {
+      const data = await getOllamaModels();
+      if (data && data.models) {
+        setOllamaModels(data.models);
+      }
+    } catch {
+      // Silence background refresh errors
+    }
+  };
 
   useEffect(() => {
     getSettings()
@@ -141,530 +145,305 @@ export function SettingsPage() {
         addToast({ type: "error", title: "Error", description: err.message });
       });
 
-    // fetch ollama models if ollama is selected
-    getOllamaModels().then((data) => {
-      if (data && data.models) {
-        setOllamaModels(data.models);
-      }
-    }).catch(() => { });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshOllamaModels();
   }, [addToast]);
 
-  const handleThemeChange = async (t: Theme) => {
-    setTheme(t);
-    try {
-      await updateSettings({ theme: t });
-    } catch {
-      // silently ignore update failures
-    }
-  };
-
-  const handleTestLLM = async () => {
+  const handleTestConnection = async () => {
     setIsTesting(true);
-    setTestResult(null);
+    setTestStatus(null);
     try {
-      await testLLM({
+      const res = await testLLM({
         provider: llmProvider,
         api_key: llmProvider === "openai" ? apiKey : undefined,
         url: llmProvider === "ollama" ? ollamaUrl : undefined,
       });
-      setTestResult("success");
-    } catch {
-      setTestResult("error");
+
+      if (res.success) {
+        setTestStatus({ type: "success", message: res.message || "Connected successfully!" });
+        if (llmProvider === "openai" && res.models && res.models.length > 0) {
+          setOpenaiModels(res.models);
+          if (!res.models.includes(openaiModel)) {
+            setOpenaiModel(res.models[0]);
+          }
+        } else if (llmProvider === "ollama" && res.models) {
+          setOllamaModels(res.models.map(m => ({ name: m })));
+        }
+      } else {
+        setTestStatus({ type: "error", message: res.message || "Connection failed." });
+      }
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setTestStatus({ type: "error", message: e.message || "An unexpected error occurred." });
     } finally {
       setIsTesting(false);
-      setTimeout(() => setTestResult(null), 3000);
     }
   };
 
-  const handleSaveLLMSettings = async () => {
-    setIsSavingLLM(true);
+  const handleSaveAll = async () => {
+    setIsSaving(true);
     try {
       await updateSettings({
+        theme,
         llm_provider: llmProvider,
         openai: { api_key: apiKey, model: openaiModel, max_input_tokens: openaiMaxTokens },
         ollama: { url: ollamaUrl, model: ollamaSelectedModel, max_input_tokens: ollamaMaxTokens },
+        max_concurrent_uploads: maxConcurrentUploads,
+        result_row_limit: resultRowLimit,
       });
-      addToast({ type: "success", title: "Saved", description: `LLM provider set to ${llmProvider}` });
+      addToast({ type: "success", title: "Settings Saved", description: "All changes have been persisted." });
     } catch (err: unknown) {
       const e = err as { message?: string };
-      addToast({ type: "error", title: "Save failed", description: e?.message });
+      addToast({ type: "error", title: "Save Failed", description: e.message });
     } finally {
-      setIsSavingLLM(false);
-    }
-  };
-
-  const handlePullModel = async () => {
-    if (!pullModelInput.trim()) return;
-    setIsPulling(true);
-    setPullProgress({ status: "Starting..." });
-    try {
-      const res = await fetch("http://localhost:8000/api/settings/pull-ollama-model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model_name: pullModelInput.trim() }),
-      });
-
-      if (!res.body) throw new Error("No response body");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n").filter(Boolean);
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            if (data.error) throw new Error(data.error);
-            setPullProgress(data);
-          } catch {
-            // ignore parse errors for partial lines
-          }
-        }
-      }
-
-      addToast({ type: "success", title: "Model pulled", description: pullModelInput.trim() });
-      setPullModelInput("");
-
-      // Refresh models
-      const modelsData = await getOllamaModels();
-      if (modelsData && modelsData.models) setOllamaModels(modelsData.models);
-
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      addToast({ type: "error", title: "Pull failed", description: e?.message });
-    } finally {
-      setIsPulling(false);
-      setPullProgress(null);
-    }
-  };
-
-  const handleClearHistory = async () => {
-    try {
-      const res = await clearChatHistory();
-      addToast({ type: "success", title: "Cleared", description: `${res.deleted_sessions} sessions removed` });
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      addToast({ type: "error", title: "Error", description: e?.message });
-    }
-  };
-
-  const handleDeleteFiles = async () => {
-    try {
-      const res = await deleteAllFiles();
-      addToast({ type: "success", title: "Deleted", description: `${res.deleted_files} files removed` });
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      addToast({ type: "error", title: "Error", description: e?.message });
+      setIsSaving(false);
     }
   };
 
   return (
-    <div
-      className="flex h-full overflow-hidden"
-      style={{ backgroundColor: "var(--color-bg-base)" }}
-    >
-      <nav
-        className="w-[180px] shrink-0 overflow-y-auto py-8 px-2"
-        style={{ borderRight: "1px solid var(--color-border-default)" }}
-      >
-        <p
-          className="mb-3 px-3 text-ui-label uppercase"
-          style={{ color: "var(--color-text-tertiary)" }}
+    <div className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: "var(--color-bg-base)" }}>
+      <header className="flex shrink-0 items-center justify-between border-b px-8 py-5" style={{ borderColor: "var(--color-border-default)" }}>
+        <div>
+          <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>Settings</h1>
+          <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>Configure your application preferences and AI providers.</p>
+        </div>
+        <button
+          onClick={handleSaveAll}
+          disabled={isSaving}
+          className="flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-all active:scale-[0.98]"
+          style={{
+            backgroundColor: "var(--color-accent)",
+            color: "#fff",
+            opacity: isSaving ? 0.7 : 1,
+          }}
         >
-          Settings
-        </p>
-        {NAV_ITEMS.map((item) => {
-          const isActive = activeSection === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              className="mb-0.5 flex w-full items-center rounded-lg px-3 py-2 text-body transition-colors duration-[120ms]"
-              style={{
-                backgroundColor: isActive ? "var(--color-bg-active)" : "transparent",
-                color: isActive ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                borderLeft: isActive ? "2px solid var(--color-accent)" : "2px solid transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-bg-hover)";
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
-              }}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
+          {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+          {isSaving ? "Saving..." : "Save All Changes"}
+        </button>
+      </header>
 
       <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin">
-        {activeSection === "appearance" && (
-          <div>
-            <h2 className="text-page-heading mb-6" style={{ color: "var(--color-text-primary)" }}>
-              Appearance
-            </h2>
-            <div
-              className="rounded-xl p-6"
-              style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
-            >
-              <p className="text-panel-heading mb-3" style={{ color: "var(--color-text-primary)" }}>Theme</p>
-              <SegmentedControl
-                options={THEME_OPTIONS}
-                value={theme}
-                onChange={handleThemeChange}
-                className="max-w-xs"
-              />
+        <div className="mx-auto max-w-2xl space-y-8">
+
+          {/* Appearance Section */}
+          <section>
+            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Appearance</h3>
+            <div className="rounded-2xl p-6 space-y-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Theme</p>
+                  <p className="text-body text-xs" style={{ color: "var(--color-text-tertiary)" }}>Choose between light and dark mode</p>
+                </div>
+                <div className="flex gap-1 rounded-xl p-1" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+                  {(["light", "dark"] as Theme[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className="rounded-lg px-4 py-1.5 text-xs font-medium capitalize transition-all"
+                      style={{
+                        backgroundColor: theme === t ? "var(--color-bg-elevated)" : "transparent",
+                        color: theme === t ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                        boxShadow: theme === t ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          </section>
 
-        {activeSection === "llm" && (
-          <div>
-            <h2 className="text-page-heading mb-6" style={{ color: "var(--color-text-primary)" }}>
-              LLM Provider
-            </h2>
-            <div
-              className="rounded-xl p-6"
-              style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
-            >
-              <SegmentedControl
-                options={LLM_OPTIONS}
-                value={llmProvider}
-                onChange={setLlmProvider}
-                className="mb-6 max-w-xs"
-              />
+          {/* AI Provider Section */}
+          <section>
+            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>AI Provider</h3>
+            <div className="rounded-2xl p-6 space-y-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
 
-              {llmProvider === "openai" && (
-                <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>SELECT PROVIDER</label>
+                <select
+                  value={llmProvider}
+                  onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
+                  className="w-full rounded-xl px-4 py-2.5 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
+                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                >
+                  <option value="openai">OpenAI (Recommended)</option>
+                  <option value="ollama">Ollama (Local)</option>
+                </select>
+              </div>
+
+              <div className="h-px w-full" style={{ backgroundColor: "var(--color-border-subtle)" }} />
+
+              {llmProvider === "openai" ? (
+                <div className="space-y-5">
                   <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      API KEY
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type={showApiKey ? "text" : "password"}
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="sk-..."
-                          className="w-full rounded-lg px-3 py-2 pr-10 text-body outline-none"
-                          style={{
-                            backgroundColor: "var(--color-bg-hover)",
-                            border: "1px solid var(--color-border-default)",
-                            color: "var(--color-text-primary)",
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey((p) => !p)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2"
-                          style={{ color: "var(--color-text-tertiary)" }}
-                          aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                        >
-                          {showApiKey ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
+                    <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>OPENAI API KEY</label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className="w-full rounded-xl px-4 py-2.5 pr-12 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
+                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                      />
+                      <button
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-[var(--color-bg-active)]"
+                        style={{ color: "var(--color-text-tertiary)" }}
+                      >
+                        {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      MODEL
-                    </label>
-                    <select
-                      value={openaiModel}
-                      onChange={(e) => setOpenaiModel(e.target.value)}
-                      className="w-full max-w-xs rounded-lg px-3 py-2 text-body outline-none"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      {["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"].map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      MAX INPUT TOKENS
-                    </label>
-                    <input
-                      type="number"
-                      min="500"
-                      max="128000"
-                      step="500"
-                      value={openaiMaxTokens}
-                      onChange={(e) => setOpenaiMaxTokens(parseInt(e.target.value) || 4000)}
-                      className="w-full max-w-[120px] rounded-lg px-3 py-2 text-body outline-none"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    />
-                    <p className="text-ui-label mt-1" style={{ color: "var(--color-text-tertiary)" }}>
-                      Token budget for conversation history.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleTestLLM}
-                      disabled={isTesting}
-                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-secondary)",
-                        opacity: isTesting ? 0.7 : 1,
-                      }}
-                    >
-                      {isTesting ? "Testing..." : "Test Connection"}
-                    </button>
-                    <button
-                      onClick={handleSaveLLMSettings}
-                      disabled={isSavingLLM}
-                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
-                      style={{
-                        backgroundColor: "var(--color-accent)",
-                        color: "#fff",
-                        opacity: isSavingLLM ? 0.7 : 1,
-                      }}
-                    >
-                      {isSavingLLM ? "Saving..." : "Save Settings"}
-                    </button>
-                    {testResult === "success" && (
-                      <span style={{ color: "var(--color-success)" }} className="text-body-em">Connected</span>
-                    )}
-                    {testResult === "error" && (
-                      <span style={{ color: "var(--color-destructive)" }} className="text-body-em">Failed</span>
-                    )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MODEL</label>
+                      <select
+                        value={openaiModel}
+                        onChange={(e) => setOpenaiModel(e.target.value)}
+                        className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
+                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                      >
+                        {openaiModels.map((m: string) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MAX TOKENS</label>
+                      <input
+                        type="number"
+                        value={openaiMaxTokens}
+                        onChange={(e) => setOpenaiMaxTokens(parseInt(e.target.value) || 4000)}
+                        className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
+                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                      />
+                    </div>
                   </div>
                 </div>
-              )}
-
-              {llmProvider === "ollama" && (
-                <div className="flex flex-col gap-4">
+              ) : (
+                <div className="space-y-5">
                   <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      OLLAMA URL
-                    </label>
+                    <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>OLLAMA SERVER URL</label>
                     <input
                       type="text"
                       value={ollamaUrl}
                       onChange={(e) => setOllamaUrl(e.target.value)}
-                      className="w-full max-w-sm rounded-lg px-3 py-2 text-body outline-none"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-primary)",
-                      }}
+                      placeholder="http://localhost:11434"
+                      className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
+                      style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
                     />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleTestLLM}
-                      disabled={isTesting}
-                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
-                      style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isTesting ? 0.7 : 1 }}
-                    >
-                      {isTesting ? "Testing..." : "Test Connection"}
-                    </button>
-                    {testResult === "success" && <span style={{ color: "var(--color-success)" }} className="text-body-em">✓ Connected</span>}
-                    {testResult === "error" && <span style={{ color: "var(--color-destructive)" }} className="text-body-em">✗ Failed</span>}
-                  </div>
-                  <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      DOWNLOADED MODELS
-                    </label>
-                    <select
-                      value={ollamaSelectedModel}
-                      onChange={(e) => setOllamaSelectedModel(e.target.value)}
-                      className="w-full max-w-sm rounded-lg px-3 py-2 text-body outline-none"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      <option value="">Select a model</option>
-                      {ollamaModels.map((m) => (
-                        <option key={m.name} value={m.name}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      MAX INPUT TOKENS
-                    </label>
-                    <input
-                      type="number"
-                      min="500"
-                      max="128000"
-                      step="500"
-                      value={ollamaMaxTokens}
-                      onChange={(e) => setOllamaMaxTokens(parseInt(e.target.value) || 4000)}
-                      className="w-full max-w-[120px] rounded-lg px-3 py-2 text-body outline-none"
-                      style={{
-                        backgroundColor: "var(--color-bg-hover)",
-                        border: "1px solid var(--color-border-default)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    />
-                    <p className="text-ui-label mt-1" style={{ color: "var(--color-text-tertiary)" }}>
-                      Token budget for conversation history.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-ui-label mb-1.5 block" style={{ color: "var(--color-text-secondary)" }}>
-                      PULL NEW MODEL
-                    </label>
-                    <div className="flex max-w-sm gap-2">
-                      <input
-                        type="text"
-                        value={pullModelInput}
-                        onChange={(e) => setPullModelInput(e.target.value)}
-                        placeholder="llama3, mistral, ..."
-                        className="flex-1 rounded-lg px-3 py-2 text-body outline-none"
-                        style={{
-                          backgroundColor: "var(--color-bg-hover)",
-                          border: "1px solid var(--color-border-default)",
-                          color: "var(--color-text-primary)",
-                        }}
-                      />
-                      <button
-                        onClick={handlePullModel}
-                        disabled={isPulling || !pullModelInput.trim()}
-                        className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms]"
-                        style={{
-                          backgroundColor: "var(--color-accent)",
-                          color: "#fff",
-                          opacity: isPulling || !pullModelInput.trim() ? 0.6 : 1,
-                        }}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MODEL</label>
+                      <select
+                        value={ollamaSelectedModel}
+                        onChange={(e) => setOllamaSelectedModel(e.target.value)}
+                        className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
+                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
                       >
-                        {isPulling ? "Pulling..." : "Pull"}
-                      </button>
+                        <option value="">Select a model</option>
+                        {ollamaModels.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                      </select>
                     </div>
-                    {isPulling && pullProgress && (
-                      <div className="mt-2">
-                        <div className="mb-1 flex justify-between text-ui-label" style={{ color: "var(--color-text-secondary)", maxWidth: 320 }}>
-                          <span>{pullProgress.status}</span>
-                          {pullProgress.total && pullProgress.completed && (
-                            <span>{Math.round((pullProgress.completed / pullProgress.total) * 100)}%</span>
-                          )}
-                        </div>
-                        <div className="overflow-hidden rounded-full bg-gray-200" style={{ height: 4, backgroundColor: "var(--color-bg-hover)", maxWidth: 320 }}>
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              backgroundColor: "var(--color-accent)",
-                              width: pullProgress.total ? `${Math.round((pullProgress.completed! / pullProgress.total) * 100)}%` : "100%",
-                              backgroundImage: pullProgress.total ? "none" : "linear-gradient(90deg, var(--color-accent) 25%, var(--color-accent-hover) 50%, var(--color-accent) 75%)",
-                              backgroundSize: "200% 100%",
-                              animation: pullProgress.total ? "none" : "shimmer 1.5s infinite",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleTestLLM}
-                      disabled={isTesting}
-                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
-                      style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", opacity: isTesting ? 0.7 : 1 }}
-                    >
-                      {isTesting ? "Testing..." : "Test Connection"}
-                    </button>
-                    <button
-                      onClick={handleSaveLLMSettings}
-                      disabled={isSavingLLM}
-                      className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
-                      style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isSavingLLM ? 0.7 : 1 }}
-                    >
-                      {isSavingLLM ? "Saving..." : "Save Settings"}
-                    </button>
-                    {testResult === "success" && <span style={{ color: "var(--color-success)" }} className="text-body-em">Connected</span>}
-                    {testResult === "error" && <span style={{ color: "var(--color-destructive)" }} className="text-body-em">Failed</span>}
+                    <div>
+                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MAX TOKENS</label>
+                      <input
+                        type="number"
+                        value={ollamaMaxTokens}
+                        onChange={(e) => setOllamaMaxTokens(parseInt(e.target.value) || 4000)}
+                        className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
+                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
 
-        {activeSection === "data" && (
-          <div>
-            <h2 className="text-page-heading mb-6" style={{ color: "var(--color-text-primary)" }}>
-              Data
-            </h2>
-            <div
-              className="rounded-xl px-6"
-              style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
-            >
+              <div className="flex flex-col gap-3 pt-2">
+                <button
+                  onClick={handleTestConnection}
+                  disabled={isTesting}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all active:scale-[0.99]"
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  {isTesting ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} className={testStatus?.type === 'success' ? 'text-success' : ''} />}
+                  {isTesting ? "Verifying Connectivity..." : "Test Connection & Fetch Models"}
+                </button>
+
+                {testStatus && (
+                  <div
+                    className="rounded-xl px-4 py-3 text-xs font-medium animate-in fade-in slide-in-from-top-2"
+                    style={{
+                      backgroundColor: testStatus.type === "success" ? "var(--color-success-subtle)" : "var(--color-destructive-subtle)",
+                      color: testStatus.type === "success" ? "var(--color-success)" : "var(--color-destructive)",
+                      border: `1px solid ${testStatus.type === "success" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}`
+                    }}
+                  >
+                    {testStatus.type === 'error' ? parseTestErrorMessage(testStatus.message) : testStatus.message}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Data & Privacy Section */}
+          <section>
+            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Data & Performance</h3>
+            <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
               <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
                 <div>
                   <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Max Concurrent Uploads</p>
-                  <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>Limit parallel processing to save system resources</p>
+                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Limit parallel processing for stability</p>
                 </div>
                 <input
                   type="number"
                   min="1"
                   max="10"
                   value={maxConcurrentUploads}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value) || 1;
-                    setMaxConcurrentUploads(val);
-                    updateSettings({ max_concurrent_uploads: val }).catch(() => { });
-                  }}
-                  className="w-20 rounded-lg px-3 py-2 text-body outline-none text-center"
-                  style={{
-                    backgroundColor: "var(--color-bg-hover)",
-                    border: "1px solid var(--color-border-default)",
-                    color: "var(--color-text-primary)",
-                  }}
+                  onChange={(e) => setMaxConcurrentUploads(parseInt(e.target.value) || 1)}
+                  className="w-16 rounded-lg px-2 py-1.5 text-body outline-none text-center"
+                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
                 />
               </div>
               <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
                 <div>
                   <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Result Row Limit</p>
-                  <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per result table</p>
+                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per query</p>
                 </div>
                 <input
                   type="number"
                   min="10"
                   max="5000"
                   value={resultRowLimit}
-                  onChange={(e) => {
-                    const val = Math.max(10, parseInt(e.target.value) || 10);
-                    setResultRowLimit(val);
-                    updateSettings({ result_row_limit: val }).catch(() => { });
-                  }}
-                  className="w-24 rounded-lg px-3 py-2 text-body outline-none text-center"
-                  style={{
-                    backgroundColor: "var(--color-bg-hover)",
-                    border: "1px solid var(--color-border-default)",
-                    color: "var(--color-text-primary)",
-                  }}
+                  onChange={(e) => setResultRowLimit(parseInt(e.target.value) || 500)}
+                  className="w-20 rounded-lg px-2 py-1.5 text-body outline-none text-center"
+                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
                 />
               </div>
               <DestructiveButton
                 label="Clear Chat History"
-                description="Permanently deletes all chat sessions and messages"
-                onConfirm={handleClearHistory}
+                description="Delete all conversation data permanently"
+                onConfirm={async () => { await clearChatHistory(); addToast({ type: "success", title: "History Cleared" }); }}
               />
               <DestructiveButton
                 label="Delete All Files"
-                description="Removes all uploaded Excel files and their data"
-                onConfirm={handleDeleteFiles}
+                description="Wipe all uploaded datasets and partitions"
+                onConfirm={async () => { await deleteAllFiles(); addToast({ type: "success", title: "Files Deleted" }); }}
               />
             </div>
+          </section>
+
+          <div className="pb-12 pt-4 text-center">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: "var(--color-text-tertiary)" }}>SheetMind Production v1.0.4</p>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

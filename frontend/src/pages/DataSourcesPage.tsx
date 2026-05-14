@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Eye, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Eye, Trash2, Upload, Plus, Search, ExternalLink, RotateCw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import {
   deleteDataSource,
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useToast";
-import type { DataSource, DataSourcePreview } from "@/types/DataSource";
+import type { DataSource, DataSourcePreview, ExcelSheet } from "@/types/DataSource";
 import { formatAbsoluteDate, formatFileSize } from "@/utils/formatDate";
 
 interface UploadingFile {
@@ -29,7 +30,7 @@ export function DataSourcesPage() {
   const { addToast } = useToast();
   const [sources, setSources] = useState<DataSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState<UploadingFile[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -37,6 +38,13 @@ export function DataSourcesPage() {
   const [previewData, setPreviewData] = useState<DataSourcePreview | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof DataSource | 'total_rows'; direction: 'asc' | 'desc' } | null>(null);
+
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -147,14 +155,53 @@ export function DataSourcesPage() {
   };
 
   const toggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const filteredSources = useMemo<DataSource[]>(() => {
+    const result = sources.filter(s => {
+      const matchesSearch =
+        s.original_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.status?.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        if (new Date(s.uploaded_at) < from) return false;
       }
-      return next;
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (new Date(s.uploaded_at) > to) return false;
+      }
+      return true;
+    });
+
+    if (sortConfig) {
+      result.sort((a, b) => {
+        let aVal: unknown = a[sortConfig.key as keyof DataSource];
+        let bVal: unknown = b[sortConfig.key as keyof DataSource];
+
+        if (sortConfig.key === 'total_rows') {
+          aVal = a.sheets.reduce((acc: number, s: ExcelSheet) => acc + s.row_count, 0);
+          bVal = b.sheets.reduce((acc: number, s: ExcelSheet) => acc + s.row_count, 0);
+        }
+
+        if (aVal != null && bVal != null && aVal < (bVal as string | number)) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal != null && bVal != null && aVal > (bVal as string | number)) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [sources, searchQuery, dateFrom, dateTo, sortConfig]);
+
+  const handleSort = (key: keyof DataSource | 'total_rows') => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        if (prev.direction === 'asc') return { key, direction: 'desc' };
+        return null;
+      }
+      return { key, direction: 'asc' };
     });
   };
 
@@ -172,79 +219,74 @@ export function DataSourcesPage() {
 
   return (
     <div
-      className="flex h-full flex-col overflow-y-auto scrollbar-thin"
+      className="flex h-full flex-col overflow-hidden"
       style={{ backgroundColor: "var(--color-bg-base)" }}
     >
-      <div className="mx-auto w-full max-w-5xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <h1
-            className="text-page-heading"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            Data Sources
-          </h1>
-          <button
-            onClick={() => void load()}
-            disabled={isLoading}
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms]"
-            style={{
-              backgroundColor: "var(--color-bg-hover)",
-              border: "1px solid var(--color-border-default)",
-              color: "var(--color-text-secondary)",
-              opacity: isLoading ? 0.7 : 1,
-            }}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={isLoading ? "animate-spin" : ""}
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-6 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>Data Sources</h1>
+            <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>Manage and explore your uploaded data assets.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={15} style={{ color: "var(--color-text-tertiary)" }} />
+              <input
+                type="text"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-10 w-64 rounded-lg pl-9 pr-4 text-body outline-none border transition-all"
+                style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+              />
+            </div>
+
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
+              style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+              title="From date"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
+              style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+              title="To date"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                className="h-10 rounded-lg px-3 text-body-em transition-all"
+                style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", backgroundColor: "transparent" }}
+              >
+                Reset
+              </button>
+            )}
+
+            <button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-body-em text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-              <path d="M16 21v-5h5" />
-            </svg>
-            Refresh
-          </button>
+              <Plus size={16} /> Upload
+            </button>
+
+            <button
+              onClick={() => void load()}
+              disabled={isLoading}
+              className="flex h-10 w-10 items-center justify-center rounded-lg transition-all"
+              style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", opacity: isLoading ? 0.7 : 1 }}
+              title="Refresh"
+            >
+              <RotateCw size={16} className={isLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
         </div>
 
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className="mb-6 flex cursor-pointer flex-col items-center justify-center rounded-xl py-10 transition-all duration-[120ms]"
-          style={{
-            border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
-            backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-elevated)",
-          }}
-        >
-          <Upload
-            size={24}
-            style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 8 }}
-          />
-          <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
-            Drop Excel files here or click to browse
-          </p>
-          <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
-            .xlsx, .xls supported
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            multiple
-            className="hidden"
-            onChange={(e) => e.target.files && handleUpload(e.target.files)}
-          />
-        </div>
 
         {uploading.length > 0 && (
           <div className="mb-4 flex flex-col gap-2">
@@ -287,46 +329,58 @@ export function DataSourcesPage() {
 
         {isLoading ? (
           <SkeletonTable />
-        ) : sources.length === 0 ? (
+        ) : filteredSources.length === 0 ? (
           <div
             className="rounded-xl py-16 text-center"
-            style={{
-              backgroundColor: "var(--color-bg-elevated)",
-              border: "1px solid var(--color-border-default)",
-            }}
+            style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
           >
             <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-              No data sources yet. Upload an Excel file to get started.
+              {searchQuery ? "No matching data sources found." : "No data sources yet. Upload an Excel file to get started."}
             </p>
           </div>
         ) : (
           <div
-            className="overflow-hidden rounded-xl"
-            style={{ border: "1px solid var(--color-border-default)" }}
+            className="flex-1 min-h-0 overflow-y-auto scrollbar-thin rounded-xl"
+            style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-elevated)" }}
           >
-            <table className="w-full border-collapse">
+            <table className="w-full border-collapse sticky-header">
               <thead>
-                <tr style={{ backgroundColor: "var(--color-bg-hover)" }}>
-                  {["Filename", "Status", "Sheets", "Rows", "Size", "Uploaded", "Actions"].map((h) => (
+                <tr className="sticky top-0 z-10" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+                  {[
+                    { label: "Filename", key: "original_filename" },
+                    { label: "Status", key: "status" },
+                    { label: "Sheets", key: "num_sheets" },
+                    { label: "Rows", key: "total_rows" },
+                    { label: "Size", key: "file_size_bytes" },
+                    { label: "Uploaded", key: "uploaded_at" },
+                    { label: "Actions", key: null }
+                  ].map((h) => (
                     <th
-                      key={h}
-                      className="px-4 py-3 text-left text-ui-label uppercase"
+                      key={h.label}
+                      onClick={() => h.key && handleSort(h.key as keyof DataSource | 'total_rows')}
+                      className={`px-4 py-3 text-left text-ui-label uppercase ${h.key ? 'cursor-pointer select-none' : ''}`}
                       style={{ color: "var(--color-text-tertiary)", borderBottom: "1px solid var(--color-border-default)" }}
                     >
-                      {h}
+                      <div className="flex items-center gap-1">
+                        {h.label}
+                        {sortConfig?.key === h.key && (
+                          <span className="text-accent">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </div>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {sources.map((src) => {
-                  const isExpanded = expandedIds.has(src.id);
-                  const totalRows = src.sheets.reduce((a, s) => a + s.row_count, 0);
+                {filteredSources.map((src: DataSource) => {
+                  const isExpanded = expandedId === src.id;
+                  const totalRows = src.sheets.reduce((a: number, s: ExcelSheet) => a + s.row_count, 0);
                   return (
                     <>
                       <tr
                         key={src.id}
-                        className="group"
+                        className="group cursor-pointer"
+                        onClick={() => toggleExpand(src.id)}
                         style={{
                           height: 48,
                           borderBottom: "1px solid var(--color-border-subtle)",
@@ -382,18 +436,29 @@ export function DataSourcesPage() {
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
                             {src.status === 'completed' && (
-                              <button
-                                onClick={() => openPreview(src.id)}
-                                className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
-                                style={{ color: "var(--color-text-tertiary)" }}
-                                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
-                                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
-                              >
-                                <Eye size={13} /> Preview
-                              </button>
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openPreview(src.id); }}
+                                  className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
+                                  style={{ color: "var(--color-text-tertiary)" }}
+                                  onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
+                                  onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                                >
+                                  <Eye size={13} /> Preview
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/excel-editor?fileId=${src.id}`); }}
+                                  className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
+                                  style={{ color: "var(--color-text-tertiary)" }}
+                                  onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-accent)"}
+                                  onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                                >
+                                  <ExternalLink size={13} /> Edit
+                                </button>
+                              </>
                             )}
                             <button
-                              onClick={() => setDeleteId(src.id)}
+                              onClick={(e) => { e.stopPropagation(); setDeleteId(src.id); }}
                               className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
                               onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-destructive)"}
@@ -405,7 +470,7 @@ export function DataSourcesPage() {
                         </td>
                       </tr>
                       {isExpanded &&
-                        src.sheets.map((sheet) => (
+                        src.sheets.map((sheet: ExcelSheet) => (
                           <tr
                             key={sheet.id}
                             style={{
@@ -454,6 +519,45 @@ export function DataSourcesPage() {
         )}
       </div>
 
+      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+        <DialogContent className="sm:max-w-[500px]" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "var(--color-text-primary)" }}>Upload Data Sources</DialogTitle>
+          </DialogHeader>
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
+            style={{
+              border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
+              backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+            }}
+          >
+            <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
+            <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
+              Drop Excel files or folders here<br />or click to browse
+            </p>
+            <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>.xlsx, .xls, .csv supported</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) {
+                  handleUpload(e.target.files);
+                  setIsUploadModalOpen(false);
+                }
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={previewId !== null} onOpenChange={(o) => !o && setPreviewId(null)}>
         <DialogContent
           className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-6"
@@ -463,18 +567,43 @@ export function DataSourcesPage() {
             color: "var(--color-text-primary)",
           }}
         >
-          <DialogHeader className="flex-none">
-            <DialogTitle style={{ color: "var(--color-text-primary)" }}>
-              Preview — {previewSource?.original_filename}
-              {previewSheet ? ` · ${previewSheet}` : ""}
-            </DialogTitle>
+          <DialogHeader className="flex-none flex flex-row items-center justify-between gap-4">
+            <div>
+              <DialogTitle style={{ color: "var(--color-text-primary)" }}>
+                Preview — {previewSource?.original_filename}
+              </DialogTitle>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {previewSource?.sheets.map((s) => (
+                  <button
+                    key={s.sheet_name}
+                    onClick={() => openPreview(previewSource.id, s.sheet_name)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${(previewSheet === s.sheet_name || (!previewSheet && s === previewSource.sheets[0]))
+                      ? "bg-accent text-white"
+                      : "bg-bg-hover text-tertiary border border-border-default hover:text-secondary"
+                      }`}
+                  >
+                    {s.sheet_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => previewSource && navigate(`/excel-editor?fileId=${previewSource.id}`)}
+              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <ExternalLink size={14} /> Open in Editor
+            </button>
           </DialogHeader>
+
           <div className="flex-1 min-h-0 mt-4 border rounded-xl overflow-hidden" style={{ borderColor: "var(--color-border-default)" }}>
             {isLoadingPreview ? (
-              <div className="p-4"><SkeletonTable /></div>
+              <div className="w-full h-full flex items-center justify-center"><SkeletonTable /></div>
             ) : previewResultTable ? (
               <ExcelPreviewGrid result={previewResultTable} />
-            ) : null}
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-tertiary">Select a sheet to preview</div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

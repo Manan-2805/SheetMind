@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from "react";
 import { Hash, Send } from "lucide-react";
 
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
-import { useToast } from "@/hooks/useToast";
 import { extractReferencedFiles } from "@/utils/chatReferences";
 import { FileAutocomplete } from "./FileAutocomplete";
 
@@ -25,7 +24,6 @@ export function ChatInput({
   followups = [],
   onFollowupClick,
 }: ChatInputProps) {
-  const { addToast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const {
     showAutocomplete,

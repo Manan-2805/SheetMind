@@ -32,7 +32,7 @@ export function RegenerateModal({ isOpen, onClose, onSubmit }: RegenerateModalPr
             <X size={20} />
           </button>
         </div>
-        
+
         <p className="mb-4 text-body" style={{ color: "var(--color-text-secondary)" }}>
           Why do you want to regenerate this response?
         </p>
@@ -43,7 +43,7 @@ export function RegenerateModal({ isOpen, onClose, onSubmit }: RegenerateModalPr
               key={r}
               onClick={() => setSelectedReason(r)}
               className={`rounded-full px-3 py-1 text-xs font-medium border ${selectedReason === r ? 'border-transparent' : ''}`}
-              style={{ 
+              style={{
                 backgroundColor: selectedReason === r ? "var(--color-accent)" : "transparent",
                 borderColor: selectedReason === r ? "transparent" : "var(--color-border-default)",
                 color: selectedReason === r ? "white" : "var(--color-text-secondary)"
@@ -59,9 +59,9 @@ export function RegenerateModal({ isOpen, onClose, onSubmit }: RegenerateModalPr
         </p>
         <textarea
           className="mb-6 w-full rounded-lg border p-3 text-body focus:outline-none focus:ring-1"
-          style={{ 
-            backgroundColor: "var(--color-bg-secondary)", 
-            borderColor: "var(--color-border-default)", 
+          style={{
+            backgroundColor: "var(--color-bg-secondary)",
+            borderColor: "var(--color-border-default)",
             color: "var(--color-text-primary)",
             minHeight: "80px"
           }}

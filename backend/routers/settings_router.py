@@ -1,9 +1,12 @@
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from schemas.settings_schemas import (
@@ -29,6 +32,8 @@ class TestLLMResponse(BaseModel):
     success: bool
     provider: str
     latency_ms: int
+    message: str
+    models: list[str] = []
 
 
 class PullModelResponse(BaseModel):
@@ -66,23 +71,74 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
         current_settings.max_concurrent_uploads = body.max_concurrent_uploads
     if body.result_row_limit is not None:
         current_settings.result_row_limit = body.result_row_limit
-        
+
     update_settings_db(current_settings)
     return current_settings
 
 
 @router.post("/test-llm", response_model=TestLLMResponse)
 async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
-    await asyncio.sleep(0.8)
-    return TestLLMResponse(
-        success=True,
-        provider=body.provider,
-        latency_ms=312,
-    )
+    t0 = time.time()
+    settings = db_get_settings()
 
+    if body.provider == "openai":
+        api_key = body.api_key or settings.openai.api_key
+        if not api_key:
+            return TestLLMResponse(
+                success=False,
+                provider="openai",
+                latency_ms=0,
+                message="No API key provided.",
+            )
+        try:
+            client = AsyncOpenAI(api_key=api_key)
+            models_page = await client.models.list()
+            model_ids = sorted(
+                [m.id for m in models_page.data if "gpt" in m.id.lower()],
+                reverse=True,
+            )
+            latency_ms = int((time.time() - t0) * 1000)
+            return TestLLMResponse(
+                success=True,
+                provider="openai",
+                latency_ms=latency_ms,
+                message=f"Connected. {len(model_ids)} GPT models available.",
+                models=model_ids,
+            )
+        except Exception as e:
+            latency_ms = int((time.time() - t0) * 1000)
+            return TestLLMResponse(
+                success=False,
+                provider="openai",
+                latency_ms=latency_ms,
+                message=str(e),
+            )
 
-import httpx
-from fastapi.responses import StreamingResponse
+    else:
+        ollama_url = (body.url or settings.ollama.url).rstrip("/")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{ollama_url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+                model_names = [m["name"] for m in data.get("models", [])]
+                latency_ms = int((time.time() - t0) * 1000)
+                return TestLLMResponse(
+                    success=True,
+                    provider="ollama",
+                    latency_ms=latency_ms,
+                    message=f"Connected. {len(model_names)} models available.",
+                    models=model_names,
+                )
+        except Exception as e:
+            latency_ms = int((time.time() - t0) * 1000)
+            return TestLLMResponse(
+                success=False,
+                provider="ollama",
+                latency_ms=latency_ms,
+                message=str(e),
+            )
+
 
 @router.get("/ollama-models")
 async def get_ollama_models():
@@ -96,11 +152,12 @@ async def get_ollama_models():
         except Exception as e:
             return JSONResponse(status_code=500, content={"detail": str(e)})
 
+
 @router.post("/pull-ollama-model")
 async def pull_ollama_model(body: PullModelRequest):
     settings = db_get_settings()
     ollama_url = settings.ollama.url.rstrip("/")
-    
+
     async def stream_pull():
         async with httpx.AsyncClient() as client:
             try:
@@ -109,7 +166,7 @@ async def pull_ollama_model(body: PullModelRequest):
                         yield chunk
             except Exception as e:
                 yield json.dumps({"error": str(e)}).encode("utf-8")
-                
+
     return StreamingResponse(stream_pull(), media_type="application/x-ndjson")
 
 

@@ -175,12 +175,12 @@ def get_sessions() -> list[ChatSessionResponse]:
 def get_messages(session_id: str) -> list[ChatMessageResponse]:
     conn = get_connection()
     result = conn.execute("""
-        SELECT id, session_id, role, content, created_at, sql_generated, 
-               sql_execution_ms, llm_generation_ms, token_count_input, 
-               token_count_output, confidence_score, result_row_count,
-               parent_user_message_id, feedback, result_data_json, version,
-               sql_gen_ms, summary_gen_ms, total_ms, model_name,
-               followups_json, chart_suggestion
+         SELECT id, session_id, role, content, created_at, sql_generated, 
+             sql_execution_ms, llm_generation_ms, token_count_input, 
+             token_count_output, confidence_score, result_row_count,
+             parent_user_message_id, feedback, feedback_reason, result_data_json, version,
+             sql_gen_ms, summary_gen_ms, total_ms, model_name,
+             followups_json
         FROM chat_messages
         WHERE session_id = ?
         ORDER BY created_at ASC
@@ -189,9 +189,9 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
     messages = []
     for row in result:
         res_data = None
-        if row[14]:
+        if row[15]:
             try:
-                res_data = ResultTable(**json.loads(row[14]))
+                res_data = ResultTable(**json.loads(row[15]))
             except Exception:
                 pass
 
@@ -210,14 +210,14 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
             result_row_count=row[11],
             parent_user_message_id=row[12],
             feedback=row[13],
+            feedback_reason=row[14],
             result_data=res_data,
-            version=row[15] or 1,
-            sql_gen_ms=row[16],
-            summary_gen_ms=row[17],
-            total_ms=row[18],
-            model_name=row[19],
-            followups=json.loads(row[20]) if row[20] else None,
-            chart_suggestion=row[21]
+            version=row[16] or 1,
+            sql_gen_ms=row[17],
+            summary_gen_ms=row[18],
+            total_ms=row[19],
+            model_name=row[20],
+            followups=json.loads(row[21]) if row[21] else None
         ))
     return messages
 
@@ -286,63 +286,84 @@ Your job:
 - Understand the user's question in the context of the conversation history.
 - Generate a precise DuckDB SQL query when the question requires data retrieval
   or manipulation.
-- Ask clarifying questions when the question is ambiguous or missing required
-  information. Do not guess schema or column names.
-- Respond conversationally when no SQL is needed (greetings, explanations,
-  follow-ups to your own questions).
-
-Available DuckDB tables:
-{schema_info}
+- Boldly map terms used in the user's prompt to the closest logically matching column names available in the schema. Do not hesitate or ask for clarification if a requested field loosely matches an available column header (e.g. 'city' -> 'Warehouse City' or 'Location'). Confidently write the working SQL query immediately.
+- Automatically construct valid DuckDB JOIN queries using logical relational keys when multiple tables or files are required or referenced to answer the question.
+- Respond conversationally when no SQL is needed (greetings, explanations).
 
 STRICT RULES — violating any of these is an error:
 1. Use ONLY the exact table name strings shown above (e.g. file_abc123_sheet1).
    Never use file names, sheet names, or any other identifiers in SQL.
-2. sql must ALWAYS be a string. Never return null or None.
+2. sql must ALWAYS be a string containing the complete working query. Never return null or None.
    Use "" (empty string) when no SQL is appropriate.
 3. message must ALWAYS be a non-empty string. Use it to:
-   - Explain what the SQL does (when sql is present)
-   - Ask the user for missing information (when sql is "")
+   - Explain concisely what the SQL does (when sql is present)
+   - Ask the user for missing information ONLY as an absolute last resort if the request is completely incomprehensible
    - Respond conversationally (when no data is needed)
 4. When the question references previous results ("filter that", "sort this",
    "add region to this"), build on the last SQL query in conversation history.
 5. When no tables are available or referenced, ask the user to attach a file
    using #filename in their message.
-6. Never fabricate column names. If unsure, ask.
-7. Respond ONLY with a valid JSON object. No prose, no markdown fences.
+6. Respond ONLY with a valid JSON object. No prose, no markdown fences.
+
+The current user question is always the block labeled "CURRENT USER QUESTION".
+Conversation history may appear after it for context only.
 
 Required response format:
 {{
-  "sql": "<complete DuckDB SQL query, or empty string>",
-  "message": "<explanation, clarification question, or conversational reply>",
-  "confidence": <integer 1 to 5>,
-  "chart_suggestion": "<bar|line|pie|scatter|area|null>"
-}}""".format(schema_info=schema_info)
+    "sql": "<complete working DuckDB SQL query, or empty string>",
+    "message": "<explanation, clarification question, or conversational reply>",
+    "confidence": <integer 1 to 5>
+}}"""
 
-    messages = [{"role": "system", "content": system_content}]
+    schema_content = f"Available DuckDB tables:\n{schema_info}"
+    current_question_block = "\n".join([
+        "=== CURRENT USER QUESTION ===",
+        current_question,
+        "=== END QUESTION ===",
+    ])
+
+    messages = [
+        {"role": "system", "content": system_content},
+        {"role": "system", "content": schema_content},
+        {"role": "user", "content": current_question_block},
+    ]
 
     # Build history entries, add until token budget is reached
     history_blocks = []
     for turn in turn_history:  # oldest to newest, max 4 turns
-        user_block = {"role": "user", "content": turn["user_message"]}
+        user_text = turn["user_message"] or ""
+        user_block = {
+            "role": "user",
+            "content": f"[Previous user message - context only]\n{user_text}"
+        }
         
         assistant_parts = []
         if turn.get("bot_message"):
             assistant_parts.append(turn["bot_message"])
+        feedback = turn.get("feedback")
+        feedback_reason = turn.get("feedback_reason")
+        if feedback:
+            if feedback_reason:
+                assistant_parts.append(f"[User feedback: {feedback} - {feedback_reason}]")
+            else:
+                assistant_parts.append(f"[User feedback: {feedback}]")
         if turn.get("sql_generated"):
             assistant_parts.append(f"[SQL: {turn['sql_generated']}]")
         if turn.get("sql_error"):
-            assistant_parts.append(f"[Error: {turn['sql_error']}]")
-        if turn.get("feedback"):
-            assistant_parts.append(f"[User feedback: {turn['feedback']}]")
+            assistant_parts.append(f"[SQL Error: {turn['sql_error']}]")
         
         assistant_block = {
             "role": "assistant",
-            "content": "\n".join(assistant_parts)
+            "content": "\n".join(["[Previous assistant response - context only]"] + assistant_parts)
         }
         history_blocks.append((user_block, assistant_block))
 
     # Token-aware history insertion
-    base_tokens = estimate_tokens(system_content) + estimate_tokens(current_question)
+    base_tokens = (
+        estimate_tokens(system_content)
+        + estimate_tokens(schema_content)
+        + estimate_tokens(current_question_block)
+    )
     token_budget = max_input_tokens - base_tokens - 500  # 500 reserve for response
 
     inserted = []
@@ -356,20 +377,157 @@ Required response format:
     for user_block, assistant_block in inserted:
         messages.append(user_block)
         messages.append(assistant_block)
-
-    messages.append({"role": "user", "content": current_question})
     return messages
 
 
-def set_message_feedback(message_id: str, feedback: str) -> None:
+def _collect_schema_refs(
+    conn,
+    referenced_files: list[str],
+    content: str,
+    turns: list[dict[str, Any]],
+) -> list[str]:
+    refs = [r for r in referenced_files if r.strip()]
+    if not refs:
+        refs = _extract_references_from_content(conn, content)
+
+    history_refs: list[str] = []
+    for turn in turns:
+        history_refs.extend(turn.get("referenced_files") or [])
+
+    combined: list[str] = []
+    seen = set()
+    for ref in refs + history_refs:
+        ref = ref.strip() if isinstance(ref, str) else ""
+        if ref and ref not in seen:
+            combined.append(ref)
+            seen.add(ref)
+
+    return combined
+
+
+def _extract_table_names_from_sql(sql: str) -> list[str]:
+    if not sql:
+        return []
+    return re.findall(r"\bfile_[0-9A-Za-z_]+\b", sql)
+
+
+def _extract_table_names_from_turns(turns: list[dict[str, Any]]) -> list[str]:
+    names: list[str] = []
+    seen = set()
+    for turn in turns:
+        sql = turn.get("sql_generated") or ""
+        for name in _extract_table_names_from_sql(sql):
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
+    return names
+
+
+def _resolve_tables_by_name(conn, table_names: list[str]) -> list[dict[str, str]]:
+    if not table_names:
+        return []
+
+    placeholders = ", ".join(["?"] * len(table_names))
+    rows = conn.execute(
+        f"""
+        SELECT f.original_filename, s.sheet_name, s.table_name
+        FROM excel_sheets s
+        JOIN excel_files f ON f.id = s.excel_file_id
+        WHERE s.table_name IN ({placeholders}) AND f.status = 'completed'
+        """,
+        table_names,
+    ).fetchall()
+
+    entries: dict[str, dict[str, str]] = {}
+    for filename, sheet_name, table_name in rows:
+        entries[str(table_name)] = {
+            "filename": str(filename),
+            "sheet_name": str(sheet_name),
+            "table_name": str(table_name),
+        }
+
+    return [entries[name] for name in table_names if name in entries]
+
+
+def _merge_table_entries(
+    base: list[dict[str, str]],
+    extra: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    seen = {entry.get("table_name") for entry in base}
+    for entry in extra:
+        table_name = entry.get("table_name")
+        if table_name and table_name not in seen:
+            base.append(entry)
+            seen.add(table_name)
+    return base
+
+
+def _get_recent_turns(
+    conn,
+    session_id: str,
+    exclude_message_id: str | None = None,
+    limit_pairs: int = 4,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [session_id]
+    user_query = """
+        SELECT id, content, created_at, referenced_files_json
+        FROM chat_messages
+        WHERE session_id = ? AND role = 'user'
+    """
+    if exclude_message_id:
+        user_query += " AND id != ?"
+        params.append(exclude_message_id)
+    user_query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit_pairs * 4)
+
+    user_rows = conn.execute(user_query, params).fetchall()
+    turns: list[dict[str, Any]] = []
+
+    for user_id, user_content, _created_at, ref_files_raw in user_rows:
+        assistant_row = conn.execute(
+            """
+            SELECT content, sql_generated, feedback, feedback_reason, created_at, version
+            FROM chat_messages
+            WHERE parent_user_message_id = ? AND role = 'assistant'
+            ORDER BY COALESCE(version, 1) DESC, created_at DESC
+            LIMIT 1
+            """,
+            [user_id],
+        ).fetchone()
+
+        if not assistant_row:
+            continue
+
+        assistant_content, sql, feedback, feedback_reason, _a_created_at, _version = assistant_row
+        sql_error = assistant_content if assistant_content and str(assistant_content).startswith("SQL Error:") else None
+        ref_files = json.loads(ref_files_raw) if ref_files_raw else []
+
+        turns.append({
+            "user_message": user_content or "",
+            "bot_message": assistant_content or "",
+            "sql_generated": sql,
+            "feedback": feedback,
+            "feedback_reason": feedback_reason,
+            "sql_error": sql_error,
+            "referenced_files": ref_files,
+        })
+
+        if len(turns) >= limit_pairs:
+            break
+
+    turns.reverse()
+    return turns
+
+
+def set_message_feedback(message_id: str, feedback: str, reason: str | None = None) -> None:
     conn = get_connection()
     conn.execute(
-        "UPDATE chat_messages SET feedback = ? WHERE id = ?",
-        [feedback, message_id]
+        "UPDATE chat_messages SET feedback = ?, feedback_reason = ? WHERE id = ?",
+        [feedback, reason, message_id]
     )
 
 def _extract_json_sql(raw: str) -> dict[str, Any]:
-    """Parse JSON response from LLM. Returns a dict with sql, message, confidence, chart_suggestion."""
+    """Parse JSON response from LLM. Returns a dict with sql, message, confidence."""
     text = raw.strip()
     # Strip markdown code fences if present
     if text.startswith("```"):
@@ -390,23 +548,32 @@ def _extract_json_sql(raw: str) -> dict[str, Any]:
         return {
             "sql": str(data.get("sql", "")).strip(),
             "message": str(data.get("message") or ""),
-            "confidence": data.get("confidence", 3),
-            "chart_suggestion": data.get("chart_suggestion")
+            "confidence": data.get("confidence", 3)
         }
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON response from LLM")
 
 
-def _write_debug_prompt(prompt: str, label: str = "PROMPT") -> None:
-    debug_file = "llm_prompt_debug.txt"
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> None:
+    """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir."""
+    debug_dir = get_debug_prompts_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    safe_label = label.replace(" ", "_").replace("[", "").replace("]", "")[:60]
+    filename = debug_dir / f"{timestamp}_{safe_label}.txt"
     try:
-        with open(debug_file, "a", encoding="utf-8") as f:
-            f.write(f"\n{'='*80}\n")
-            f.write(f"[{timestamp}] {label}\n")
-            f.write(f"{'='*80}\n")
-            f.write(prompt)
-            f.write("\n")
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
+            f.write("=" * 80 + "\n\n")
+            if isinstance(messages_or_prompt, list):
+                for i, msg in enumerate(messages_or_prompt):
+                    role = msg.get("role", "unknown").upper()
+                    content = msg.get("content", "")
+                    f.write(f"--- [{i+1}] {role} ---\n")
+                    f.write(content)
+                    f.write("\n\n")
+            else:
+                f.write(messages_or_prompt)
+                f.write("\n")
     except Exception as e:
         print(f"Failed to write debug prompt: {e}")
 
@@ -610,7 +777,7 @@ def export_message(message_id: str):
 
 
 async def generate_sql(messages: list[dict]) -> dict[str, Any]:
-    """Returns a dict with {sql, message, confidence, chart_suggestion, model, input_tokens, output_tokens}."""
+    """Returns a dict with {sql, message, confidence, model, input_tokens, output_tokens}."""
     settings = get_settings()
     model_name = "unknown"
 
@@ -618,7 +785,6 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
         "sql": "",
         "message": "I had trouble formatting my response. Please try rephrasing your question.",
         "confidence": 1,
-        "chart_suggestion": None,
         "model": "fallback",
         "input_tokens": 0,
         "output_tokens": 0
@@ -847,52 +1013,19 @@ async def create_message(
     
     # Insert user message
     conn.execute(
-        "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id) VALUES (?, ?, ?, ?, ?, ?)",
-        [user_msg_id, session_id, "user", content, now, parent_user_message_id]
+        "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id, referenced_files_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [user_msg_id, session_id, "user", content, now, parent_user_message_id, json.dumps(referenced_files)]
     )
     
     settings = get_settings()
-    tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
-    schema_info = _build_schema_info(conn, tables)
+    turns = _get_recent_turns(conn, session_id, exclude_message_id=user_msg_id, limit_pairs=4)
 
-    # Fetch history for context (last 4 turns)
-    history_rows = conn.execute("""
-        SELECT content, sql_generated, role, feedback, id
-        FROM chat_messages 
-        WHERE session_id = ? AND id != ?
-        ORDER BY created_at DESC LIMIT 8
-    """, [session_id, user_msg_id]).fetchall()
-    
-    turns = []
-    i = 0
-    while i < len(history_rows):
-        msg = history_rows[i]
-        if msg[2] == "assistant":
-            assistant_content = msg[0]
-            sql = msg[1]
-            feedback = msg[3]
-            if i + 1 < len(history_rows) and history_rows[i+1][2] == "user":
-                user_content = history_rows[i+1][0]
-                turns.append({
-                    "user_message": user_content,
-                    "bot_message": assistant_content,
-                    "sql_generated": sql,
-                    "feedback": feedback
-                })
-                i += 2
-            else:
-                turns.append({
-                    "user_message": "",
-                    "bot_message": assistant_content,
-                    "sql_generated": sql,
-                    "feedback": feedback
-                })
-                i += 1
-        else:
-            turns.append({"user_message": msg[0]})
-            i += 1
-            
-    turns.reverse()
+    _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
+    schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
+    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, content)
+    history_table_names = _extract_table_names_from_turns(turns)
+    schema_tables = _merge_table_entries(schema_tables, _resolve_tables_by_name(conn, history_table_names))
+    schema_info = _build_schema_info(conn, schema_tables)
     
     max_input_tokens = 6000
     if settings.llm_provider == "openai":
@@ -901,7 +1034,8 @@ async def create_message(
         max_input_tokens = settings.ollama.max_input_tokens
 
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
-    
+    _write_debug_prompt(messages, f"SQL_GENERATION [{session_id}]")
+
     msg_count = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]).fetchone()[0]
     sess_row = conn.execute("SELECT title FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
     current_title = sess_row[0] if sess_row else ""
@@ -922,7 +1056,6 @@ async def create_message(
     llm_message = sql_res.get("message") or ""
     model_name = sql_res.get("model") or "unknown"
     confidence = sql_res.get("confidence", 3)
-    chart_suggestion = sql_res.get("chart_suggestion")
     total_input_tokens = sql_res.get("input_tokens", 0)
     total_output_tokens = sql_res.get("output_tokens", 0)
     sql_gen_ms = int((time.time() - t0) * 1000)
@@ -973,22 +1106,23 @@ async def create_message(
         """INSERT INTO chat_messages 
         (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
-         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_suggestion) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
          total_input_tokens, total_output_tokens, len(result_rows), user_msg_id, res_data_json, 1,
-         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_suggestion]
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
-    async def _bg_followups():
-        if result_rows:
-            fups = await generate_followups(result_rows, [c.key for c in columns], content)
-            if fups:
-                conn_bg = get_connection()
-                conn_bg.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(fups), assistant_msg_id])
+    followups = []
+    if result_rows:
+        try:
+            followups = await generate_followups(result_rows, [c.key for c in columns], content)
+            if followups:
+                conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
+        except Exception as e:
+            print(f"Follow-up generation failed: {e}")
 
-    asyncio.create_task(_bg_followups())
 
     return ChatMessageResponse(
         id=assistant_msg_id,
@@ -1011,8 +1145,9 @@ async def create_message(
         total_ms=total_ms,
         model_name=model_name,
         confidence_score=confidence,
-        chart_suggestion=chart_suggestion
+        followups=followups
     )
+
 
 
 async def regenerate_response(
@@ -1026,35 +1161,14 @@ async def regenerate_response(
     import asyncio
     conn = get_connection()
 
-    tables, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
-    schema_info = _build_schema_info(conn, tables)
+    turns = _get_recent_turns(conn, session_id, exclude_message_id=parent_user_message_id, limit_pairs=4)
 
-    history_rows = conn.execute("""
-        SELECT content, sql_generated, role, feedback, id
-        FROM chat_messages 
-        WHERE session_id = ? AND id != ?
-        ORDER BY created_at DESC LIMIT 8
-    """, [session_id, parent_user_message_id]).fetchall()
-    
-    turns = []
-    i = 0
-    while i < len(history_rows):
-        msg = history_rows[i]
-        if msg[2] == "assistant":
-            assistant_content = msg[0]
-            sql = msg[1]
-            feedback = msg[3]
-            if i + 1 < len(history_rows) and history_rows[i+1][2] == "user":
-                user_content = history_rows[i+1][0]
-                turns.append({"user_message": user_content, "bot_message": assistant_content, "sql_generated": sql, "feedback": feedback})
-                i += 2
-            else:
-                turns.append({"user_message": "", "bot_message": assistant_content, "sql_generated": sql, "feedback": feedback})
-                i += 1
-        else:
-            turns.append({"user_message": msg[0]})
-            i += 1
-    turns.reverse()
+    _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
+    schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
+    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, content)
+    history_table_names = _extract_table_names_from_turns(turns)
+    schema_tables = _merge_table_entries(schema_tables, _resolve_tables_by_name(conn, history_table_names))
+    schema_info = _build_schema_info(conn, schema_tables)
     
     settings = get_settings()
     max_input_tokens = 6000
@@ -1064,6 +1178,7 @@ async def regenerate_response(
         max_input_tokens = settings.ollama.max_input_tokens
 
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
+    _write_debug_prompt(messages, f"SQL_REGENERATE [{session_id}]")
 
     t0 = time.time()
     sql_res = await generate_sql(messages)
@@ -1071,7 +1186,6 @@ async def regenerate_response(
     llm_message = sql_res.get("message") or ""
     model_name = sql_res.get("model") or "unknown"
     confidence = sql_res.get("confidence", 3)
-    chart_suggestion = sql_res.get("chart_suggestion")
     total_input_tokens = sql_res.get("input_tokens", 0)
     total_output_tokens = sql_res.get("output_tokens", 0)
     sql_gen_ms = int((time.time() - t0) * 1000)
@@ -1120,22 +1234,22 @@ async def regenerate_response(
         """INSERT INTO chat_messages
         (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
-         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_suggestion)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
          total_input_tokens, total_output_tokens, len(result_rows), parent_user_message_id, res_data_json, next_version,
-         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_suggestion]
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
-    async def _bg_followups():
-        if result_rows:
-            fups = await generate_followups(result_rows, [c.key for c in columns], content)
-            if fups:
-                conn_bg = get_connection()
-                conn_bg.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(fups), assistant_msg_id])
-
-    asyncio.create_task(_bg_followups())
+    followups = []
+    if result_rows:
+        try:
+            followups = await generate_followups(result_rows, [c.key for c in columns], content)
+            if followups:
+                conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
+        except Exception as e:
+            print(f"Follow-up generation failed: {e}")
 
     return ChatMessageResponse(
         id=assistant_msg_id,
@@ -1158,7 +1272,7 @@ async def regenerate_response(
         total_ms=total_ms,
         model_name=model_name,
         confidence_score=confidence,
-        chart_suggestion=chart_suggestion
+        followups=followups
     )
 
 

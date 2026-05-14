@@ -1,20 +1,29 @@
-import { SkeletonTable } from "./SkeletonTable";
-import { SkeletonText } from "./SkeletonText";
-
 export function SkeletonChatMessage() {
   return (
-    <div className="flex gap-3 py-4" aria-hidden="true">
-      <div
-        className="skeleton mt-0.5 h-5 w-5 shrink-0 rounded-full"
-        aria-hidden="true"
-      />
-      <div className="flex flex-1 flex-col gap-3">
-        <div className="flex flex-col gap-1.5">
-          <SkeletonText width="100%" height="13px" />
-          <SkeletonText width="82%" height="13px" />
-          <SkeletonText width="61%" height="13px" />
-        </div>
-        <SkeletonTable />
+    <div className="mb-6 flex flex-col gap-3 animate-pulse">
+      <div className="flex items-center gap-2">
+        <div
+          className="h-7 w-7 rounded-full shrink-0"
+          style={{ backgroundColor: "var(--color-bg-hover)" }}
+        />
+        <div
+          className="h-3 w-20 rounded"
+          style={{ backgroundColor: "var(--color-bg-hover)" }}
+        />
+      </div>
+      <div className="ml-9 flex flex-col gap-2">
+        <div
+          className="h-3 rounded"
+          style={{ backgroundColor: "var(--color-bg-hover)", width: "88%" }}
+        />
+        <div
+          className="h-3 rounded"
+          style={{ backgroundColor: "var(--color-bg-hover)", width: "72%" }}
+        />
+        <div
+          className="h-3 rounded"
+          style={{ backgroundColor: "var(--color-bg-hover)", width: "55%" }}
+        />
       </div>
     </div>
   );

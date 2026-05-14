@@ -24,16 +24,16 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, type }: FeedbackModal
             <X size={20} />
           </button>
         </div>
-        
+
         <p className="mb-4 text-body" style={{ color: "var(--color-text-secondary)" }}>
           {type === "like" ? "What did you like about this response?" : "What was wrong with this response?"}
         </p>
 
         <textarea
           className="mb-4 w-full rounded-lg border p-3 text-body focus:outline-none focus:ring-1"
-          style={{ 
-            backgroundColor: "var(--color-bg-secondary)", 
-            borderColor: "var(--color-border-default)", 
+          style={{
+            backgroundColor: "var(--color-bg-secondary)",
+            borderColor: "var(--color-border-default)",
             color: "var(--color-text-primary)",
             minHeight: "100px"
           }}

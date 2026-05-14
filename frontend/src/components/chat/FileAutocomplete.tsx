@@ -117,7 +117,7 @@ export function FileAutocomplete({
         maxHeight: 300,
       }}
     >
-      <div 
+      <div
         className="flex items-center gap-2 border-b px-3 py-2"
         style={{ borderColor: "var(--color-border-default)" }}
       >
@@ -135,7 +135,7 @@ export function FileAutocomplete({
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {flatItems.length === 0 ? (
-          <div 
+          <div
             className="px-4 py-3 text-center text-sm"
             style={{ color: "var(--color-text-tertiary)" }}
           >
@@ -171,9 +171,9 @@ export function FileAutocomplete({
                   ↳
                 </span>
               )}
-              <span 
+              <span
                 className="truncate"
-                style={{ 
+                style={{
                   color: item.type === "file" ? "var(--color-text-primary)" : "var(--color-text-secondary)",
                   fontWeight: item.type === "file" ? 500 : 400
                 }}

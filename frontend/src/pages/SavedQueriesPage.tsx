@@ -12,6 +12,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { QueryResultPanel } from "@/components/QueryResultPanel";
 import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
+import { SkeletonQueryCard } from "@/components/skeletons/SkeletonQueryCard";
 import { useToast } from "@/hooks/useToast";
 import type { ResultTable } from "@/types/ChatMessage";
 import type { SavedQuery } from "@/types/SavedQuery";
@@ -123,6 +124,14 @@ export function SavedQueriesPage() {
             const res = await runSavedQuery(query.id);
             setActiveResult(res);
             setChartModalOpen(false);
+            // Update run count and last_used_at in local state
+            setQueries((prev) =>
+                prev.map((q) =>
+                    q.id === query.id
+                        ? { ...q, use_count: q.use_count + 1, last_used_at: new Date().toISOString() }
+                        : q
+                )
+            );
         } catch (err: unknown) {
             const e = err as { message?: string };
             addToast({ type: "error", title: "Error", description: e?.message });
@@ -227,7 +236,11 @@ export function SavedQueriesPage() {
                     </div>
 
                     {isLoading ? (
-                        <p className="text-body text-sm" style={{ color: "var(--color-text-tertiary)" }}>Loading...</p>
+                        <div className="flex flex-col gap-4">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <SkeletonQueryCard key={i} />
+                            ))}
+                        </div>
                     ) : queries.length === 0 ? (
                         <div
                             className="rounded-xl p-6 text-center text-sm"
@@ -368,7 +381,7 @@ export function SavedQueriesPage() {
                                 </button>
                             </div>
                         </div>
-                        
+
                         <div className="flex-1 overflow-hidden rounded-xl" style={{ border: "1px solid var(--color-border-default)" }}>
                             <ExcelPreviewGrid result={activeResult.result} />
                         </div>

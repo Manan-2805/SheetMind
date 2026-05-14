@@ -74,11 +74,13 @@ export function useChat() {
   const startNewChat = useCallback(() => {
     setActiveSessionId(null);
     setMessages([]);
+    setFollowups([]);
   }, []);
 
   const sendChatMessage = useCallback(
     async (content: string, referencedFiles: string[] = []) => {
       let sessionId = activeSessionId;
+      let isNewSession = false;
 
       if (!sessionId) {
         try {
@@ -86,7 +88,7 @@ export function useChat() {
           setSessions((prev) => [session, ...prev]);
           sessionId = session.id;
           setActiveSessionId(sessionId);
-          navigate(`/${sessionId}`, { replace: true });
+          isNewSession = true;
         } catch (err: unknown) {
           const e = err as { message?: string };
           addToast({
@@ -114,18 +116,32 @@ export function useChat() {
         content: "",
         created_at: new Date().toISOString(),
         is_typing: true,
+        parent_user_message_id: userMessage.id,
       };
 
       setMessages((prev) => [...prev, userMessage, typingMessage]);
       setIsSending(true);
 
+      if (isNewSession) {
+        navigate(`/${sessionId}`, { replace: true });
+      }
+
+      // Small delay to ensure the typing indicator is rendered before the API response potentially replaces it
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
       try {
         const response = await sendMessage(sessionId, content, referencedFiles);
-        setMessages((prev) =>
-          prev
+        setMessages((prev) => {
+          const updated = prev
             .filter((m) => m.id !== TYPING_ID)
-            .concat(response)
-        );
+            .map((m) => {
+              if (m.id === userMessage.id && response.parent_user_message_id) {
+                return { ...m, id: response.parent_user_message_id };
+              }
+              return m;
+            });
+          return updated.concat(response);
+        });
         if (response.followups) {
           setFollowups(response.followups);
         }
@@ -133,10 +149,10 @@ export function useChat() {
           prev.map((s) =>
             s.id === sessionId
               ? {
-                  ...s,
-                  updated_at: new Date().toISOString(),
-                  title: response.session_title ?? s.title,
-                }
+                ...s,
+                updated_at: new Date().toISOString(),
+                title: response.session_title ?? s.title,
+              }
               : s
           )
         );
@@ -172,7 +188,7 @@ export function useChat() {
 
   const editMessageHandler = useCallback(async (messageId: string, content: string, referencedFiles: string[]) => {
     if (!activeSessionId) return;
-    
+
     const typingMessage: ChatMessage = {
       id: TYPING_ID,
       session_id: activeSessionId,
@@ -180,6 +196,7 @@ export function useChat() {
       content: "",
       created_at: new Date().toISOString(),
       is_typing: true,
+      parent_user_message_id: messageId,
     };
 
     const targetMsg = messages.find(m => m.id === messageId);
@@ -196,7 +213,17 @@ export function useChat() {
 
     try {
       const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
-      setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
+      setMessages(prev => {
+        const updated = prev
+          .filter(m => m.id !== TYPING_ID)
+          .map(m => {
+            if (m.id === messageId && response.parent_user_message_id) {
+              return { ...m, id: response.parent_user_message_id };
+            }
+            return m;
+          });
+        return updated.concat(response);
+      });
       if (response.followups) {
         setFollowups(response.followups);
       }
@@ -215,32 +242,47 @@ export function useChat() {
   const regenerateResponseHandler = useCallback(async (msg: ChatMessage, reason: string, instruction: string) => {
     if (!activeSessionId) return;
 
+    // Find the actual user message that this assistant message belongs to
+    const parentId = msg.role === "user" ? msg.id : msg.parent_user_message_id;
+    if (!parentId) return;
+
     const typingMessage: ChatMessage = {
       id: TYPING_ID,
       session_id: activeSessionId,
       role: "assistant",
       content: "",
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now() + 1000).toISOString(), // Ensure it's after the user message
       is_typing: true,
+      parent_user_message_id: parentId,
     };
 
-    setMessages(prev => [...prev.filter(m => !m.is_typing), typingMessage]);
+    setMessages(prev => [
+      ...prev.filter(m => m.id !== TYPING_ID),
+      typingMessage
+    ]);
+    setFollowups([]);
     setIsSending(true);
 
     try {
       const response = await regenerateMessage(
-        activeSessionId, 
-        msg.content, 
-        msg.referenced_files ?? [], 
-        reason, 
-        instruction, 
-        msg.id
+        activeSessionId,
+        msg.content,
+        msg.referenced_files ?? [],
+        reason,
+        instruction,
+        parentId // Correctly pass the user message ID
       );
       setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
+      if (response.followups) {
+        setFollowups(response.followups);
+      }
     } catch (err: unknown) {
       const e = err as { message?: string };
       setMessages(prev => prev.filter(m => m.id !== TYPING_ID));
       addToast({ type: "error", title: "Error", description: e.message ?? "Failed to regenerate" });
+      // Reload messages to ensure sync if something went wrong
+      const data = await getMessages(activeSessionId);
+      setMessages(data);
     } finally {
       setIsSending(false);
     }

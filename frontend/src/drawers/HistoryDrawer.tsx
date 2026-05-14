@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Star, Edit2, Trash2 } from "lucide-react";
+
+import { Edit2, Search, Star, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { getSessions } from "@/api/chatApi";
 import { Drawer } from "@/components/ui/Drawer";
@@ -44,6 +46,7 @@ export function HistoryDrawer({
   activeSessionId,
   onSelectSession,
 }: HistoryDrawerProps) {
+  const navigate = useNavigate();
   const { addToast } = useToast();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,8 +141,8 @@ export function HistoryDrawer({
                           backgroundColor: isActive
                             ? "var(--color-bg-active)"
                             : isHovered
-                            ? "var(--color-bg-hover)"
-                            : "transparent",
+                              ? "var(--color-bg-hover)"
+                              : "transparent",
                           cursor: "pointer",
                         }}
                         onMouseEnter={() => setHoveredId(session.id)}
@@ -203,7 +206,7 @@ export function HistoryDrawer({
                                     await import("@/api/chatApi").then(m => m.deleteSession(session.id));
                                     setSessions(prev => prev.filter(s => s.id !== session.id));
                                     if (activeSessionId === session.id) {
-                                      window.location.hash = "#/chat/new";
+                                      navigate("/", { replace: true });
                                     }
                                   } catch {
                                     addToast({ type: "error", title: "Error", description: "Failed to delete session" });

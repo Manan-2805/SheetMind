@@ -10,6 +10,7 @@ from routers.chat_router import router as chat_router
 from routers.data_sources_router import router as data_sources_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
+from routers.excel_editor_router import router as excel_editor_router
 from services.duckdb_service import init_schema
 
 
@@ -59,6 +60,7 @@ app.include_router(data_sources_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(saved_queries_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(excel_editor_router, prefix="/api")
 
 
 import asyncio

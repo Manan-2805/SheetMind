@@ -289,9 +289,9 @@ export function QueryResultPanel({
 
                             {chartImageUrl && !isGenerating && (
                                 <div className="rounded-xl p-4 overflow-hidden flex items-center justify-center bg-white" style={{ border: "1px solid var(--color-border-subtle)", height: "320px" }}>
-                                    <img 
-                                        src={chartImageUrl} 
-                                        alt="Generated Chart" 
+                                    <img
+                                        src={chartImageUrl}
+                                        alt="Generated Chart"
                                         className="max-w-full max-h-full object-contain"
                                     />
                                 </div>

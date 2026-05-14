@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Download, LineChart, Trash2, X, Check } from "lucide-react";
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { Download, LineChart, Trash2, X, Check, Search } from "lucide-react";
 
 import {
     deleteArtifact,
@@ -10,6 +10,7 @@ import {
 } from "@/api/artifactsApi";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { QueryResultPanel } from "@/components/QueryResultPanel";
+import { SkeletonArtifactCard } from "@/components/skeletons/SkeletonArtifactCard";
 import { useToast } from "@/hooks/useToast";
 import type { ArtifactExport } from "@/types/Artifact";
 import type { ResultTable } from "@/types/ChatMessage";
@@ -32,6 +33,9 @@ export function ArtifactsPage() {
     const [loadingChartId, setLoadingChartId] = useState<string | null>(null);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [previewArtifact, setPreviewArtifact] = useState<{ id: string; title: string; filename: string } | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [dateFrom, setDateFrom] = useState("");
+    const [dateTo, setDateTo] = useState("");
 
     const loadArtifacts = useCallback(async () => {
         setIsLoading(true);
@@ -46,9 +50,9 @@ export function ArtifactsPage() {
         }
     }, [addToast]);
 
-    useEffect(() => { 
+    useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        void loadArtifacts(); 
+        void loadArtifacts();
     }, [loadArtifacts]);
 
     const startRename = (artifact: ArtifactExport) => {
@@ -121,36 +125,101 @@ export function ArtifactsPage() {
         setPreviewArtifact({ id: artifact.id, title: artifact.title, filename: artifact.filename });
     };
 
+    const filteredExports = useMemo(() => {
+        return exports.filter(e => {
+            const matchesSearch =
+                e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                e.filename.toLowerCase().includes(searchQuery.toLowerCase());
+            if (!matchesSearch) return false;
+
+            if (dateFrom) {
+                const from = new Date(dateFrom);
+                if (new Date(e.created_at) < from) return false;
+            }
+            if (dateTo) {
+                const to = new Date(dateTo);
+                to.setHours(23, 59, 59, 999);
+                if (new Date(e.created_at) > to) return false;
+            }
+            return true;
+        });
+    }, [exports, searchQuery, dateFrom, dateTo]);
+
     return (
         <div className="flex h-full flex-col overflow-y-auto scrollbar-thin" style={{ backgroundColor: "var(--color-bg-base)" }}>
             <div className="mx-auto w-full max-w-6xl px-6 py-8">
                 <div
-                    className="mb-6 rounded-2xl p-6"
+                    className="mb-6 rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4"
                     style={{
                         background: "radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 60%), var(--color-bg-elevated)",
                         border: "1px solid var(--color-border-default)",
                     }}
                 >
-                    <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
-                        Artifacts
-                    </h1>
-                    <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
-                        Access every Excel export and spin up new charts instantly.
-                    </p>
+                    <div>
+                        <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
+                            Artifacts
+                        </h1>
+                        <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+                            Access every Excel export and spin up new charts instantly.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={15} style={{ color: "var(--color-text-tertiary)" }} />
+                            <input
+                                type="text"
+                                placeholder="Search artifacts..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="h-10 w-64 rounded-lg pl-9 pr-4 text-body outline-none border transition-all"
+                                style={{ backgroundColor: "var(--color-bg-hover)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+                            />
+                        </div>
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                            className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
+                            style={{ backgroundColor: "var(--color-bg-hover)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+                            title="From date"
+                        />
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                            className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
+                            style={{ backgroundColor: "var(--color-bg-hover)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+                            title="To date"
+                        />
+                        {(dateFrom || dateTo) && (
+                            <button
+                                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                                className="h-10 rounded-lg px-3 text-body-em transition-all"
+                                style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", backgroundColor: "transparent" }}
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {isLoading ? (
-                    <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>Loading...</p>
-                ) : exports.length === 0 ? (
+                    <div className="grid gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <SkeletonArtifactCard key={i} />
+                        ))}
+                    </div>
+                ) : filteredExports.length === 0 ? (
                     <div
                         className="rounded-xl p-6 text-center text-body"
                         style={{ border: "1px dashed var(--color-border-default)", color: "var(--color-text-tertiary)" }}
                     >
-                        No exports yet. Run a query and export to Excel to see it here.
+                        {searchQuery ? "No matching artifacts found." : "No exports yet. Run a query and export to Excel to see it here."}
                     </div>
                 ) : (
                     <div className="grid gap-4">
-                        {exports.map((artifact) => {
+                        {filteredExports.map((artifact) => {
                             const isEditing = editingId === artifact.id;
                             const isLoadingChart = loadingChartId === artifact.id;
                             return (

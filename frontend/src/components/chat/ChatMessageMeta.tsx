@@ -17,8 +17,8 @@ function getConfidenceColor(score: number): string {
 }
 
 export function ChatMessageMeta({ message }: ChatMessageMetaProps) {
-  const totalTokens = (message.token_count_input || 0) + (message.token_count_output || 0);
-  
+  const totalTokens = message.total_tokens ?? (message.token_count_input || 0) + (message.token_count_output || 0);
+
   return (
     <div
       className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md p-2 text-ui-label"

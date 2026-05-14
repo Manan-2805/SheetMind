@@ -30,12 +30,16 @@ export interface ChatMessage {
   is_typing?: boolean;
   session_title?: string;
   feedback?: string;
+  feedback_reason?: string;
   parent_user_message_id?: string;
   version?: number;
   sql_gen_ms?: number;
   summary_gen_ms?: number;
   total_ms?: number;
   model_name?: string;
+  total_tokens?: number;
+  is_error?: boolean;
+  followups?: string[];
 }
 
 export interface ChatSession {

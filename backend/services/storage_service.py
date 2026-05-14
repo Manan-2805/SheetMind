@@ -8,7 +8,9 @@ def get_app_data_dir() -> Path:
 
 
 def get_debug_prompts_dir() -> Path:
-    path = get_app_data_dir() / "debug_prompts"
+    # Root of the project (SheetMind/)
+    base_dir = Path(__file__).parent.parent.parent
+    path = base_dir / "debug_prompts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

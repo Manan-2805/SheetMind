@@ -90,10 +90,11 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export async function setMessageFeedback(
   messageId: string,
-  feedback: "like" | "dislike"
+  feedback: "like" | "dislike",
+  reason?: string
 ): Promise<void> {
   try {
-    await client.put(`/chat/messages/${messageId}/feedback`, { feedback });
+    await client.put(`/chat/messages/${messageId}/feedback`, { feedback, reason });
   } catch (error) {
     handleError(error);
   }
