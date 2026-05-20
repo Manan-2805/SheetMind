@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Eye, Trash2, Upload, Plus, Search, ExternalLink, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -66,35 +66,56 @@ export function DataSourcesPage() {
   }, [load]);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8000/api/ws/datasources");
-    ws.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload.type === "status_update") {
-          let shouldRefresh = false;
-          setSources(prev => prev.map(s => {
-            const update = payload.data.find((u: { id: string, status: string, error_message: string | null }) => u.id === s.id);
-            if (update) {
-              if (update.status === "completed" && s.sheets.length === 0) {
-                shouldRefresh = true;
+    let ws: WebSocket | null = null;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let isMounted = true;
+
+    function connect() {
+      if (!isMounted) return;
+      ws = new WebSocket("ws://localhost:8000/api/ws/datasources");
+
+      ws.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === "status_update") {
+            let shouldRefresh = false;
+            setSources(prev => prev.map(s => {
+              const update = payload.data.find((u: { id: string, status: string, error_message: string | null }) => u.id === s.id);
+              if (update) {
+                if (update.status === "completed" && s.sheets.length === 0) {
+                  shouldRefresh = true;
+                }
+                return {
+                  ...s,
+                  status: update.status,
+                  error_message: update.error_message,
+                };
               }
-              return {
-                ...s,
-                status: update.status,
-                error_message: update.error_message,
-              };
+              return s;
+            }));
+            if (shouldRefresh) {
+              void load();
             }
-            return s;
-          }));
-          if (shouldRefresh) {
-            void load();
           }
+        } catch {
+          // ignore errors
         }
-      } catch {
-        // ignore errors
-      }
+      };
+
+      ws.onclose = () => {
+        if (isMounted) {
+          timeoutId = setTimeout(connect, 3000);
+        }
+      };
+    }
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      ws?.close();
     };
-    return () => ws.close();
   }, [load]);
 
   const handleUpload = async (files: FileList) => {
@@ -376,9 +397,8 @@ export function DataSourcesPage() {
                   const isExpanded = expandedId === src.id;
                   const totalRows = src.sheets.reduce((a: number, s: ExcelSheet) => a + s.row_count, 0);
                   return (
-                    <>
+                    <Fragment key={src.id}>
                       <tr
-                        key={src.id}
                         className="group cursor-pointer"
                         onClick={() => toggleExpand(src.id)}
                         style={{
@@ -510,7 +530,7 @@ export function DataSourcesPage() {
                             </td>
                           </tr>
                         ))}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

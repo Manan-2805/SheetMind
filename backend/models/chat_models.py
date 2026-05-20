@@ -928,7 +928,7 @@ Row count: {len(result_rows)}"""
                         "stream": False,
                         "format": "json"
                     },
-                    timeout=5.0 # Aggressive timeout
+                    timeout=20.0 # Allow for cold-start latency
                 )
                 resp.raise_for_status()
                 text = resp.json()["response"]

@@ -164,7 +164,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
               activeIndex={activeSheetIndex}
               onSwitch={setActiveSheet}
             />
-            <div className="flex-1 relative">
+            <div className="flex-1 relative min-h-0 h-full w-full">
               <EditorGrid
                 sheetData={activeSheet}
                 formattingMap={session.formattingMap}

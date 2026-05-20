@@ -31,11 +31,15 @@ export function ExcelPreviewGrid({ result }: ExcelPreviewGridProps) {
     }), []);
 
     return (
-        <div 
+        <div
             className={`w-full h-full ${resolvedTheme === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz'}`}
-            style={{ 
+            style={{
                 '--ag-background-color': 'var(--color-bg-base)',
                 '--ag-header-background-color': 'var(--color-bg-elevated)',
+                '--ag-header-foreground-color': 'var(--color-text-secondary)',
+                '--ag-foreground-color': 'var(--color-text-primary)',
+                '--ag-secondary-foreground-color': 'var(--color-text-secondary)',
+                '--ag-data-color': 'var(--color-text-primary)',
                 '--ag-border-color': 'var(--color-border-default)',
                 '--ag-row-border-color': 'var(--color-border-subtle)',
                 '--ag-odd-row-background-color': 'var(--color-bg-hover)',

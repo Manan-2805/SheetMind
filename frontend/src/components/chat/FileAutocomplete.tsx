@@ -24,11 +24,24 @@ export function FileAutocomplete({
   files,
   onSelect,
   onDismiss,
+  anchorRef,
 }: FileAutocompleteProps) {
   const [internalQuery, setInternalQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [position, setPosition] = useState<"up" | "down">("up");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (anchorRef?.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      if (rect.top < 350) {
+        setPosition("down");
+      } else {
+        setPosition("up");
+      }
+    }
+  }, [anchorRef]);
 
   // Combine trigger query and internal search
   const activeQuery = internalQuery || query;
@@ -109,7 +122,7 @@ export function FileAutocomplete({
       ref={containerRef}
       className="absolute z-50 flex flex-col overflow-hidden rounded-lg shadow-xl"
       style={{
-        bottom: "calc(100% + 8px)",
+        ...(position === "up" ? { bottom: "calc(100% + 8px)" } : { top: "calc(100% + 8px)" }),
         left: 0,
         right: 0,
         backgroundColor: "var(--color-bg-elevated)",

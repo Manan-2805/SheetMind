@@ -347,6 +347,7 @@
         border-radius: 8px;
         overflow: hidden;
     }
+
     .bot-message-content th {
         background-color: var(--color-bg-hover);
         color: var(--color-text-secondary);
@@ -355,12 +356,43 @@
         padding: 8px 12px;
         border-bottom: 1px solid var(--color-border-default);
     }
+
     .bot-message-content td {
         padding: 8px 12px;
         border-bottom: 1px solid var(--color-border-subtle);
         color: var(--color-text-primary);
     }
+
     .bot-message-content tr:last-child td {
         border-bottom: none;
     }
+}
+
+/* Handsontable theme alignment */
+.handsontable {
+    color: var(--color-text-primary);
+}
+
+.handsontable .htCore {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+}
+
+.handsontable .htCore td,
+.handsontable .htCore th {
+    border-color: var(--color-border-default);
+}
+
+.handsontable .htCore td {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+}
+
+.handsontable .htCore th {
+    background-color: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+}
+
+.handsontable .htDimmed {
+    color: var(--color-text-tertiary);
 }
