@@ -368,50 +368,20 @@
     }
 }
 
-/* Handsontable theme alignment */
-.handsontable {
-    color: var(--color-text-primary) !important;
-    background-color: var(--color-bg-base) !important;
+/* Univer CSS isolation — prevent Univer styles from bleeding into SheetMind UI */
+.univer-container {
+    contain: strict;
+    isolation: isolate;
 }
 
-.handsontable .htCore {
-    background-color: var(--color-bg-base) !important;
-    color: var(--color-text-primary) !important;
+/* Force Univer to respect dark theme */
+.dark .univer-container .univer-sheets-view {
+    --univer-color-black: var(--color-text-primary);
+    --univer-background-color: var(--color-bg-base);
 }
 
-.handsontable .htCore td,
-.handsontable .htCore th {
-    border-color: var(--color-border-default) !important;
-}
-
-.handsontable .htCore td {
-    background-color: var(--color-bg-base) !important;
-    color: var(--color-text-primary) !important;
-}
-
-.handsontable .htCore th {
-    background-color: var(--color-bg-elevated) !important;
-    color: var(--color-text-secondary) !important;
-}
-
-.handsontable .htDimmed {
-    color: var(--color-text-tertiary) !important;
-}
-
-/* Clones and headers */
-.handsontable th,
-.handsontable .ht_clone_top th,
-.handsontable .ht_clone_left th,
-.handsontable .ht_clone_corner th,
-.handsontable .ht_clone_top_left_corner th {
-    background-color: var(--color-bg-elevated) !important;
-    color: var(--color-text-secondary) !important;
-    border-color: var(--color-border-default) !important;
-}
-
-.handsontable td,
-.handsontable .ht_clone_left td,
-.handsontable .ht_clone_top td {
-    background-color: var(--color-bg-base) !important;
-    color: var(--color-text-primary) !important;
+/* Force Univer to respect light theme */
+.light .univer-container .univer-sheets-view {
+    --univer-color-black: var(--color-text-primary);
+    --univer-background-color: var(--color-bg-base);
 }

@@ -10,4 +10,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    include: ["@univerjs/presets", "@univerjs/preset-sheets-core"],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          univer: ["@univerjs/presets", "@univerjs/preset-sheets-core"],
+        },
+      },
+    },
+  },
 });

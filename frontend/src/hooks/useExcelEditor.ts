@@ -1,11 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { HotTableClass } from '@handsontable/react';
+import type { FUniver } from '@univerjs/presets';
 import { v4 as uuidv4 } from 'uuid';
 
 import * as api from '@/api/excelEditorApi';
+import { useToast } from '@/hooks/useToast';
 import type {
   CellFormatting,
+  CellValue,
   EditorSession,
   ExcelEditorFile,
   PendingChange,
@@ -19,9 +21,9 @@ export function useExcelEditor() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
 
-  const hotRef = useRef<HotTableClass>(null);
+  const univerRef = useRef<FUniver | null>(null);
+  const { addToast } = useToast();
 
-  // Load available files for Mode A
   const loadAvailableFiles = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -34,7 +36,6 @@ export function useExcelEditor() {
     }
   }, []);
 
-  // Mode A -> Mode B
   const openFile = useCallback(async (fileId: string) => {
     setIsLoading(true);
     try {
@@ -75,38 +76,48 @@ export function useExcelEditor() {
     setSelectedChangeId(null);
   }, []);
 
-  // Sync current grid data back to session rows
-  const syncGridToSession = useCallback(() => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
+  // Called by EditorGrid once Univer is initialized and workbook is loaded
+  const onWorkbookReady = useCallback((univerAPI: FUniver) => {
+    univerRef.current = univerAPI;
 
-    const data = hot.getData();
-    const activeSheet = session.sheets[session.activeSheetIndex];
+    // Sync active sheet index when user clicks Univer's built-in sheet bar
+    univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, (params: unknown) => {
+      const p = params as { activeSheet?: { getSheetId: () => string } } | undefined;
+      const workbook = univerAPI.getActiveWorkbook();
+      if (!workbook) return;
+      const allSheets = workbook.getSheets();
+      const newIndex = allSheets.findIndex(
+        (s) => s.getSheetId() === p?.activeSheet?.getSheetId()
+      );
+      if (newIndex !== -1) {
+        setSession((prev) => prev ? { ...prev, activeSheetIndex: newIndex } : null);
+      }
+    });
+  }, []);
 
-    // Update local rows
-    const updatedSheets = [...session.sheets];
-    updatedSheets[session.activeSheetIndex] = {
-      ...activeSheet,
-      rows: data,
-      rowCount: data.length,
-      colCount: data[0]?.length || 0,
-    };
-
-    setSession((prev) => prev ? ({ ...prev, sheets: updatedSheets }) : null);
-  }, [session]);
+  // Fired by EditorGrid on SheetValueChanged event — marks file as dirty
+  const onCellChanged = useCallback(() => {
+    setSession((prev) => prev ? { ...prev, isDirty: true } : null);
+  }, []);
 
   const setActiveSheet = useCallback(async (index: number) => {
     if (!session) return;
 
-    // 1. Sync current sheet data
-    syncGridToSession();
+    // Activate the sheet in Univer
+    if (univerRef.current) {
+      const workbook = univerRef.current.getActiveWorkbook();
+      if (workbook) {
+        const allSheets = workbook.getSheets();
+        if (allSheets[index]) {
+          allSheets[index].activate();
+        }
+      }
+    }
 
     const targetSheet = session.sheets[index];
+    setSession((prev) => prev ? { ...prev, activeSheetIndex: index } : null);
 
-    // Set the active sheet index immediately to trigger the skeleton loader
-    setSession((prev) => prev ? ({ ...prev, activeSheetIndex: index }) : null);
-
+    // Lazy-load sheet data if not yet fetched
     if (!targetSheet.columns || !targetSheet.rows) {
       setIsLoading(true);
       try {
@@ -121,10 +132,7 @@ export function useExcelEditor() {
             rowCount: data.rowCount,
             colCount: data.colCount,
           };
-          return {
-            ...prev,
-            sheets: updatedSheets,
-          };
+          return { ...prev, sheets: updatedSheets };
         });
       } catch (error) {
         console.error('Failed to load sheet data:', error);
@@ -132,43 +140,43 @@ export function useExcelEditor() {
         setIsLoading(false);
       }
     }
-  }, [session, syncGridToSession]);
+  }, [session]);
 
   const applyFormatting = useCallback((formatting: CellFormatting) => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
+    if (!univerRef.current || !session) return;
+    const workbook = univerRef.current.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    if (!sheet) return;
 
-    const selected = hot.getSelected();
-    if (!selected) return;
+    const selection = workbook?.getActiveRange();
+    if (!selection) return;
 
-    const newFormattingMap = { ...session.formattingMap };
-    const sheetName = session.sheets[session.activeSheetIndex].sheetName;
+    if (formatting.bold !== undefined) selection.setFontWeight(formatting.bold ? 'bold' : 'normal');
+    if (formatting.italic !== undefined) selection.setFontStyle(formatting.italic ? 'italic' : 'normal');
+    if (formatting.fontSize) selection.setFontSize(formatting.fontSize);
+    if (formatting.textColor) selection.setFontColor(formatting.textColor);
+    if (formatting.bgColor) selection.setBackground(formatting.bgColor);
+    if (formatting.align) selection.setHorizontalAlignment(formatting.align);
 
-    for (const [rStart, cStart, rEnd, cEnd] of selected) {
-      const r1 = Math.min(rStart, rEnd);
-      const r2 = Math.max(rStart, rEnd);
-      const c1 = Math.min(cStart, cEnd);
-      const c2 = Math.max(cStart, cEnd);
+    // Persist to formattingMap for backend save (borders included even though
+    // Univer canvas visual is a v2 item)
+    const startRow = selection.getRow();
+    const startCol = selection.getColumn();
+    const endRow = selection.getLastRow();
+    const endCol = selection.getLastColumn();
+    const sheetName = sheet.getSheetName();
 
-      for (let r = r1; r <= r2; r++) {
-        for (let c = c1; c <= c2; c++) {
+    setSession((prev) => {
+      if (!prev) return null;
+      const newMap = { ...prev.formattingMap };
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
           const key = `${sheetName}:${r}:${c}`;
-          newFormattingMap[key] = {
-            ...(newFormattingMap[key] || {}),
-            ...formatting,
-          };
+          newMap[key] = { ...newMap[key], ...formatting };
         }
       }
-    }
-
-    setSession((prev) => prev ? ({
-      ...prev,
-      formattingMap: newFormattingMap,
-      isDirty: true
-    }) : null);
-
-    hot.render(); // Repaint with new styles
+      return { ...prev, formattingMap: newMap, isDirty: true };
+    });
   }, [session]);
 
   const setFrozen = useCallback((rows: number, cols: number) => {
@@ -176,76 +184,74 @@ export function useExcelEditor() {
   }, []);
 
   const addRowBelow = useCallback(() => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
-
-    const selected = hot.getSelected();
-    const rowIdx = selected ? Math.max(...selected.map((s: number[]) => Math.max(s[0], s[2]))) : hot.countRows() - 1;
-
-    hot.alter('insert_row_below', rowIdx, 1);
-    setSession(prev => prev ? ({ ...prev, isDirty: true }) : null);
-  }, [session]);
+    if (!univerRef.current) return;
+    univerRef.current.executeCommand('sheet.command.insert-row-after', { count: 1 });
+    setSession((prev) => prev ? ({ ...prev, isDirty: true }) : null);
+  }, []);
 
   const deleteSelectedRows = useCallback(() => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
-
-    const selected = hot.getSelected();
-    if (!selected) return;
-
-    // Simplified deletion logic for multiple ranges
-    for (const [rStart, , rEnd,] of selected) {
-      const r1 = Math.min(rStart, rEnd);
-      const r2 = Math.max(rStart, rEnd);
-      hot.alter('remove_row', r1, (r2 - r1) + 1);
-    }
-    setSession(prev => prev ? ({ ...prev, isDirty: true }) : null);
-  }, [session]);
+    if (!univerRef.current) return;
+    univerRef.current.executeCommand('sheet.command.delete-rows');
+    setSession((prev) => prev ? ({ ...prev, isDirty: true }) : null);
+  }, []);
 
   const addColumnRight = useCallback(() => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
-
-    const selected = hot.getSelected();
-    const colIdx = selected ? Math.max(...selected.map((s: number[]) => Math.max(s[1], s[3]))) : hot.countCols() - 1;
-
-    hot.alter('insert_col_end', colIdx, 1);
-    setSession(prev => prev ? ({ ...prev, isDirty: true }) : null);
-  }, [session]);
+    if (!univerRef.current) return;
+    univerRef.current.executeCommand('sheet.command.insert-col-after', { count: 1 });
+    setSession((prev) => prev ? ({ ...prev, isDirty: true }) : null);
+  }, []);
 
   const deleteSelectedColumns = useCallback(() => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
+    if (!univerRef.current) return;
+    univerRef.current.executeCommand('sheet.command.delete-cols');
+    setSession((prev) => prev ? ({ ...prev, isDirty: true }) : null);
+  }, []);
 
-    const selected = hot.getSelected();
-    if (!selected) return;
+  // Extract all sheet rows from the Univer workbook snapshot.
+  // cellData is a sparse object — missing keys mean empty cells.
+  // Must iterate 0..rowCount-1 and 0..columnCount-1 to get full dense rows.
+  const extractRowsFromSnapshot = useCallback((sheetSnapshot: Record<string, unknown>, colCount: number): CellValue[][] => {
+    const cellData = (sheetSnapshot.cellData || {}) as Record<number, Record<number, { v?: CellValue; f?: string } | undefined> | undefined>;
+    const rowCount = (sheetSnapshot.rowCount as number) || 0;
 
-    for (const [, cStart, , cEnd] of selected) {
-      const c1 = Math.min(cStart, cEnd);
-      const c2 = Math.max(cStart, cEnd);
-      hot.alter('remove_col', c1, (c2 - c1) + 1);
+    const rows: CellValue[][] = [];
+    for (let r = 0; r < rowCount; r++) {
+      const row: CellValue[] = [];
+      for (let c = 0; c < colCount; c++) {
+        const cell = cellData[r]?.[c];
+        if (!cell) {
+          row.push(null);
+        } else if (cell.f) {
+          row.push(cell.f);
+        } else {
+          row.push(cell.v ?? null);
+        }
+      }
+      rows.push(row);
     }
-    setSession(prev => prev ? ({ ...prev, isDirty: true }) : null);
-  }, [session]);
+    return rows;
+  }, []);
 
-  // AI mutation
   const submitMutationPrompt = useCallback(async (instruction: string) => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
+    if (!session || !univerRef.current) return;
 
     setIsGenerating(true);
     try {
       const activeSheet = session.sheets[session.activeSheetIndex];
+      const workbook = univerRef.current.getActiveWorkbook();
+      if (!workbook) throw new Error('No active workbook');
+
+      // Get live rows from Univer snapshot so in-canvas edits are captured
+      const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
+      const sheetId = `sheet_${session.activeSheetIndex}`;
+      const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
+      const currentRows = extractRowsFromSnapshot(sheetSnapshot, activeSheet.colCount);
+
       const result = await api.mutateFile({
         fileId: session.fileId,
         sheetName: activeSheet.sheetName,
         userInstruction: instruction,
-        currentRows: hot.getData(),
+        currentRows,
         columns: activeSheet.columns || [],
       });
 
@@ -262,110 +268,121 @@ export function useExcelEditor() {
 
       setSession((prev) => prev ? ({
         ...prev,
-        changeStack: [newChange, ...prev.changeStack]
+        changeStack: [newChange, ...prev.changeStack],
       }) : null);
       setSelectedChangeId(newChange.changeId);
-
     } catch (error) {
       console.error('Mutation failed:', error);
     } finally {
       setIsGenerating(false);
     }
-  }, [session]);
+  }, [session, extractRowsFromSnapshot]);
 
   const acceptChange = useCallback(async (changeId: string) => {
-    if (!session || !hotRef.current) return;
-    const hot = hotRef.current.hotInstance;
-    if (!hot) return;
-
-    const change = session.changeStack.find(c => c.changeId === changeId);
-    if (!change || !change.generatedCode) return;
+    const change = session?.changeStack.find((c) => c.changeId === changeId);
+    if (!change || !session || !univerRef.current) return;
 
     setIsLoading(true);
     try {
-      const activeSheet = session.sheets[session.activeSheetIndex];
-      await api.applyMutation({
+      const workbook = univerRef.current.getActiveWorkbook();
+      const activeSheet = workbook?.getActiveSheet();
+      if (!activeSheet) return;
+
+      const currentSheetData = session.sheets[session.activeSheetIndex];
+
+      const result = await api.applyMutation({
         fileId: session.fileId,
-        sheetName: activeSheet.sheetName,
-        pandasCode: change.generatedCode,
-        currentRows: hot.getData(),
-        columns: activeSheet.columns || [],
+        sheetName: change.targetSheet,
+        pandasCode: change.generatedCode || '',
+        currentRows: currentSheetData.rows || [],
+        columns: currentSheetData.columns || [],
       });
 
-      // Update local data by applying diffRows
-      // Actually the backend applies it and we should probably just reload?
-      // But instructions say "updates session.sheets[activeSheetIndex].rows with mutated data"
-      // and "calls hotRef.current.loadData()".
-      // Since we sent currentRows, we can apply the diff locally to be fast.
-      const newData = [...hot.getData()];
-      change.diffRows.forEach(diff => {
-        if (diff.rowIndex < newData.length) {
-          const colIdx = (activeSheet.columns || []).indexOf(diff.columnName);
-          if (colIdx !== -1) {
-            newData[diff.rowIndex][colIdx] = diff.newValue;
+      if (result.success) {
+        // Apply each diff row directly to the Univer canvas
+        change.diffRows.forEach((diff) => {
+          const colIndex = (currentSheetData.columns || []).indexOf(diff.columnName);
+          if (colIndex === -1) return;
+          const range = activeSheet.getRange(diff.rowIndex, colIndex, 1, 1);
+          if (diff.isFormula && typeof diff.newValue === 'string') {
+            range.setFormula(diff.newValue);
+          } else {
+            range.setValue(diff.newValue as string | number | boolean | null);
           }
-        }
-      });
+        });
 
-      const updatedSheets = [...session.sheets];
-      updatedSheets[session.activeSheetIndex] = {
-        ...activeSheet,
-        rows: newData,
-        rowCount: newData.length,
-      };
+        setSession((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            isDirty: true,
+            changeStack: prev.changeStack.map((c) =>
+              c.changeId === changeId
+                ? { ...c, status: 'accepted' as const, appliedAt: new Date().toISOString() }
+                : c
+            ),
+          };
+        });
 
-      setSession((prev) => prev ? ({
-        ...prev,
-        sheets: updatedSheets,
-        changeStack: prev.changeStack.map(c =>
-          c.changeId === changeId ? { ...c, status: 'accepted', appliedAt: new Date().toISOString() } : c
-        )
-      }) : null);
-
-      hot.loadData(newData);
-
-    } catch (error) {
-      console.error('Accept change failed:', error);
+        addToast({ type: 'success', title: 'Change applied', description: `${change.affectedRowCount} rows updated.` });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Apply failed', description: msg });
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [session, addToast]);
 
   const rejectChange = useCallback((changeId: string) => {
     setSession((prev) => prev ? ({
       ...prev,
-      changeStack: prev.changeStack.map(c =>
-        c.changeId === changeId ? { ...c, status: 'rejected' } : c
-      )
+      changeStack: prev.changeStack.map((c) =>
+        c.changeId === changeId ? { ...c, status: 'rejected' as const } : c
+      ),
     }) : null);
   }, []);
 
   const saveFile = useCallback(async () => {
-    if (!session) return;
-
-    // Sync first
-    syncGridToSession();
-
+    if (!univerRef.current || !session) return;
     setIsSaving(true);
+
     try {
+      const workbook = univerRef.current.getActiveWorkbook();
+      if (!workbook) throw new Error('No workbook loaded');
+
+      const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
+
+      const sheetsForBackend = session.sheets.map((sessionSheet, index) => {
+        const sheetId = `sheet_${index}`;
+        const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
+        const colCount = sessionSheet.colCount || 0;
+        const rows = extractRowsFromSnapshot(sheetSnapshot, colCount);
+
+        return {
+          sheetName: sessionSheet.sheetName,
+          rows,
+          columns: sessionSheet.columns || [],
+          rowCount: rows.length,
+          colCount,
+        };
+      });
+
       await api.saveEdits({
         fileId: session.fileId,
-        sheets: session.sheets,
+        sheets: sheetsForBackend,
         formattingMap: session.formattingMap,
       });
-      setSession(prev => prev ? ({ ...prev, isDirty: false }) : null);
-    } catch (error) {
-      console.error('Save failed:', error);
+
+      setSession((prev) => prev ? ({ ...prev, isDirty: false }) : null);
+      addToast({ type: 'success', title: 'Saved', description: 'File saved successfully.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addToast({ type: 'error', title: 'Save failed', description: msg });
     } finally {
       setIsSaving(false);
     }
-  }, [session, syncGridToSession]);
-
-  // Handle manual edits marking isDirty
-  const handleAfterChange = useCallback((changes: unknown[] | null, source: string) => {
-    if (source === 'loadData' || !changes) return;
-    setSession(prev => prev ? ({ ...prev, isDirty: true }) : null);
-  }, []);
+  }, [session, addToast, extractRowsFromSnapshot]);
 
   return {
     availableFiles,
@@ -376,7 +393,9 @@ export function useExcelEditor() {
     isLoading,
     activeSheetIndex: session?.activeSheetIndex ?? 0,
     setActiveSheet,
-    hotRef: hotRef as React.RefObject<HotTableClass>,
+    univerRef,
+    onWorkbookReady,
+    onCellChanged,
     applyFormatting,
     setFrozen,
     addRowBelow,
@@ -391,6 +410,5 @@ export function useExcelEditor() {
     setSelectedChangeId,
     isSaving,
     saveFile,
-    handleAfterChange,
   };
 }

@@ -1,24 +1,24 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { HotTable } from '@handsontable/react';
-import { registerAllModules } from 'handsontable/registry';
-import 'handsontable/styles/handsontable.min.css';
-import type { HotTableClass } from '@handsontable/react';
-import type { SheetData, CellFormattingMap } from '@/types/ExcelEditor';
-
-// Register all Handsontable modules
-registerAllModules();
+import { useEffect, useRef } from 'react';
+import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
+import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
+import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US';
+import '@univerjs/preset-sheets-core/lib/index.css';
+import type { FUniver } from '@univerjs/presets';
+import type { CellFormattingMap, SheetData } from '@/types/ExcelEditor';
 
 interface EditorGridProps {
-  sheetData: SheetData;
+  sheets: SheetData[];
+  activeSheetIndex: number;
   formattingMap: CellFormattingMap;
   frozenRows: number;
   frozenCols: number;
-  hotRef: React.RefObject<HotTableClass>;
-  onAfterChange: (changes: unknown[] | null, source: string) => void;
+  univerRef: React.MutableRefObject<FUniver | null>;
+  onWorkbookReady: (univerAPI: FUniver) => void;
+  onCellChanged: () => void;
 }
 
 function ExcelCellSkeleton() {
-  const columns = Array.from({ length: 12 }, (_, i) => String.fromCharCode(65 + i)); // A to L
+  const columns = Array.from({ length: 12 }, (_, i) => String.fromCharCode(65 + i));
   const rows = Array.from({ length: 25 }, (_, i) => i + 1);
 
   return (
@@ -65,128 +65,165 @@ function ExcelCellSkeleton() {
   );
 }
 
+function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap) {
+  const sheetsObj: Record<string, unknown> = {};
+
+  sheets.forEach((sheet, sheetIndex) => {
+    const sheetId = `sheet_${sheetIndex}`;
+    const cellData: Record<number, Record<number, unknown>> = {};
+
+    (sheet.rows || []).forEach((row, rowIndex) => {
+      cellData[rowIndex] = {};
+      row.forEach((cellValue, colIndex) => {
+        const key = `${sheet.sheetName}:${rowIndex}:${colIndex}`;
+        const fmt = formattingMap[key];
+
+        const cell: Record<string, unknown> = {};
+
+        if (cellValue === null || cellValue === undefined) {
+          cell.v = null;
+        } else if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
+          cell.f = cellValue;
+        } else {
+          cell.v = cellValue;
+        }
+
+        if (fmt) {
+          const style: Record<string, unknown> = {};
+          if (fmt.bold !== undefined) style.bl = fmt.bold ? 1 : 0;
+          if (fmt.italic !== undefined) style.it = fmt.italic ? 1 : 0;
+          if (fmt.fontSize) style.fs = fmt.fontSize;
+          if (fmt.textColor) style.cl = { rgb: fmt.textColor.replace('#', '') };
+          if (fmt.bgColor) style.bg = { rgb: fmt.bgColor.replace('#', '') };
+          if (fmt.align) {
+            const alignMap: Record<string, number> = { left: 1, center: 2, right: 3 };
+            style.ht = alignMap[fmt.align];
+          }
+          if (Object.keys(style).length > 0) cell.s = style;
+        }
+
+        cellData[rowIndex][colIndex] = cell;
+      });
+    });
+
+    const columnData: Record<number, { w?: number }> = {};
+    (sheet.columns || []).forEach((_, colIndex) => {
+      columnData[colIndex] = { w: 120 };
+    });
+
+    sheetsObj[sheetId] = {
+      id: sheetId,
+      name: sheet.sheetName,
+      rowCount: Math.max((sheet.rowCount || 0) + 20, 100),
+      columnCount: Math.max((sheet.colCount || 0) + 5, 26),
+      cellData,
+      columnData,
+    };
+  });
+
+  return {
+    id: 'sheetmind-workbook',
+    sheetOrder: sheets.map((_, i) => `sheet_${i}`),
+    sheets: sheetsObj,
+    name: 'SheetMind Workbook',
+    appVersion: '0.0.1',
+    locale: LocaleType.EN_US,
+  };
+}
+
 export function EditorGrid({
-  sheetData,
+  sheets,
+  activeSheetIndex,
   formattingMap,
   frozenRows,
   frozenCols,
-  hotRef,
-  onAfterChange
+  univerRef,
+  onWorkbookReady,
+  onCellChanged,
 }: EditorGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerHeight, setContainerHeight] = useState<number>(600);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    if (!containerRef.current || isInitialized.current) return;
+    isInitialized.current = true;
 
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === el) {
-          const h = el.offsetHeight;
-          if (h > 0) {
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-            }
-            timeoutId = setTimeout(() => {
-              setContainerHeight(h);
-            }, 80);
-          }
-        }
-      }
+    const { univerAPI } = createUniver({
+      locale: LocaleType.EN_US,
+      locales: {
+        [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS),
+      },
+      presets: [
+        UniverSheetsCorePreset({
+          container: containerRef.current,
+          header: true,
+          toolbar: false,
+          footer: {
+            sheetBar: true,
+            statisticBar: true,
+          },
+        }),
+      ],
     });
 
-    observer.observe(el);
-    const initialH = el.offsetHeight;
-    if (initialH > 0) {
-      setContainerHeight(initialH);
+    const workbookData = buildWorkbookData(sheets, formattingMap);
+    univerAPI.createWorkbook(workbookData as Parameters<typeof univerAPI.createWorkbook>[0]);
+
+    const workbook = univerAPI.getActiveWorkbook();
+    if (workbook && activeSheetIndex > 0) {
+      const allSheets = workbook.getSheets();
+      if (allSheets[activeSheetIndex]) {
+        allSheets[activeSheetIndex].activate();
+      }
     }
 
+    if (frozenRows > 0 || frozenCols > 0) {
+      const sheet = workbook?.getActiveSheet();
+      if (sheet) {
+        sheet.setFrozenRows(frozenRows);
+        sheet.setFrozenColumns(frozenCols);
+      }
+    }
+
+    univerAPI.addEvent(univerAPI.Event.SheetValueChanged, () => {
+      onCellChanged();
+    });
+
+    univerRef.current = univerAPI;
+    onWorkbookReady(univerAPI);
+
     return () => {
-      observer.disconnect();
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      if (univerRef.current) {
+        univerAPI.dispose();
+        univerRef.current = null;
+        isInitialized.current = false;
       }
     };
-  }, [sheetData.sheetName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    console.debug("[EditorGrid] data", {
-      sheetName: sheetData.sheetName,
-      rowCount: sheetData.rowCount,
-      colCount: sheetData.colCount,
-    });
-  }, [sheetData.sheetName, sheetData.rowCount, sheetData.colCount]);
+    if (!univerRef.current) return;
+    const workbook = univerRef.current.getActiveWorkbook();
+    const sheet = workbook?.getActiveSheet();
+    if (!sheet) return;
+    sheet.setFrozenRows(frozenRows);
+    sheet.setFrozenColumns(frozenCols);
+  }, [frozenRows, frozenCols, univerRef]);
 
-  const settings = useMemo(() => {
-    const isLarge = sheetData.rowCount > 1000;
-
-    return {
-      licenseKey: 'non-commercial-and-evaluation',
-      data: sheetData.rows || [],
-      colHeaders: sheetData.columns || [],
-      rowHeaders: true,
-      width: '100%',
-      height: containerHeight,
-      stretchH: 'all' as const,
-      manualRowResize: true,
-      manualColumnResize: true,
-      contextMenu: true,
-      filters: true,
-      dropdownMenu: true,
-      columnSorting: true,
-      autoWrapRow: true,
-      autoWrapCol: true,
-      fixedRowsTop: frozenRows,
-      fixedColumnsStart: frozenCols,
-      viewportRowRenderingOffset: isLarge ? 10 : 'auto' as const,
-      viewportColumnRenderingOffset: isLarge ? 5 : 'auto' as const,
-      renderAllRows: !isLarge,
-      afterChange: onAfterChange,
-      cells: (row: number, col: number) => {
-        const key = `${sheetData.sheetName}:${row}:${col}`;
-        const fmt = formattingMap[key];
-        if (!fmt) return {};
-
-        return {
-          renderer: (instance: unknown, td: HTMLTableCellElement, row: number, col: number, prop: string | number, value: unknown, cellProperties: unknown) => {
-            const hot = instance as { getRenderer: (name: string) => (i: unknown, t: HTMLElement, r: number, c: number, p: string | number, v: unknown, cp: unknown) => void };
-            (hot.getRenderer('text'))(instance, td, row, col, prop, value, cellProperties);
-
-            // Apply custom styles
-            if (fmt.bold) td.style.fontWeight = 'bold';
-            if (fmt.italic) td.style.fontStyle = 'italic';
-            if (fmt.fontSize) td.style.fontSize = `${fmt.fontSize}pt`;
-            if (fmt.textColor) td.style.color = fmt.textColor;
-            if (fmt.bgColor) td.style.backgroundColor = fmt.bgColor;
-            if (fmt.align) td.style.textAlign = fmt.align;
-
-            if (fmt.borderTop) td.style.borderTop = '1px solid var(--color-border-default)';
-            if (fmt.borderBottom) td.style.borderBottom = '1px solid var(--color-border-default)';
-            if (fmt.borderLeft) td.style.borderLeft = '1px solid var(--color-border-default)';
-            if (fmt.borderRight) td.style.borderRight = '1px solid var(--color-border-default)';
-
-            return td;
-          }
-        };
-      }
-    };
-  }, [sheetData, formattingMap, frozenRows, frozenCols, onAfterChange, containerHeight]);
-
-  if (!sheetData.rows || !sheetData.columns) {
+  if (!sheets || sheets.length === 0) {
     return <ExcelCellSkeleton />;
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden" key={sheetData.sheetName}>
-      <HotTable
-        ref={hotRef}
-        {...settings}
+    <div
+      className="absolute inset-0 univer-container"
+      style={{ width: '100%', height: '100%', contain: 'strict' }}
+    >
+      <div
+        ref={containerRef}
+        style={{ width: '100%', height: '100%' }}
       />
     </div>
   );
 }
-

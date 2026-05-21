@@ -24,7 +24,9 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     isLoading,
     activeSheetIndex,
     setActiveSheet,
-    hotRef,
+    univerRef,
+    onWorkbookReady,
+    onCellChanged,
     applyFormatting,
     setFrozen,
     addRowBelow,
@@ -39,7 +41,6 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     setSelectedChangeId,
     isSaving,
     saveFile,
-    handleAfterChange
   } = useExcelEditor();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -53,7 +54,6 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     const fileId = searchParams.get('fileId');
     if (fileId && !session && !isLoading) {
       openFile(fileId);
-      // Do NOT clear the param here — keep it so reload re-opens the file
     }
   }, [searchParams, session, isLoading, openFile]);
 
@@ -166,12 +166,14 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
             />
             <div className="flex-1 relative min-h-0 h-full w-full">
               <EditorGrid
-                sheetData={activeSheet}
+                sheets={session.sheets}
+                activeSheetIndex={activeSheetIndex}
                 formattingMap={session.formattingMap}
                 frozenRows={session.frozenRows}
                 frozenCols={session.frozenCols}
-                hotRef={hotRef}
-                onAfterChange={handleAfterChange}
+                univerRef={univerRef}
+                onWorkbookReady={onWorkbookReady}
+                onCellChanged={onCellChanged}
               />
               {activeSheet.rowCount > 5000 && (
                 <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg bg-warning px-3 py-2 text-white shadow-xl animate-in slide-in-from-right-4">
