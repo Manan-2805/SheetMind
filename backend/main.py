@@ -101,6 +101,8 @@ async def websocket_datasources(websocket: WebSocket):
             await asyncio.sleep(2)
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        print(f"WebSocket connection error: {e}")
     finally:
         _ws_clients.discard(websocket)
         current_username.reset(token)

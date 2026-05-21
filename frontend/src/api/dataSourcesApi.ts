@@ -83,3 +83,15 @@ export async function listForAutocomplete(): Promise<AutocompleteResponse> {
     handleError(error);
   }
 }
+
+export async function uploadFromUrl(url: string): Promise<DataSource> {
+  try {
+    const res: AxiosResponse<DataSource> = await client.post(
+      "/data-sources/upload-from-url",
+      { url }
+    );
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}

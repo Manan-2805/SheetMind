@@ -97,6 +97,7 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
 export function SettingsPage() {
   const { addToast } = useToast();
   const { theme, setTheme } = useTheme();
+  const hasFetchedRef = useRef(false);
 
   const [llmProvider, setLlmProvider] = useState<LLMProvider>("openai");
   const [apiKey, setApiKey] = useState("");
@@ -132,6 +133,9 @@ export function SettingsPage() {
   };
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     getSettings()
       .then((s) => {
         setLlmProvider(s.llm_provider as LLMProvider);
@@ -151,7 +155,6 @@ export function SettingsPage() {
         addToast({ type: "error", title: "Error", description: err.message });
       });
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshOllamaModels();
   }, [addToast]);
 

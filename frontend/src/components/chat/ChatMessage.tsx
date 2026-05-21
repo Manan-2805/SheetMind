@@ -199,7 +199,7 @@ export function ChatMessage({
   };
 
   if (message.is_typing) {
-    return <TypingIndicator />;
+    return <TypingIndicator status={message.typing_status} />;
   }
 
   if (message.role === "user") {

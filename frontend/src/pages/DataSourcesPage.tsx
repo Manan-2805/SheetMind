@@ -7,6 +7,7 @@ import {
   getDataSources,
   getDataSourcePreview,
   uploadFile,
+  uploadFromUrl,
 } from "@/api/dataSourcesApi";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkeletonTable } from "@/components/skeletons/SkeletonTable";
@@ -46,6 +47,11 @@ export function DataSourcesPage() {
 
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const [uploadTab, setUploadTab] = useState<"files" | "folder" | "url">("files");
+  const [urlInput, setUrlInput] = useState("");
+  const [isUrlUploading, setIsUrlUploading] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -118,12 +124,33 @@ export function DataSourcesPage() {
     };
   }, [load]);
 
-  const handleUpload = async (files: FileList) => {
+  const supportedExtensions = [".xlsx", ".xls", ".csv", ".ods"];
+
+  const handleUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
-    const ids = fileArr.map(() => crypto.randomUUID());
-    setUploading(fileArr.map((f, i) => ({ name: f.name, id: ids[i] })));
+    
+    // Filter to supported extensions
+    const filteredFiles = fileArr.filter(file => {
+      const ext = "." + file.name.split(".").pop()?.toLowerCase();
+      return supportedExtensions.includes(ext);
+    });
+
+    const ignoredCount = fileArr.length - filteredFiles.length;
+    if (ignoredCount > 0) {
+      addToast({
+        type: "warning",
+        title: "Unsupported files ignored",
+        description: `Ignored ${ignoredCount} file(s) that are not Excel or CSV.`
+      });
+    }
+
+    if (filteredFiles.length === 0) return;
+
+    const ids = filteredFiles.map(() => crypto.randomUUID());
+    setUploading(filteredFiles.map((f, i) => ({ name: f.name, id: ids[i] })));
+    
     await Promise.all(
-      fileArr.map(async (file) => {
+      filteredFiles.map(async (file) => {
         try {
           const result = await uploadFile(file);
           setSources((prev) => [result, ...prev]);
@@ -135,6 +162,26 @@ export function DataSourcesPage() {
       })
     );
     setUploading([]);
+  };
+
+  const handleUrlUpload = async () => {
+    if (!urlInput.trim()) return;
+    setIsUrlUploading(true);
+    const tempId = crypto.randomUUID();
+    setUploading([{ name: urlInput, id: tempId }]);
+    try {
+      const result = await uploadFromUrl(urlInput.trim());
+      setSources((prev) => [result, ...prev]);
+      addToast({ type: "success", title: "Imported from URL", description: urlInput });
+      setIsUploadModalOpen(false);
+      setUrlInput("");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addToast({ type: "error", title: "Import failed", description: e?.message ?? urlInput });
+    } finally {
+      setIsUrlUploading(false);
+      setUploading([]);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -539,42 +586,126 @@ export function DataSourcesPage() {
         )}
       </div>
 
-      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+      <Dialog open={isUploadModalOpen} onOpenChange={(o) => { setIsUploadModalOpen(o); if (!o) { setUrlInput(""); } }}>
         <DialogContent className="sm:max-w-[500px]" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
           <DialogHeader>
             <DialogTitle style={{ color: "var(--color-text-primary)" }}>Upload Data Sources</DialogTitle>
           </DialogHeader>
 
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
-            onClick={() => fileInputRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
-            style={{
-              border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
-              backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
-            }}
-          >
-            <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
-            <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
-              Drop Excel files or folders here<br />or click to browse
-            </p>
-            <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>.xlsx, .xls, .csv supported</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) {
-                  handleUpload(e.target.files);
-                  setIsUploadModalOpen(false);
-                }
-              }}
-            />
+          {/* Premium Tab Selector */}
+          <div className="flex gap-1 rounded-xl p-1 mb-4" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+            {(["files", "folder", "url"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setUploadTab(tab)}
+                className="flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition-all"
+                style={{
+                  backgroundColor: uploadTab === tab ? "var(--color-bg-elevated)" : "transparent",
+                  color: uploadTab === tab ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                  boxShadow: uploadTab === tab ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
+                }}
+              >
+                {tab === "files" ? "Files" : tab === "folder" ? "Folder" : "From URL"}
+              </button>
+            ))}
           </div>
+
+          {uploadTab === "files" && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
+              onClick={() => fileInputRef.current?.click()}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
+              style={{
+                border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
+                backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+              }}
+            >
+              <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
+              <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
+                Drop Excel files here<br />or click to browse
+              </p>
+              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>.xlsx, .xls, .csv, .ods supported</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.ods"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    handleUpload(e.target.files);
+                    setIsUploadModalOpen(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {uploadTab === "folder" && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
+              onClick={() => folderInputRef.current?.click()}
+              className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
+              style={{
+                border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
+                backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+              }}
+            >
+              <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
+              <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
+                Drop folder here<br />or click to browse folder
+              </p>
+              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>Supported files will be filtered and imported</p>
+              <input
+                ref={folderInputRef}
+                type="file"
+                {...{
+                  webkitdirectory: "",
+                  directory: "",
+                } as React.InputHTMLAttributes<HTMLInputElement>}
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) {
+                    handleUpload(e.target.files);
+                    setIsUploadModalOpen(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {uploadTab === "url" && (
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>FILE URL</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/dataset.xlsx"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full rounded-xl px-4 py-2.5 text-body outline-none animate-in fade-in"
+                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                />
+              </div>
+              <button
+                onClick={handleUrlUpload}
+                disabled={isUrlUploading || !urlInput.trim()}
+                className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all active:scale-[0.99]"
+                style={{
+                  backgroundColor: urlInput.trim() ? "var(--color-accent)" : "var(--color-bg-hover)",
+                  color: urlInput.trim() ? "#fff" : "var(--color-text-tertiary)",
+                  cursor: urlInput.trim() ? "pointer" : "default",
+                }}
+              >
+                {isUrlUploading ? "Downloading & Importing..." : "Download & Import"}
+              </button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

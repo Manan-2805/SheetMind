@@ -5,8 +5,21 @@ from dependencies import current_username
 
 
 def get_app_root() -> Path:
-    """Root app dir: ~/.sheetmind"""
-    base = Path.home() / ".sheetmind"
+    """Root app dir: ~/.sheetmind in production, or backend/.sheetmind in development"""
+    import os
+    import sys
+    
+    is_dev = (
+        os.environ.get("SHEETMIND_ENV") == "development"
+        or os.environ.get("NODE_ENV") == "development"
+        or (not getattr(sys, "frozen", False) and (Path(__file__).parent.parent.parent / ".git").exists())
+    )
+    
+    if is_dev:
+        base = Path(__file__).parent.parent / ".sheetmind"
+    else:
+        base = Path.home() / ".sheetmind"
+        
     base.mkdir(parents=True, exist_ok=True)
     return base
 

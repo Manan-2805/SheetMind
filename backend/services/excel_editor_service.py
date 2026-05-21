@@ -47,29 +47,86 @@ def open_excel_file(file_id: str) -> Optional[dict]:
         
     filename, path = file_row
     
-    # Read all sheets using pandas
-    # We use data_only=True for values but the instructions say open normally first?
-    # Actually for "Mode B - Editor" we need the data.
-    workbook = pd.read_excel(path, sheet_name=None)
+    try:
+        xl = pd.ExcelFile(path)
+        sheet_names = xl.sheet_names
+    except Exception as e:
+        print(f"Error reading excel sheets: {e}")
+        return None
     
     sheets = []
-    for sheet_name, df in workbook.items():
-        # Replace NaN and Inf with None for JSON compatibility
-        df_clean = df.replace({float('nan'): None, float('inf'): None, float('-inf'): None})
-        
-        sheets.append(SheetData(
-            sheetName=sheet_name,
-            columns=df_clean.columns.tolist(),
-            rows=df_clean.values.tolist(),
-            rowCount=len(df_clean),
-            colCount=len(df_clean.columns)
-        ))
-        
+    for idx, sheet_name in enumerate(sheet_names):
+        if idx == 0:
+            try:
+                df = xl.parse(sheet_name)
+                df_clean = df.replace({float('nan'): None, float('inf'): None, float('-inf'): None})
+                sheets.append(SheetData(
+                    sheetName=sheet_name,
+                    columns=df_clean.columns.tolist(),
+                    rows=df_clean.values.tolist(),
+                    rowCount=len(df_clean),
+                    colCount=len(df_clean.columns)
+                ))
+            except Exception as e:
+                print(f"Error parsing first sheet {sheet_name}: {e}")
+                sheets.append(SheetData(
+                    sheetName=sheet_name,
+                    columns=[],
+                    rows=[],
+                    rowCount=0,
+                    colCount=0
+                ))
+        else:
+            row_count, col_count = 0, 0
+            sheet_row = conn.execute(
+                "SELECT row_count, col_count FROM excel_sheets WHERE excel_file_id = ? AND sheet_name = ?",
+                [file_id, sheet_name]
+            ).fetchone()
+            if sheet_row:
+                row_count, col_count = sheet_row[0], sheet_row[1]
+            sheets.append(SheetData(
+                sheetName=sheet_name,
+                columns=None,
+                rows=None,
+                rowCount=row_count,
+                colCount=col_count
+            ))
+            
     return {
         "fileId": file_id,
         "filename": filename,
         "sheets": sheets
     }
+
+def open_excel_sheet(file_id: str, sheet_name: str) -> Optional[SheetData]:
+    conn = get_connection()
+    file_row = conn.execute(
+        "SELECT stored_path FROM excel_files WHERE id = ?",
+        [file_id]
+    ).fetchone()
+    
+    if not file_row:
+        return None
+        
+    path = file_row[0]
+    try:
+        xl = pd.ExcelFile(path)
+        if sheet_name not in xl.sheet_names:
+            return None
+            
+        df = xl.parse(sheet_name)
+        df_clean = df.replace({float('nan'): None, float('inf'): None, float('-inf'): None})
+        
+        return SheetData(
+            sheetName=sheet_name,
+            columns=df_clean.columns.tolist(),
+            rows=df_clean.values.tolist(),
+            rowCount=len(df_clean),
+            colCount=len(df_clean.columns)
+        )
+    except Exception as e:
+        print(f"Error opening sheet {sheet_name}: {e}")
+        return None
 
 def create_backup(stored_path: str, filename: str) -> str:
     backup_dir = get_backups_dir()
@@ -264,7 +321,7 @@ def refresh_duckdb_sheet(file_id: str, sheet_name: str, file_path: str):
     table_name = row[0]
     
     # Import evaluated values (data_only=True)
-    df = pd.read_excel(file_path, sheet_name=sheet_name, data_only=True)
+    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl', engine_kwargs={'data_only': True})
     import_df_to_duckdb(conn, df, table_name)
     
     # Update row/col count in excel_sheets

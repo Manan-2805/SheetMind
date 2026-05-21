@@ -370,29 +370,48 @@
 
 /* Handsontable theme alignment */
 .handsontable {
-    color: var(--color-text-primary);
+    color: var(--color-text-primary) !important;
+    background-color: var(--color-bg-base) !important;
 }
 
 .handsontable .htCore {
-    background-color: var(--color-bg-base);
-    color: var(--color-text-primary);
+    background-color: var(--color-bg-base) !important;
+    color: var(--color-text-primary) !important;
 }
 
 .handsontable .htCore td,
 .handsontable .htCore th {
-    border-color: var(--color-border-default);
+    border-color: var(--color-border-default) !important;
 }
 
 .handsontable .htCore td {
-    background-color: var(--color-bg-base);
-    color: var(--color-text-primary);
+    background-color: var(--color-bg-base) !important;
+    color: var(--color-text-primary) !important;
 }
 
 .handsontable .htCore th {
-    background-color: var(--color-bg-elevated);
-    color: var(--color-text-secondary);
+    background-color: var(--color-bg-elevated) !important;
+    color: var(--color-text-secondary) !important;
 }
 
 .handsontable .htDimmed {
-    color: var(--color-text-tertiary);
+    color: var(--color-text-tertiary) !important;
+}
+
+/* Clones and headers */
+.handsontable th,
+.handsontable .ht_clone_top th,
+.handsontable .ht_clone_left th,
+.handsontable .ht_clone_corner th,
+.handsontable .ht_clone_top_left_corner th {
+    background-color: var(--color-bg-elevated) !important;
+    color: var(--color-text-secondary) !important;
+    border-color: var(--color-border-default) !important;
+}
+
+.handsontable td,
+.handsontable .ht_clone_left td,
+.handsontable .ht_clone_top td {
+    background-color: var(--color-bg-base) !important;
+    color: var(--color-text-primary) !important;
 }

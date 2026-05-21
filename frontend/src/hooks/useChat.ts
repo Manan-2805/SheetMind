@@ -40,6 +40,21 @@ export function useChat() {
             max: payload.max,
             error: payload.error,
           });
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === TYPING_ID
+                ? { ...msg, typing_status: "fixing_sql" }
+                : msg
+            )
+          );
+        } else if (payload.type === "chat_status") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === TYPING_ID
+                ? { ...msg, typing_status: payload.status }
+                : msg
+            )
+          );
         }
       } catch {
         // ignore

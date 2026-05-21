@@ -31,6 +31,7 @@ export interface ChatMessage {
   nl_summary?: string;
   referenced_files?: string[];
   is_typing?: boolean;
+  typing_status?: string;
   session_title?: string;
   feedback?: string;
   feedback_reason?: string;

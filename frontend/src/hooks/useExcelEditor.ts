@@ -96,14 +96,42 @@ export function useExcelEditor() {
     setSession((prev) => prev ? ({ ...prev, sheets: updatedSheets }) : null);
   }, [session]);
 
-  const setActiveSheet = useCallback((index: number) => {
+  const setActiveSheet = useCallback(async (index: number) => {
     if (!session) return;
 
     // 1. Sync current sheet data
     syncGridToSession();
 
-    // 2. Switch index
-    setSession((prev) => prev ? ({ ...prev, activeSheetIndex: index }) : null);
+    const targetSheet = session.sheets[index];
+    if (!targetSheet.columns || !targetSheet.rows) {
+      setIsLoading(true);
+      try {
+        const data = await api.getSheetData(session.fileId, targetSheet.sheetName);
+        setSession((prev) => {
+          if (!prev) return null;
+          const updatedSheets = [...prev.sheets];
+          updatedSheets[index] = {
+            ...updatedSheets[index],
+            columns: data.columns,
+            rows: data.rows,
+            rowCount: data.rowCount,
+            colCount: data.colCount,
+          };
+          return {
+            ...prev,
+            activeSheetIndex: index,
+            sheets: updatedSheets,
+          };
+        });
+      } catch (error) {
+        console.error('Failed to load sheet data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // 2. Switch index
+      setSession((prev) => prev ? ({ ...prev, activeSheetIndex: index }) : null);
+    }
   }, [session, syncGridToSession]);
 
   const applyFormatting = useCallback((formatting: CellFormatting) => {
@@ -218,7 +246,7 @@ export function useExcelEditor() {
         sheetName: activeSheet.sheetName,
         userInstruction: instruction,
         currentRows: hot.getData(),
-        columns: activeSheet.columns,
+        columns: activeSheet.columns || [],
       });
 
       const newChange: PendingChange = {
@@ -261,7 +289,7 @@ export function useExcelEditor() {
         sheetName: activeSheet.sheetName,
         pandasCode: change.generatedCode,
         currentRows: hot.getData(),
-        columns: activeSheet.columns,
+        columns: activeSheet.columns || [],
       });
 
       // Update local data by applying diffRows
@@ -272,7 +300,7 @@ export function useExcelEditor() {
       const newData = [...hot.getData()];
       change.diffRows.forEach(diff => {
         if (diff.rowIndex < newData.length) {
-          const colIdx = activeSheet.columns.indexOf(diff.columnName);
+          const colIdx = (activeSheet.columns || []).indexOf(diff.columnName);
           if (colIdx !== -1) {
             newData[diff.rowIndex][colIdx] = diff.newValue;
           }

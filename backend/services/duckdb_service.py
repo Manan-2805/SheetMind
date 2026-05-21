@@ -1,9 +1,12 @@
+import threading
+
 import duckdb
 
 from dependencies import current_username
 from services.storage_service import get_user_db_path
 
 _conns: dict[str, duckdb.DuckDBPyConnection] = {}
+_conn_lock = threading.Lock()
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -13,12 +16,13 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
     db_path = str(get_user_db_path(safe_username))
 
-    if db_path not in _conns:
-        conn = duckdb.connect(db_path)
-        init_schema(conn)
-        _conns[db_path] = conn
+    with _conn_lock:
+        if db_path not in _conns:
+            conn = duckdb.connect(db_path)
+            init_schema(conn)
+            _conns[db_path] = conn
 
-    return _conns[db_path]
+        return _conns[db_path].cursor()
 
 
 def close_connection(username: str) -> None:

@@ -110,27 +110,19 @@ async def _process_wrapper(username: str, file_id: str, file_path: str):
 
 
 async def queue_worker():
+    import os
+    limit = min(5, max(1, os.cpu_count() or 1))
+    sem = asyncio.Semaphore(limit)
+
+    async def worker_task(username, file_id, file_path):
+        async with sem:
+            await _process_wrapper(username, file_id, file_path)
+
     while True:
         try:
-            # Wait until there is a task so we can get its username to check limit
-            # But wait, limit is per-user! So we just process globally with a global limit of 2?
-            # Or get settings for the specific user? Let's just use the default or first user's limit 
-            # if we have no task yet. Actually, we can get task first, then wait based on THAT user's limit.
             username, file_id, file_path = await task_queue.get()
             
-            token = current_username.set(username)
-            try:
-                settings = get_settings()
-                limit = settings.max_concurrent_uploads
-                
-                while len(active_tasks) >= limit:
-                    await asyncio.sleep(0.5)
-                    settings = get_settings()
-                    limit = settings.max_concurrent_uploads
-            finally:
-                current_username.reset(token)
-                
-            task = asyncio.create_task(_process_wrapper(username, file_id, file_path))
+            task = asyncio.create_task(worker_task(username, file_id, file_path))
             active_tasks.add(task)
             task.add_done_callback(active_tasks.discard)
             

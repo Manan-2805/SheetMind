@@ -17,6 +17,54 @@ interface EditorGridProps {
   onAfterChange: (changes: unknown[] | null, source: string) => void;
 }
 
+function ExcelCellSkeleton() {
+  const columns = Array.from({ length: 12 }, (_, i) => String.fromCharCode(65 + i)); // A to L
+  const rows = Array.from({ length: 25 }, (_, i) => i + 1);
+
+  return (
+    <div className="absolute inset-0 overflow-auto bg-bg-base border border-border-default select-none scrollbar-thin animate-pulse">
+      <table className="w-full border-collapse table-fixed text-[11px] font-medium text-tertiary">
+        <thead>
+          <tr className="h-6">
+            <th className="w-10 bg-bg-elevated border-b border-r border-border-default sticky top-0 left-0 z-30" />
+            {columns.map((col) => (
+              <th
+                key={col}
+                className="w-24 bg-bg-elevated border-b border-r border-border-default text-center align-middle sticky top-0 z-20 font-semibold"
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row} className="h-6">
+              <td className="bg-bg-elevated border-b border-r border-border-default text-center align-middle font-medium sticky left-0 z-10 w-10 text-xs">
+                {row}
+              </td>
+              {columns.map((col, cIdx) => (
+                <td
+                  key={`${row}-${col}`}
+                  className="bg-bg-base border-b border-r border-border-default px-2 py-1 align-middle"
+                >
+                  <div
+                    className="skeleton h-3.5"
+                    style={{
+                      width: `${30 + (row * 7 + cIdx * 13) % 55}%`,
+                      opacity: 0.65,
+                    }}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function EditorGrid({
   sheetData,
   formattingMap,
@@ -68,8 +116,8 @@ export function EditorGrid({
 
     return {
       licenseKey: 'non-commercial-and-evaluation',
-      data: sheetData.rows,
-      colHeaders: sheetData.columns,
+      data: sheetData.rows || [],
+      colHeaders: sheetData.columns || [],
       rowHeaders: true,
       width: '100%',
       height: containerHeight,
@@ -117,6 +165,10 @@ export function EditorGrid({
       }
     };
   }, [sheetData, formattingMap, frozenRows, frozenCols, onAfterChange, containerHeight]);
+
+  if (!sheetData.rows || !sheetData.columns) {
+    return <ExcelCellSkeleton />;
+  }
 
   return (
     <div ref={containerRef} className="absolute inset-0 overflow-hidden" key={sheetData.sheetName}>

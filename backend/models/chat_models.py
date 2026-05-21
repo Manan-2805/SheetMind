@@ -1144,6 +1144,8 @@ async def create_message(
     settings = get_settings()
     turns = _get_recent_turns(conn, session_id, exclude_message_id=user_msg_id, limit_pairs=4)
 
+    # 1. Gathering files
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "gathering_files"})
     _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
     schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
     schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, content)
@@ -1157,6 +1159,8 @@ async def create_message(
     else:
         max_input_tokens = settings.ollama.max_input_tokens
 
+    # 2. Preparing prompt
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
     _write_debug_prompt(messages, f"SQL_GENERATION [{session_id}]")
 
@@ -1167,6 +1171,9 @@ async def create_message(
 
     t0 = time.time()
     session_title = None
+    
+    # 3. Generating SQL
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     if is_first:
         title_task = generate_title(content)
         sql_task = generate_sql(messages)
@@ -1204,6 +1211,7 @@ async def create_message(
 
         while retry_count <= max_retries:
             try:
+                await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "executing_sql"})
                 df = conn.execute(current_sql).fetchdf()
                 sql_exec_ms = int((time.time() - t2) * 1000)
                 columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
@@ -1218,6 +1226,7 @@ async def create_message(
                 sql_error = str(exec_err)
                 if auto_retry and retry_count < max_retries:
                     retry_count += 1
+                    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "fixing_sql"})
                     await _broadcast_ws_event(
                         session_id,
                         {"type": "sql_retry", "attempt": retry_count, "max": max_retries, "error": sql_error},
@@ -1234,6 +1243,7 @@ async def create_message(
                     break
 
         if sql_exec_succeeded:
+            await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_summary"})
             t3 = time.time()
             try:
                 combined_res = await _generate_combined_second_call(
@@ -1267,6 +1277,7 @@ async def create_message(
         )
 
     if result_rows and settings.auto_chart_display:
+        await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_charts"})
         try:
             chart_url = await _auto_generate_chart(result_rows, [c.key for c in columns], content, session_id)
         except Exception as e:
@@ -1295,6 +1306,7 @@ async def create_message(
         conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
 
 
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "complete"})
 
     return ChatMessageResponse(
         id=assistant_msg_id,

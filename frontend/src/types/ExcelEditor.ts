@@ -2,8 +2,8 @@ export type CellValue = string | number | boolean | null;
 
 export interface SheetData {
   sheetName: string;
-  columns: string[];          // column header names
-  rows: CellValue[][];        // row-major 2D array
+  columns?: string[];          // column header names
+  rows?: CellValue[][];        // row-major 2D array
   rowCount: number;
   colCount: number;
 }

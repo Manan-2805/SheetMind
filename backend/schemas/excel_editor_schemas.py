@@ -7,8 +7,8 @@ CellValue = Union[str, int, float, bool, Any, None]
 
 class SheetData(BaseModel):
     sheetName: str
-    columns: list[str]
-    rows: list[list[CellValue]]
+    columns: Optional[list[str]] = None
+    rows: Optional[list[list[CellValue]]] = None
     rowCount: int
     colCount: int
 

@@ -71,6 +71,12 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
         current_settings.max_concurrent_uploads = body.max_concurrent_uploads
     if body.result_row_limit is not None:
         current_settings.result_row_limit = body.result_row_limit
+    if body.auto_sql_retry is not None:
+        current_settings.auto_sql_retry = body.auto_sql_retry
+    if body.auto_sql_retry_max is not None:
+        current_settings.auto_sql_retry_max = body.auto_sql_retry_max
+    if body.auto_chart_display is not None:
+        current_settings.auto_chart_display = body.auto_chart_display
 
     update_settings_db(current_settings)
     return current_settings

@@ -14,12 +14,14 @@ from schemas.excel_editor_schemas import (
     MutationResponse,
     OpenFileResponse,
     SaveRequest,
+    SheetData,
 )
 from services.excel_editor_service import (
     apply_mutation_to_disk,
     get_available_files,
     get_edit_history,
     open_excel_file,
+    open_excel_sheet,
     restore_backup,
     save_manual_edits,
 )
@@ -62,17 +64,27 @@ async def list_files():
     files = get_available_files()
     return FileListResponse(files=files)
 
-@router.post("/open", response_model=OpenFileResponse)
-async def open_file(body: dict):
-    file_id = body.get("fileId")
-    if not file_id:
+@router.get("/open", response_model=OpenFileResponse)
+async def open_file(fileId: str):
+    if not fileId:
         raise HTTPException(status_code=400, detail="fileId is required")
     
-    data = open_excel_file(file_id)
+    data = open_excel_file(fileId)
     if not data:
         raise HTTPException(status_code=404, detail="File not found")
         
     return OpenFileResponse(**data)
+
+@router.get("/sheet-data", response_model=SheetData)
+async def get_sheet_data(fileId: str, sheetName: str):
+    if not fileId or not sheetName:
+        raise HTTPException(status_code=400, detail="fileId and sheetName are required")
+        
+    data = open_excel_sheet(fileId, sheetName)
+    if not data:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+        
+    return data
 
 @router.post("/mutate", response_model=MutationResponse)
 async def mutate_file(body: MutationRequest):
