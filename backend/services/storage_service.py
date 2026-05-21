@@ -53,9 +53,9 @@ def get_exports_dir(username: str | None = None) -> Path:
     return path
 
 
-def get_charts_dir(username: str | None = None) -> Path:
-    """Per-user charts: ~/.sheetmind/users/{username}/charts"""
-    path = get_user_dir(username) / "charts"
+def get_charts_dir() -> Path:
+    """Global charts: ~/.sheetmind/charts to prevent unauthenticated 404s when loading images"""
+    path = get_app_root() / "charts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -68,9 +68,8 @@ def get_backups_dir(username: str | None = None) -> Path:
 
 
 def get_debug_prompts_dir() -> Path:
-    """Debug prompts dir at project root (not per-user)."""
-    base_dir = Path(__file__).parent.parent.parent
-    path = base_dir / "debug_prompts"
+    """Debug prompts dir inside .sheetmind (not per-user)."""
+    path = get_app_root() / "debug_prompts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

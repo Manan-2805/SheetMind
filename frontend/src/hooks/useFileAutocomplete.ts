@@ -36,10 +36,7 @@ export function useFileAutocomplete(): UseFileAutocompleteReturn {
   }, []);
 
   useEffect(() => {
-    if (!cachedFiles) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchFiles();
-    }
+    fetchFiles();
   }, [fetchFiles]);
 
   const detectTrigger = useCallback(

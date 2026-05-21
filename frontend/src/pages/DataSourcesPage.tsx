@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Eye, Trash2, Upload, Plus, Search, ExternalLink, RotateCw } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Eye, Plus, Search, Trash2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -9,9 +9,9 @@ import {
   uploadFile,
   uploadFromUrl,
 } from "@/api/dataSourcesApi";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { SkeletonTable } from "@/components/skeletons/SkeletonTable";
 import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
+import { SkeletonTable } from "@/components/skeletons/SkeletonTable";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useToast";
+import { websocketService } from "@/services/websocketService";
 import type { DataSource, DataSourcePreview, ExcelSheet } from "@/types/DataSource";
 import { formatAbsoluteDate, formatFileSize } from "@/utils/formatDate";
 
@@ -71,57 +72,74 @@ export function DataSourcesPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    let isMounted = true;
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-    function connect() {
-      if (!isMounted) return;
-      const username = localStorage.getItem("sheetmind-username") || "default";
-      ws = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`);
-
-      ws.onmessage = (e) => {
-        try {
-          const payload = JSON.parse(e.data);
-          if (payload.type === "status_update") {
-            let shouldRefresh = false;
-            setSources(prev => prev.map(s => {
-              const update = payload.data.find((u: { id: string, status: string, error_message: string | null }) => u.id === s.id);
-              if (update) {
-                if (update.status === "completed" && s.sheets.length === 0) {
-                  shouldRefresh = true;
-                }
-                return {
-                  ...s,
-                  status: update.status,
-                  error_message: update.error_message,
-                };
-              }
-              return s;
-            }));
-            if (shouldRefresh) {
-              void load();
-            }
-          }
-        } catch {
-          // ignore errors
-        }
-      };
-
-      ws.onclose = () => {
-        if (isMounted) {
-          timeoutId = setTimeout(connect, 3000);
-        }
-      };
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete the ${selectedIds.length} selected files?`)) {
+      return;
     }
 
-    connect();
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      try {
+        await deleteDataSource(id);
+        successCount++;
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to delete data source ${id}`, err);
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setSelectedIds([]);
+    void load();
+
+    if (failCount === 0) {
+      addToast({
+        title: "Bulk Delete Completed",
+        description: `Successfully deleted ${successCount} files.`,
+        type: "success",
+      });
+    } else {
+      addToast({
+        title: "Bulk Delete Completed with Errors",
+        description: `Successfully deleted ${successCount} files. Failed to delete ${failCount} files.`,
+        type: "warning",
+      });
+    }
+  };
+
+  useEffect(() => {
+    const removeListener = websocketService.addListener((payload) => {
+      if (payload.type === "status_update") {
+        let shouldRefresh = false;
+        setSources(prev => prev.map(s => {
+          const update = payload.data.find((u: { id: string, status: string, error_message: string | null }) => u.id === s.id);
+          if (update) {
+            if (update.status === "completed" && s.sheets.length === 0) {
+              shouldRefresh = true;
+            }
+            return {
+              ...s,
+              status: update.status,
+              error_message: update.error_message,
+            };
+          }
+          return s;
+        }));
+        if (shouldRefresh) {
+          void load();
+        }
+      }
+    });
 
     return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-      ws?.close();
+      removeListener();
     };
   }, [load]);
 
@@ -337,21 +355,21 @@ export function DataSourcesPage() {
               </button>
             )}
 
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="flex h-10 items-center gap-2 rounded-lg bg-destructive px-4 text-body-em text-white shadow-lg shadow-destructive/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              >
+                <Trash2 size={16} /> Delete Selected ({selectedIds.length})
+              </button>
+            )}
+
             <button
               onClick={() => setIsUploadModalOpen(true)}
               className="flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-body-em text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus size={16} /> Upload
-            </button>
-
-            <button
-              onClick={() => void load()}
-              disabled={isLoading}
-              className="flex h-10 w-10 items-center justify-center rounded-lg transition-all"
-              style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", opacity: isLoading ? 0.7 : 1 }}
-              title="Refresh"
-            >
-              <RotateCw size={16} className={isLoading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
@@ -415,6 +433,28 @@ export function DataSourcesPage() {
             <table className="w-full border-collapse sticky-header">
               <thead>
                 <tr className="sticky top-0 z-10" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+                  <th
+                    className="px-4 py-3 text-left w-12"
+                    style={{ borderBottom: "1px solid var(--color-border-default)" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filteredSources.length > 0 && selectedIds.length === filteredSources.length}
+                      ref={(input) => {
+                        if (input) {
+                          input.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredSources.length;
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(filteredSources.map((s) => s.id));
+                        } else {
+                          setSelectedIds([]);
+                        }
+                      }}
+                      className="rounded border-gray-300 text-accent focus:ring-accent"
+                    />
+                  </th>
                   {[
                     { label: "Filename", key: "original_filename" },
                     { label: "Status", key: "status" },
@@ -460,10 +500,24 @@ export function DataSourcesPage() {
                           (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "transparent";
                         }}
                       >
+                        <td className="px-4 py-2 w-12" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(src.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIds((prev) => [...prev, src.id]);
+                              } else {
+                                setSelectedIds((prev) => prev.filter((id) => id !== src.id));
+                              }
+                            }}
+                            className="rounded border-gray-300 text-accent focus:ring-accent"
+                          />
+                        </td>
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => toggleExpand(src.id)}
+                              onClick={(e) => { e.stopPropagation(); toggleExpand(src.id); }}
                               className="shrink-0 rounded p-0.5 transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
                               aria-label={isExpanded ? "Collapse" : "Expand"}
@@ -546,6 +600,7 @@ export function DataSourcesPage() {
                               borderBottom: "1px solid var(--color-border-subtle)",
                             }}
                           >
+                            <td className="px-4 py-2 w-12" />
                             <td
                               className="py-2 pr-4 text-body"
                               style={{

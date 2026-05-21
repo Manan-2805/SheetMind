@@ -122,6 +122,40 @@ export function useExcelEditor() {
       setIsLoading(true);
       try {
         const data = await api.getSheetData(session.fileId, targetSheet.sheetName);
+        
+        // Write lazy loaded data dynamically to Univer sheet
+        if (univerRef.current) {
+          const workbook = univerRef.current.getActiveWorkbook();
+          const sheet = workbook?.getSheetByName(targetSheet.sheetName);
+          if (sheet) {
+            // Prepend column names as row 0
+            if (data.columns) {
+              data.columns.forEach((colName, cIdx) => {
+                const cellRange = sheet.getRange(0, cIdx, 1, 1);
+                cellRange.setValue(colName);
+                cellRange.setFontWeight('bold');
+                cellRange.setHorizontalAlignment('center');
+                cellRange.setBackground('#F3F4F6');
+              });
+            }
+            // Populate actual data rows 1..N
+            if (data.rows) {
+              data.rows.forEach((row, rIdx) => {
+                row.forEach((cellValue, colIndex) => {
+                  if (cellValue !== null && cellValue !== undefined) {
+                    const cellRange = sheet.getRange(rIdx + 1, colIndex, 1, 1);
+                    if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
+                      cellRange.setFormula(cellValue);
+                    } else {
+                      cellRange.setValue(cellValue as any);
+                    }
+                  }
+                });
+              });
+            }
+          }
+        }
+
         setSession((prev) => {
           if (!prev) return null;
           const updatedSheets = [...prev.sheets];
@@ -156,7 +190,7 @@ export function useExcelEditor() {
     if (formatting.fontSize) selection.setFontSize(formatting.fontSize);
     if (formatting.textColor) selection.setFontColor(formatting.textColor);
     if (formatting.bgColor) selection.setBackground(formatting.bgColor);
-    if (formatting.align) selection.setHorizontalAlignment(formatting.align);
+    if (formatting.align) selection.setHorizontalAlignment(formatting.align as any);
 
     // Persist to formattingMap for backend save (borders included even though
     // Univer canvas visual is a v2 item)
@@ -170,8 +204,9 @@ export function useExcelEditor() {
       if (!prev) return null;
       const newMap = { ...prev.formattingMap };
       for (let r = startRow; r <= endRow; r++) {
+        if (r === 0) continue; // Skip header row format persistence
         for (let c = startCol; c <= endCol; c++) {
-          const key = `${sheetName}:${r}:${c}`;
+          const key = `${sheetName}:${r - 1}:${c}`;
           newMap[key] = { ...newMap[key], ...formatting };
         }
       }
@@ -210,12 +245,20 @@ export function useExcelEditor() {
   // Extract all sheet rows from the Univer workbook snapshot.
   // cellData is a sparse object — missing keys mean empty cells.
   // Must iterate 0..rowCount-1 and 0..columnCount-1 to get full dense rows.
-  const extractRowsFromSnapshot = useCallback((sheetSnapshot: Record<string, unknown>, colCount: number): CellValue[][] => {
+  const extractRowsFromSnapshot = useCallback((sheetSnapshot: Record<string, unknown>, colCount: number) => {
     const cellData = (sheetSnapshot.cellData || {}) as Record<number, Record<number, { v?: CellValue; f?: string } | undefined> | undefined>;
     const rowCount = (sheetSnapshot.rowCount as number) || 0;
 
+    // Extract columns from row index 0
+    const columns: string[] = [];
+    for (let c = 0; c < colCount; c++) {
+      const cell = cellData[0]?.[c];
+      columns.push(cell?.v ? String(cell.v) : `Column ${c + 1}`);
+    }
+
+    // Extract actual data rows from row index 1 onwards
     const rows: CellValue[][] = [];
-    for (let r = 0; r < rowCount; r++) {
+    for (let r = 1; r < rowCount; r++) {
       const row: CellValue[] = [];
       for (let c = 0; c < colCount; c++) {
         const cell = cellData[r]?.[c];
@@ -229,7 +272,7 @@ export function useExcelEditor() {
       }
       rows.push(row);
     }
-    return rows;
+    return { columns, rows };
   }, []);
 
   const submitMutationPrompt = useCallback(async (instruction: string) => {
@@ -245,14 +288,14 @@ export function useExcelEditor() {
       const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
       const sheetId = `sheet_${session.activeSheetIndex}`;
       const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
-      const currentRows = extractRowsFromSnapshot(sheetSnapshot, activeSheet.colCount);
+      const { columns: extractedCols, rows: currentRows } = extractRowsFromSnapshot(sheetSnapshot, activeSheet.colCount);
 
       const result = await api.mutateFile({
         fileId: session.fileId,
         sheetName: activeSheet.sheetName,
         userInstruction: instruction,
         currentRows,
-        columns: activeSheet.columns || [],
+        columns: extractedCols,
       });
 
       const newChange: PendingChange = {
@@ -303,11 +346,11 @@ export function useExcelEditor() {
         change.diffRows.forEach((diff) => {
           const colIndex = (currentSheetData.columns || []).indexOf(diff.columnName);
           if (colIndex === -1) return;
-          const range = activeSheet.getRange(diff.rowIndex, colIndex, 1, 1);
+          const range = activeSheet.getRange(diff.rowIndex + 1, colIndex, 1, 1);
           if (diff.isFormula && typeof diff.newValue === 'string') {
             range.setFormula(diff.newValue);
           } else {
-            range.setValue(diff.newValue as string | number | boolean | null);
+            range.setValue(diff.newValue as any);
           }
         });
 
@@ -354,15 +397,26 @@ export function useExcelEditor() {
       const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
 
       const sheetsForBackend = session.sheets.map((sessionSheet, index) => {
+        if (!sessionSheet.columns || !sessionSheet.rows) {
+          // If this sheet has not been loaded, return null columns and rows to skip modifying it in the backend
+          return {
+            sheetName: sessionSheet.sheetName,
+            rows: undefined,
+            columns: undefined,
+            rowCount: sessionSheet.rowCount,
+            colCount: sessionSheet.colCount,
+          };
+        }
+
         const sheetId = `sheet_${index}`;
         const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
         const colCount = sessionSheet.colCount || 0;
-        const rows = extractRowsFromSnapshot(sheetSnapshot, colCount);
+        const { columns, rows } = extractRowsFromSnapshot(sheetSnapshot, colCount);
 
         return {
           sheetName: sessionSheet.sheetName,
           rows,
-          columns: sessionSheet.columns || [],
+          columns,
           rowCount: rows.length,
           colCount,
         };

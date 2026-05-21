@@ -1,18 +1,19 @@
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { HistoryDrawer } from "@/drawers/HistoryDrawer";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Toast } from "@/components/ui/Toast";
+import { HistoryDrawer } from "@/drawers/HistoryDrawer";
 import { useChat } from "@/hooks/useChat";
-
+import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { DataSourcesPage } from "@/pages/DataSourcesPage";
-import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
-import { ArtifactsPage } from "@/pages/ArtifactsPage";
-import { SettingsPage } from "@/pages/SettingsPage";
 import { ExcelEditorPage } from "@/pages/ExcelEditorPage";
+import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
+import { SettingsPage } from "@/pages/SettingsPage";
+import { websocketService } from "@/services/websocketService";
 
 type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor";
 type ActiveDrawer = "history" | null;
@@ -21,6 +22,14 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeDrawer, setActiveDrawer] = useState<ActiveDrawer>(null);
+
+  useEffect(() => {
+    const username = localStorage.getItem("sheetmind-username") || "default";
+    websocketService.connect(username);
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []);
 
   const {
     activeSessionId,
@@ -157,20 +166,20 @@ export function AppShell() {
               <ChatPage
                 key="new"
                 onNewChat={handleNewChat}
-                messages={messages}
-                isLoadingMessages={isLoadingMessages}
+                messages={[]}
+                isLoadingMessages={false}
                 isSending={isSending}
                 sendChatMessage={handleChatSent}
                 loadSessions={loadSessions}
-                activeSessionId={activeSessionId}
+                activeSessionId={null}
                 startNewChat={startNewChat}
                 onUpdateMessage={handleUpdateMessage}
                 onDeleteMessage={deleteMessageBranch}
                 onEditMessage={editMessage}
                 onRegenerateSubmit={regenerateResponse}
-                followups={followups}
+                followups={[]}
                 onFollowupClick={(text) => sendChatMessage(text)}
-                sqlRetryStatus={sqlRetryStatus}
+                sqlRetryStatus={null}
               />
             } />
 

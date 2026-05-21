@@ -16,8 +16,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          univer: ["@univerjs/presets", "@univerjs/preset-sheets-core"],
+        manualChunks(id) {
+          if (id.includes("@univerjs")) {
+            return "univer";
+          }
         },
       },
     },

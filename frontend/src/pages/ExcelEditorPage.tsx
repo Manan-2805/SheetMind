@@ -6,7 +6,6 @@ import { ChevronLeft, X, Save, AlertTriangle } from 'lucide-react';
 import { useExcelEditor } from '@/hooks/useExcelEditor';
 import { EditorFileSelector } from '@/components/editor/EditorFileSelector';
 import { EditorToolbar } from '@/components/editor/EditorToolbar';
-import { EditorSheetTabs } from '@/components/editor/EditorSheetTabs';
 import { EditorGrid } from '@/components/editor/EditorGrid';
 import { EditorAIPanel } from '@/components/editor/EditorAIPanel';
 
@@ -23,11 +22,9 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     session,
     isLoading,
     activeSheetIndex,
-    setActiveSheet,
     univerRef,
     onWorkbookReady,
     onCellChanged,
-    applyFormatting,
     setFrozen,
     addRowBelow,
     deleteSelectedRows,
@@ -147,7 +144,6 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
 
       {/* Editor Toolbar */}
       <EditorToolbar
-        onFormatting={applyFormatting}
         onAddRow={addRowBelow}
         onDeleteRow={deleteSelectedRows}
         onAddCol={addColumnRight}
@@ -159,11 +155,6 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
       <Group orientation="vertical" className="flex-1 min-h-0">
         <Panel defaultSize={60} minSize={30} className="min-h-0">
           <div className="flex flex-col h-full min-h-0 bg-bg-base">
-            <EditorSheetTabs
-              sheets={session.sheets}
-              activeIndex={activeSheetIndex}
-              onSwitch={setActiveSheet}
-            />
             <div className="flex-1 relative min-h-0 h-full w-full">
               <EditorGrid
                 sheets={session.sheets}

@@ -1,11 +1,11 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketState
+import uvicorn
 
 from dependencies import current_username
 from routers.artifacts_router import router as artifacts_router
@@ -15,6 +15,8 @@ from routers.data_sources_router import router as data_sources_router
 from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
+from services.duckdb_service import get_connection
+from services.logging_service import get_logger
 
 
 @asynccontextmanager
@@ -76,9 +78,6 @@ async def serve_chart_static(filename: str):
     return FileResponse(str(chart_path), media_type="image/png")
 
 
-from services.duckdb_service import get_connection
-
-
 @app.websocket("/api/ws/datasources")
 async def websocket_datasources(websocket: WebSocket):
     from models.chat_models import _ws_clients
@@ -87,6 +86,8 @@ async def websocket_datasources(websocket: WebSocket):
 
     username = websocket.query_params.get("username", "default")
     token = current_username.set(username)
+    logger = get_logger()
+    logger.info(f"WebSocket Connected: username={username}")
 
     try:
         while True:
@@ -104,20 +105,22 @@ async def websocket_datasources(websocket: WebSocket):
                     {"id": r[0], "status": r[1], "error_message": r[2], "row_count": r[3], "column_count": r[4]}
                     for r in rows
                 ]
+                logger.info(f"WebSocket Broadcast (status_update): username={username}, data={updates}")
                 await websocket.send_json({"type": "status_update", "data": updates})
             except WebSocketDisconnect:
                 break
             except RuntimeError as loop_err:
                 if "Cannot call \"send\"" in str(loop_err):
                     break
-                print(f"WebSocket loop query error: {loop_err}")
+                logger.error(f"WebSocket loop query error: {loop_err}")
             except Exception as loop_err:
-                print(f"WebSocket loop query error: {loop_err}")
+                logger.error(f"WebSocket loop query error: {loop_err}")
             await asyncio.sleep(2)
     except Exception as e:
-        print(f"WebSocket connection error: {e}")
+        logger.error(f"WebSocket connection error: {e}")
     finally:
         _ws_clients.discard(websocket)
+        logger.info(f"WebSocket Disconnected: username={username}")
         current_username.reset(token)
 
 

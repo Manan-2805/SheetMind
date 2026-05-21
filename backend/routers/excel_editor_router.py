@@ -1,4 +1,6 @@
+from datetime import datetime, timezone
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -31,9 +33,8 @@ from services.excel_mutation_service import (
     validate_pandas_expression,
 )
 from services.storage_service import get_debug_prompts_dir
-from datetime import datetime, timezone
 
-def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> None:
+def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
     """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir."""
     debug_dir = get_debug_prompts_dir()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
@@ -53,8 +54,28 @@ def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -
             else:
                 f.write(str(messages_or_prompt))
                 f.write("\n")
+        return filename
     except Exception as e:
         print(f"Failed to write debug prompt: {e}")
+        return None
+
+
+def _append_debug_response(filepath: Path | None, response_content: Any, label: str = "RESPONSE") -> None:
+    """Append the LLM response content to the existing debug prompt file."""
+    if not filepath or not filepath.exists():
+        return
+    try:
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write("\n" + "=" * 80 + "\n")
+            f.write(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
+            f.write("=" * 80 + "\n\n")
+            if isinstance(response_content, (dict, list)):
+                f.write(json.dumps(response_content, indent=2))
+            else:
+                f.write(str(response_content))
+            f.write("\n")
+    except Exception as e:
+        print(f"Failed to append debug response: {e}")
 
 
 router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
@@ -101,7 +122,7 @@ async def mutate_file(body: MutationRequest):
         sample_rows=sample_rows,
         row_count=len(df)
     )
-    _write_debug_prompt(prompt_msgs, f"EXCEL_MUTATION [{body.fileId}]")
+    debug_path = _write_debug_prompt(prompt_msgs, f"EXCEL_MUTATION [{body.fileId}]")
 
     
     # 2. Call LLM
@@ -138,7 +159,9 @@ async def mutate_file(body: MutationRequest):
     # 3. Parse and Validate
     try:
         data = json.loads(llm_response_text)
+        _append_debug_response(debug_path, data, f"EXCEL_MUTATION RESPONSE [{body.fileId}]")
     except Exception:
+        _append_debug_response(debug_path, llm_response_text, f"EXCEL_MUTATION RESPONSE RAW (FAILED PARSE) [{body.fileId}]")
         # Simple retry once if parsing fails (Ollama sometimes misses JSON wrapper)
         raise HTTPException(status_code=500, detail="LLM returned invalid JSON")
 

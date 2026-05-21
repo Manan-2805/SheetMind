@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import math
+from pathlib import Path
 import re
 import time
 from typing import Any
@@ -17,6 +18,7 @@ from schemas.chat_schemas import (
     ResultColumn,
     ResultTable,
 )
+from services.logging_service import get_logger
 from services.query_service import dataframe_to_result_table
 from services.storage_service import get_debug_prompts_dir, get_exports_dir
 
@@ -563,9 +565,8 @@ def _extract_json_sql(raw: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON response from LLM")
 
-
-def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> None:
-    """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir."""
+def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
+    """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir and return the path."""
     debug_dir = get_debug_prompts_dir()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     safe_label = label.replace(" ", "_").replace("[", "").replace("]", "")[:60]
@@ -582,10 +583,30 @@ def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -
                     f.write(content)
                     f.write("\n\n")
             else:
-                f.write(messages_or_prompt)
+                f.write(str(messages_or_prompt))
                 f.write("\n")
+        return filename
     except Exception as e:
         print(f"Failed to write debug prompt: {e}")
+        return None
+
+
+def _append_debug_response(filepath: Path | None, response_content: Any, label: str = "RESPONSE") -> None:
+    """Append the LLM response content to the existing debug prompt file."""
+    if not filepath or not filepath.exists():
+        return
+    try:
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write("\n" + "=" * 80 + "\n")
+            f.write(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
+            f.write("=" * 80 + "\n\n")
+            if isinstance(response_content, (dict, list)):
+                f.write(json.dumps(response_content, indent=2))
+            else:
+                f.write(str(response_content))
+            f.write("\n")
+    except Exception as e:
+        print(f"Failed to append debug response: {e}")
 
 
 def _split_reference(value: str) -> tuple[str, str | None]:
@@ -869,7 +890,7 @@ First 5 rows: {result_rows[:5]}
 Total rows: {len(result_rows)}
 
 Respond with only the summary sentence. No JSON."""
-    _write_debug_prompt(prompt, "NL SUMMARY")
+    debug_path = _write_debug_prompt(prompt, "NL SUMMARY")
 
     settings = get_settings()
     input_tokens = 0
@@ -887,7 +908,9 @@ Respond with only the summary sentence. No JSON."""
         )
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
-        return {"summary": response.choices[0].message.content.strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
+        res = {"summary": response.choices[0].message.content.strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
+        _append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
+        return res
     else:
         url = settings.ollama.url.rstrip("/")
         async with httpx.AsyncClient() as client:
@@ -905,7 +928,9 @@ Respond with only the summary sentence. No JSON."""
             data = resp.json()
             input_tokens = data.get("prompt_eval_count", 0)
             output_tokens = data.get("eval_count", 0)
-            return {"summary": data["response"].strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
+            res = {"summary": data["response"].strip(), "input_tokens": input_tokens, "output_tokens": output_tokens}
+            _append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
+            return res
 
 
 async def generate_followups(result_rows: list, columns: list, user_question: str) -> list[str]:
@@ -968,7 +993,7 @@ Row count: {len(result_rows)}"""
 
 async def generate_title(content: str) -> str:
     prompt = f"Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: \"{content}\". Do not use quotes or prefixes, just the title text."
-    _write_debug_prompt(prompt, "TITLE GENERATION")
+    debug_path = _write_debug_prompt(prompt, "TITLE GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -977,7 +1002,9 @@ async def generate_title(content: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
-        return response.choices[0].message.content.strip()
+        res = response.choices[0].message.content.strip()
+        _append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
+        return res
     else:
         url = settings.ollama.url.rstrip("/")
         async with httpx.AsyncClient() as client:
@@ -987,12 +1014,14 @@ async def generate_title(content: str) -> str:
                 timeout=30.0
             )
             resp.raise_for_status()
-            return resp.json()["response"].strip()
+            res = resp.json()["response"].strip()
+            _append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
+            return res
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
     prompt = f"Create a short, human-readable label (max 6 words) for a saved SQL query.\nThe user asked: \"{nl_query}\"\nThe SQL generated: {sql_query[:200]}\nReturn ONLY the label text, no quotes, no punctuation at end."
-    _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
+    debug_path = _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -1001,7 +1030,9 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7
         )
-        return response.choices[0].message.content.strip()
+        res = response.choices[0].message.content.strip()
+        _append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
+        return res
     else:
         url = settings.ollama.url.rstrip("/")
         async with httpx.AsyncClient() as client:
@@ -1011,7 +1042,9 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
                 timeout=30.0
             )
             resp.raise_for_status()
-            return resp.json()["response"].strip()
+            res = resp.json()["response"].strip()
+            _append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
+            return res
 
 
 
@@ -1024,6 +1057,8 @@ async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
     import asyncio
     payload_copy = dict(payload)
     payload_copy["session_id"] = session_id
+    logger = get_logger()
+    logger.info(f"WebSocket Broadcast (chat/sql): session_id={session_id}, data={payload}")
     dead = set()
     for ws in list(_ws_clients):
         try:
@@ -1173,7 +1208,7 @@ async def create_message(
     # 2. Preparing prompt
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
-    _write_debug_prompt(messages, f"SQL_GENERATION [{session_id}]")
+    debug_path = _write_debug_prompt(messages, f"SQL_GENERATION [{session_id}]")
 
     msg_count = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]).fetchone()[0]
     sess_row = conn.execute("SELECT title FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
@@ -1193,6 +1228,8 @@ async def create_message(
         session_title = title
     else:
         sql_res = await generate_sql(messages)
+
+    _append_debug_response(debug_path, sql_res, f"SQL_GENERATION RESPONSE [{session_id}]")
 
     sql = sql_res.get("sql") or ""
     llm_message = sql_res.get("message") or ""
@@ -1219,6 +1256,7 @@ async def create_message(
         max_retries = settings.auto_sql_retry_max if auto_retry else 0
         retry_count = 0
         current_sql = sql
+        failed_attempts = []
 
         while retry_count <= max_retries:
             try:
@@ -1235,6 +1273,7 @@ async def create_message(
             except Exception as exec_err:
                 sql_exec_ms = int((time.time() - t2) * 1000)
                 sql_error = str(exec_err)
+                failed_attempts.append({"sql": current_sql, "error": sql_error})
                 if auto_retry and retry_count < max_retries:
                     retry_count += 1
                     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "fixing_sql"})
@@ -1242,11 +1281,22 @@ async def create_message(
                         session_id,
                         {"type": "sql_retry", "attempt": retry_count, "max": max_retries, "error": sql_error},
                     )
+                    
+                    failed_attempts_str = ""
+                    for idx, attempt in enumerate(failed_attempts):
+                        failed_attempts_str += f"\nAttempt {idx+1} SQL:\n{attempt['sql']}\nAttempt {idx+1} Error:\n{attempt['error']}\n"
+
                     retry_content = (
-                        f"{content}\n\n[Previous SQL failed: {sql_error}. Please fix and regenerate.]"
+                        f"{content}\n\n"
+                        f"The SQL generated so far has failed execution. Here is the list of previous failed SQL attempts and their errors:\n"
+                        f"{failed_attempts_str}\n"
+                        f"CRITICAL: Do NOT generate the same SQL queries that failed. Analyze the errors, learn from them, "
+                        f"and generate a different, corrected SQL query that will execute successfully and avoid these errors."
                     )
                     retry_messages = build_sql_prompt(retry_content, schema_info, turns, max_input_tokens)
+                    retry_debug_path = _write_debug_prompt(retry_messages, f"SQL_RETRY_{retry_count} [{session_id}]")
                     retry_res = await generate_sql(retry_messages)
+                    _append_debug_response(retry_debug_path, retry_res, f"SQL_RETRY_{retry_count} RESPONSE")
                     current_sql = retry_res.get("sql") or ""
                     if not current_sql:
                         break
@@ -1287,6 +1337,7 @@ async def create_message(
             total_pages=total_pages,
         )
 
+    chart_url = None
     if result_rows and settings.auto_chart_display:
         await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_charts"})
         try:
@@ -1395,11 +1446,12 @@ async def regenerate_response(
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
     messages = build_sql_prompt(effective_content, schema_info, turns, max_input_tokens)
-    _write_debug_prompt(messages, f"SQL_REGENERATE [{session_id}]")
+    debug_path = _write_debug_prompt(messages, f"SQL_REGENERATE [{session_id}]")
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     t0 = time.time()
     sql_res = await generate_sql(messages)
+    _append_debug_response(debug_path, sql_res, f"SQL_REGENERATE RESPONSE [{session_id}]")
     sql = sql_res.get("sql") or ""
     llm_message = sql_res.get("message") or ""
     model_name = sql_res.get("model") or "unknown"

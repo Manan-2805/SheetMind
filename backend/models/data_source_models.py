@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
 
 import pandas as pd
 
@@ -77,8 +81,11 @@ def delete(source_id: str) -> None:
     row = conn.execute("SELECT stored_path FROM excel_files WHERE id = ?", [source_id]).fetchone()
     if row:
         stored_path = row[0]
-        if os.path.exists(stored_path):
-            os.remove(stored_path)
+        try:
+            if os.path.exists(stored_path):
+                os.remove(stored_path)
+        except Exception as e:
+            logger.warning("Failed to physically remove file %s: %s", stored_path, e)
 
     sheet_tables = conn.execute(
         "SELECT table_name FROM excel_sheets WHERE excel_file_id = ?",

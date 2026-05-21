@@ -72,8 +72,23 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
     const sheetId = `sheet_${sheetIndex}`;
     const cellData: Record<number, Record<number, unknown>> = {};
 
+    // 1. Prepend column names as row index 0 in Univer
+    cellData[0] = {};
+    (sheet.columns || []).forEach((colName, colIndex) => {
+      cellData[0][colIndex] = {
+        v: colName,
+        s: {
+          bl: 1, // bold
+          ht: 2, // center align
+          bg: { rgb: 'F3F4F6' }, // background F3F4F6
+        },
+      };
+    });
+
+    // 2. Shift actual data rows to row index 1..N
     (sheet.rows || []).forEach((row, rowIndex) => {
-      cellData[rowIndex] = {};
+      const univerRowIndex = rowIndex + 1;
+      cellData[univerRowIndex] = {};
       row.forEach((cellValue, colIndex) => {
         const key = `${sheet.sheetName}:${rowIndex}:${colIndex}`;
         const fmt = formattingMap[key];
@@ -102,7 +117,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
           if (Object.keys(style).length > 0) cell.s = style;
         }
 
-        cellData[rowIndex][colIndex] = cell;
+        cellData[univerRowIndex][colIndex] = cell;
       });
     });
 
@@ -114,7 +129,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
     sheetsObj[sheetId] = {
       id: sheetId,
       name: sheet.sheetName,
-      rowCount: Math.max((sheet.rowCount || 0) + 20, 100),
+      rowCount: Math.max((sheet.rowCount || 0) + 21, 100),
       columnCount: Math.max((sheet.colCount || 0) + 5, 26),
       cellData,
       columnData,
@@ -157,7 +172,7 @@ export function EditorGrid({
         UniverSheetsCorePreset({
           container: containerRef.current,
           header: true,
-          toolbar: false,
+          toolbar: true,
           footer: {
             sheetBar: true,
             statisticBar: true,

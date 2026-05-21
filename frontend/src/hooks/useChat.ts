@@ -11,6 +11,7 @@ import {
   sendMessage,
 } from "@/api/chatApi";
 import { useToast } from "@/hooks/useToast";
+import { websocketService } from "@/services/websocketService";
 import type { ChatMessage, ChatSession } from "@/types/ChatMessage";
 
 const TYPING_ID = "__typing__";
@@ -34,44 +35,36 @@ export function useChat() {
   }, [activeSessionId]);
 
   useEffect(() => {
-    const username = localStorage.getItem("sheetmind-username") || "default";
-    const ws = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${username}`);
-
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.session_id && payload.session_id !== activeSessionIdRef.current) {
-          return;
-        }
-        if (payload.type === "sql_retry") {
-          setSqlRetryStatus({
-            attempt: payload.attempt,
-            max: payload.max,
-            error: payload.error,
-          });
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === TYPING_ID
-                ? { ...msg, typing_status: "fixing_sql" }
-                : msg
-            )
-          );
-        } else if (payload.type === "chat_status") {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === TYPING_ID
-                ? { ...msg, typing_status: payload.status }
-                : msg
-            )
-          );
-        }
-      } catch {
-        // ignore
+    const removeListener = websocketService.addListener((payload) => {
+      if (payload.session_id && payload.session_id !== activeSessionIdRef.current) {
+        return;
       }
-    };
+      if (payload.type === "sql_retry") {
+        setSqlRetryStatus({
+          attempt: payload.attempt,
+          max: payload.max,
+          error: payload.error,
+        });
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === TYPING_ID
+              ? { ...msg, typing_status: "fixing_sql" }
+              : msg
+          )
+        );
+      } else if (payload.type === "chat_status") {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === TYPING_ID
+              ? { ...msg, typing_status: payload.status }
+              : msg
+          )
+        );
+      }
+    });
 
     return () => {
-      ws.close();
+      removeListener();
     };
   }, []);
 

@@ -271,6 +271,9 @@ def save_manual_edits(
         if sheet_data.sheetName not in wb.sheetnames:
             continue
         
+        if sheet_data.columns is None or sheet_data.rows is None:
+            continue
+            
         ws = wb[sheet_data.sheetName]
         modified_sheet_names.append(sheet_data.sheetName)
         

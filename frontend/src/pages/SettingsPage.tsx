@@ -39,10 +39,13 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
 
   const handleClick = async () => {
     if (isLoading) return;
-    if (!isRunning && !isConfirming) {
+    if (!isConfirming) {
       start();
       setIsConfirming(true);
-    } else if (isConfirming) {
+    } else if (isRunning) {
+      cancel();
+      setIsConfirming(false);
+    } else if (count === 0) {
       setIsLoading(true);
       cancel();
       setIsConfirming(false);
@@ -50,14 +53,6 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
       setIsLoading(false);
     }
   };
-
-  const prevCountRef = useRef(count);
-  useEffect(() => {
-    if (prevCountRef.current !== 0 && count === 0 && isRunning) {
-      setIsConfirming(false);
-    }
-    prevCountRef.current = count;
-  }, [count, isRunning]);
 
   const buttonText = isLoading
     ? "Processing..."
