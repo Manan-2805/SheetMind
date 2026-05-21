@@ -5,6 +5,7 @@ import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.websockets import WebSocketState
 
 from dependencies import current_username
 from routers.artifacts_router import router as artifacts_router
@@ -90,6 +91,11 @@ async def websocket_datasources(websocket: WebSocket):
     try:
         while True:
             try:
+                if (
+                    websocket.client_state == WebSocketState.DISCONNECTED
+                    or websocket.application_state == WebSocketState.DISCONNECTED
+                ):
+                    break
                 conn = get_connection()
                 rows = conn.execute(
                     "SELECT id, status, error_message, row_count, column_count FROM excel_files"
@@ -99,11 +105,15 @@ async def websocket_datasources(websocket: WebSocket):
                     for r in rows
                 ]
                 await websocket.send_json({"type": "status_update", "data": updates})
+            except WebSocketDisconnect:
+                break
+            except RuntimeError as loop_err:
+                if "Cannot call \"send\"" in str(loop_err):
+                    break
+                print(f"WebSocket loop query error: {loop_err}")
             except Exception as loop_err:
                 print(f"WebSocket loop query error: {loop_err}")
             await asyncio.sleep(2)
-    except WebSocketDisconnect:
-        pass
     except Exception as e:
         print(f"WebSocket connection error: {e}")
     finally:
