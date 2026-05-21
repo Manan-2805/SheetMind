@@ -24,6 +24,9 @@ export interface Settings {
   max_concurrent_uploads: number;
   result_row_limit: number;
   max_input_tokens: number;
+  auto_sql_retry: boolean;
+  auto_sql_retry_max: number;
+  auto_chart_display: boolean;
 }
 
 export interface TestLLMRequest {

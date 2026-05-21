@@ -119,10 +119,11 @@ export async function regenerateMessage(
   }
 }
 
-export async function getMessageData(messageId: string): Promise<ResultTable> {
+export async function getMessageData(messageId: string, page?: number): Promise<ResultTable> {
   try {
     const res: AxiosResponse<ResultTable> = await client.get(
-      `/chat/messages/${messageId}/data`
+      `/chat/messages/${messageId}/data`,
+      { params: page ? { page } : undefined }
     );
     return res.data;
   } catch (error) {
@@ -149,6 +150,7 @@ export async function generateChart(params: {
   title?: string;
   colors?: string[];
   output_format?: string;
+  value_key?: string;
 }): Promise<Blob> {
   try {
     const res = await client.post("/chat/charts/generate", params, {

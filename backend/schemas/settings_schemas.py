@@ -24,6 +24,9 @@ class SettingsResponse(BaseModel):
     created_at: str = ""
     max_concurrent_uploads: int = 1
     result_row_limit: int = 500
+    auto_sql_retry: bool = True
+    auto_sql_retry_max: int = 3
+    auto_chart_display: bool = False
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -33,6 +36,9 @@ class UpdateSettingsRequest(BaseModel):
     ollama: Optional[OllamaSettingsSchema] = None
     max_concurrent_uploads: Optional[int] = None
     result_row_limit: Optional[int] = None
+    auto_sql_retry: Optional[bool] = None
+    auto_sql_retry_max: Optional[int] = None
+    auto_chart_display: Optional[bool] = None
 
 
 class TestLLMRequest(BaseModel):

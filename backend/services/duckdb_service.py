@@ -1,6 +1,7 @@
 import duckdb
 
 from dependencies import current_username
+from services.storage_service import get_user_db_path
 
 _conns: dict[str, duckdb.DuckDBPyConnection] = {}
 
@@ -8,30 +9,32 @@ _conns: dict[str, duckdb.DuckDBPyConnection] = {}
 def get_connection() -> duckdb.DuckDBPyConnection:
     global _conns
     username = current_username.get("default")
-    
-    # Sanitize username slightly
-    safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
-    if not safe_username:
-        safe_username = "default"
-        
-    db_path = f"sheetmind_{safe_username}.duckdb"
-    
+    safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-")) or "default"
+
+    db_path = str(get_user_db_path(safe_username))
+
     if db_path not in _conns:
         conn = duckdb.connect(db_path)
-        _conns[db_path] = conn
         init_schema(conn)
-        
+        _conns[db_path] = conn
+
     return _conns[db_path]
 
 
-def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
-
-    def _safe_execute(statement: str) -> None:
+def close_connection(username: str) -> None:
+    """Close and remove a user's DuckDB connection (needed before deleting the file)."""
+    safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-")) or "default"
+    db_path = str(get_user_db_path(safe_username))
+    conn = _conns.pop(db_path, None)
+    if conn:
         try:
-            conn.execute(statement)
+            conn.close()
         except Exception:
             pass
 
+
+def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    """Create all tables in a single pass. Safe for fresh databases only."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS excel_files (
             id VARCHAR PRIMARY KEY,
@@ -90,7 +93,12 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             result_data_json VARCHAR,
             version INTEGER DEFAULT 1,
             followups_json VARCHAR,
-            referenced_files_json VARCHAR
+            referenced_files_json VARCHAR,
+            sql_gen_ms INTEGER,
+            summary_gen_ms INTEGER,
+            total_ms INTEGER,
+            model_name VARCHAR,
+            chart_url VARCHAR
         )
     """)
 
@@ -127,20 +135,15 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
         )
     """)
 
-    _safe_execute("ALTER TABLE excel_sheets ALTER COLUMN id SET DATA TYPE VARCHAR")
-    _safe_execute("ALTER TABLE excel_sheets ALTER COLUMN excel_file_id SET DATA TYPE VARCHAR")
-    _safe_execute("ALTER TABLE saved_queries ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false")
-    _safe_execute("ALTER TABLE artifacts ALTER COLUMN id SET DATA TYPE VARCHAR")
-    _safe_execute("ALTER TABLE artifacts ALTER COLUMN source_message_id SET DATA TYPE VARCHAR")
-    _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT DEFAULT 0")
-    _safe_execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS title VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS parent_user_message_id VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS result_data_json VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sql_gen_ms INTEGER")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS summary_gen_ms INTEGER")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS total_ms INTEGER")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS model_name VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS followups_json VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS referenced_files_json VARCHAR")
-    _safe_execute("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS feedback_reason VARCHAR")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS edit_history (
+            id VARCHAR PRIMARY KEY,
+            excel_file_id VARCHAR NOT NULL,
+            sheet_name VARCHAR NOT NULL,
+            operation_type VARCHAR NOT NULL,
+            rows_affected INTEGER NOT NULL,
+            applied_at TIMESTAMP NOT NULL,
+            backup_path VARCHAR NOT NULL,
+            was_confirmed BOOLEAN DEFAULT true
+        )
+    """)

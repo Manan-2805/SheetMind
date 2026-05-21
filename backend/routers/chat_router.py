@@ -25,6 +25,7 @@ class ChartGenerateRequest(BaseModel):
     title: str = "Chart"
     colors: list[str] | None = None
     output_format: str = "png"
+    value_key: str | None = None
 
 
 @router.post("/charts/generate")
@@ -37,7 +38,8 @@ async def generate_chart_endpoint(body: ChartGenerateRequest):
             y_key=body.y_key,
             title=body.title,
             colors=body.colors,
-            output_format=body.output_format
+            output_format=body.output_format,
+            value_key=body.value_key,
         )
         media_type = "image/png" if body.output_format == "png" else "image/svg+xml"
         return StreamingResponse(buf, media_type=media_type)
@@ -73,6 +75,11 @@ async def create_message(
     session_id: str,
     body: SendMessageRequest,
 ) -> ChatMessageResponse:
+    if len(body.content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Message content cannot exceed 2000 characters.",
+        )
     return await chat_models.create_message(
         session_id=session_id,
         content=body.content,
@@ -98,9 +105,13 @@ class FeedbackRequest(BaseModel):
 
 
 @router.get("/messages/{message_id}/data", response_model=ResultTable)
-async def get_message_data(message_id: str) -> ResultTable:
+async def get_message_data(
+    message_id: str, page: int = 1, page_size: int | None = None
+) -> ResultTable:
     try:
-        return chat_models.get_message_data(message_id)
+        return chat_models.get_message_data(
+            message_id, page=page, page_size=page_size
+        )
     except ValueError as exc:
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
@@ -133,6 +144,11 @@ class RegenerateRequest(BaseModel):
 
 @router.post("/sessions/{session_id}/regenerate", response_model=ChatMessageResponse)
 async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMessageResponse:
+    if len(body.content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Message content cannot exceed 2000 characters.",
+        )
     # Build a combined prompt from content, reason, and instruction
     combined_content = body.content
     if body.reason or body.instruction:
@@ -153,6 +169,11 @@ class EditMessageRequest(BaseModel):
 
 @router.put("/sessions/{session_id}/messages/{message_id}", response_model=ChatMessageResponse)
 async def edit_message(session_id: str, message_id: str, body: EditMessageRequest) -> ChatMessageResponse:
+    if len(body.content) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Message content cannot exceed 2000 characters.",
+        )
     try:
         return await chat_models.edit_user_message(
             session_id=session_id,

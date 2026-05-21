@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { HotTable } from '@handsontable/react';
 import { registerAllModules } from 'handsontable/registry';
 import 'handsontable/styles/handsontable.min.css';
@@ -25,6 +25,34 @@ export function EditorGrid({
   hotRef,
   onAfterChange
 }: EditorGridProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState<number>(600);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === el) {
+          const h = el.offsetHeight;
+          if (h > 0) {
+            setContainerHeight(h);
+          }
+        }
+      }
+    });
+
+    observer.observe(el);
+    const initialH = el.offsetHeight;
+    if (initialH > 0) {
+      setContainerHeight(initialH);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [sheetData.sheetName]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -44,7 +72,7 @@ export function EditorGrid({
       colHeaders: sheetData.columns,
       rowHeaders: true,
       width: '100%',
-      height: '100%',
+      height: containerHeight,
       stretchH: 'all' as const,
       manualRowResize: true,
       manualColumnResize: true,
@@ -88,10 +116,10 @@ export function EditorGrid({
         };
       }
     };
-  }, [sheetData, formattingMap, frozenRows, frozenCols, onAfterChange]);
+  }, [sheetData, formattingMap, frozenRows, frozenCols, onAfterChange, containerHeight]);
 
   return (
-    <div className="absolute inset-0 overflow-hidden" key={sheetData.sheetName}>
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden" key={sheetData.sheetName}>
       <HotTable
         ref={hotRef}
         {...settings}
@@ -99,3 +127,4 @@ export function EditorGrid({
     </div>
   );
 }
+

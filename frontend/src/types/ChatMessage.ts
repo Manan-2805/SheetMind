@@ -9,6 +9,9 @@ export interface ResultTable {
   columns: ResultColumn[];
   rows: Record<string, unknown>[];
   total_rows: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
 }
 
 export interface ChatMessage {
@@ -40,6 +43,7 @@ export interface ChatMessage {
   total_tokens?: number;
   is_error?: boolean;
   followups?: string[];
+  chart_url?: string;
 }
 
 export interface ChatSession {

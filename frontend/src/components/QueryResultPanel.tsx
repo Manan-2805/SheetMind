@@ -26,6 +26,9 @@ const CHART_TYPES = [
     { value: "pie", label: "Pie" },
     { value: "donut", label: "Donut" },
     { value: "scatter", label: "Scatter" },
+    { value: "histogram", label: "Histogram" },
+    { value: "heatmap", label: "Heatmap" },
+    { value: "pivot", label: "Pivot Table" },
 ] as const;
 
 type ChartType = (typeof CHART_TYPES)[number]["value"];
@@ -84,6 +87,7 @@ export function QueryResultPanel({
     const [paletteIndex, setPaletteIndex] = useState(0);
     const [xKey, setXKey] = useState<string | null>(null);
     const [yKey, setYKey] = useState<string | null>(null);
+    const [valueKey, setValueKey] = useState<string | null>(null);
 
     const columnMeta = useMemo(() => {
         if (!result) return { numeric: [], categorical: [] };
@@ -114,18 +118,21 @@ export function QueryResultPanel({
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setXKey(firstCategory);
         setYKey(firstNumeric);
+        setValueKey(firstNumeric);
         setChartImageUrl(null);
     }, [result, columnMeta]);
 
     const handleGenerate = async () => {
-        if (!result || !xKey || !yKey) return;
+        if (!result || !xKey) return;
+        if (chartType !== "histogram" && !yKey) return;
         setIsGenerating(true);
         try {
             const blob = await generateChart({
                 data: result.rows,
                 chart_type: chartType,
                 x_key: xKey,
-                y_key: yKey,
+                y_key: yKey || xKey,
+                value_key: (chartType === "heatmap" || chartType === "pivot") ? (valueKey ?? undefined) : undefined,
                 title: title || "Chart",
                 colors: PALETTES[paletteIndex].colors,
             });
@@ -141,13 +148,15 @@ export function QueryResultPanel({
     };
 
     const handleDownload = async (format: "PNG" | "SVG") => {
-        if (!result || !xKey || !yKey) return;
+        if (!result || !xKey) return;
+        if (chartType !== "histogram" && !yKey) return;
         try {
             const blob = await generateChart({
                 data: result.rows,
                 chart_type: chartType,
                 x_key: xKey,
-                y_key: yKey,
+                y_key: yKey || xKey,
+                value_key: (chartType === "heatmap" || chartType === "pivot") ? (valueKey ?? undefined) : undefined,
                 title: title || "Chart",
                 colors: PALETTES[paletteIndex].colors,
                 output_format: format.toLowerCase(),
@@ -168,7 +177,7 @@ export function QueryResultPanel({
     return (
         <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
             <DialogContent
-                className="max-w-5xl"
+                className="w-[calc(100%-10%)] h-[calc(100%-10%)] overflow-y-auto"
                 style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
             >
                 <DialogHeader>
@@ -181,9 +190,9 @@ export function QueryResultPanel({
                 {!result ? (
                     <p className="mt-4 text-body" style={{ color: "var(--color-text-tertiary)" }}>No data available.</p>
                 ) : (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-[300px_1fr]">
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[300px_1fr] h-full">
                         <div
-                            className="flex flex-col gap-4 rounded-xl p-4"
+                            className="flex flex-col gap-4 rounded-xl p-4 h-full"
                             style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-subtle)" }}
                         >
                             <div>
@@ -201,7 +210,9 @@ export function QueryResultPanel({
                             </div>
 
                             <div>
-                                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>X Axis</label>
+                                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>
+                                    {chartType === "histogram" ? "Column to Bin" : "X Axis"}
+                                </label>
                                 <Select value={xKey ?? ""} onValueChange={(value) => setXKey(value)}>
                                     <SelectTrigger className="mt-1 w-full">
                                         <SelectValue placeholder="Select column" />
@@ -214,23 +225,49 @@ export function QueryResultPanel({
                                 </Select>
                             </div>
 
-                            <div>
-                                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>Y Axis</label>
-                                <Select value={yKey ?? ""} onValueChange={(value) => setYKey(value)}>
-                                    <SelectTrigger className="mt-1 w-full">
-                                        <SelectValue placeholder="Select numeric column" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {result.columns
-                                            .filter((col) => col.key !== xKey)
-                                            .map((col) => (
-                                                <SelectItem key={col.key} value={col.key}>
-                                                    {col.label}
-                                                </SelectItem>
-                                            ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {chartType !== "histogram" && (
+                                <div>
+                                    <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>
+                                        {chartType === "heatmap" || chartType === "pivot" ? "Y Axis (Rows)" : "Y Axis"}
+                                    </label>
+                                    <Select value={yKey ?? ""} onValueChange={(value) => setYKey(value)}>
+                                        <SelectTrigger className="mt-1 w-full">
+                                            <SelectValue placeholder="Select column" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {result.columns
+                                                .filter((col) => col.key !== xKey)
+                                                .map((col) => (
+                                                    <SelectItem key={col.key} value={col.key}>
+                                                        {col.label}
+                                                    </SelectItem>
+                                                ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+
+                            {(chartType === "heatmap" || chartType === "pivot") && (
+                                <div>
+                                    <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>
+                                        Value (Numeric)
+                                    </label>
+                                    <Select value={valueKey ?? ""} onValueChange={(value) => setValueKey(value)}>
+                                        <SelectTrigger className="mt-1 w-full">
+                                            <SelectValue placeholder="Select numeric column" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {result.columns
+                                                .filter((col) => col.key !== xKey && col.key !== yKey)
+                                                .map((col) => (
+                                                    <SelectItem key={col.key} value={col.key}>
+                                                        {col.label}
+                                                    </SelectItem>
+                                                ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
 
                             <div>
                                 <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>Palette</label>
@@ -288,7 +325,7 @@ export function QueryResultPanel({
                             )}
 
                             {chartImageUrl && !isGenerating && (
-                                <div className="rounded-xl p-4 overflow-hidden flex items-center justify-center bg-white" style={{ border: "1px solid var(--color-border-subtle)", height: "320px" }}>
+                                <div className="rounded-xl p-4 overflow-hidden flex items-center justify-center bg-white" style={{ border: "1px solid var(--color-border-subtle)", height: "70%" }}>
                                     <img
                                         src={chartImageUrl}
                                         alt="Generated Chart"

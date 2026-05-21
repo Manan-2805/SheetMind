@@ -47,6 +47,36 @@ export function ChatMessage({
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const { addToast } = useToast();
 
+  const chartUrl = message.chart_url || (message.result_data as unknown as Record<string, unknown> | null)?.chart_url as string | undefined;
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLocalData(message.result_data || null);
+  }, [message.id, message.result_data]);
+
+  const getFullChartUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+      return url;
+    }
+    const backendBase = "http://localhost:8000";
+    return `${backendBase}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
+  const handlePageChange = async (newPage: number) => {
+    if (isLoadingData) return;
+    setIsLoadingData(true);
+    try {
+      const data = await getMessageData(message.id, newPage);
+      setLocalData(data);
+    } catch (e) {
+      console.error(e);
+      addToast({ type: "error", title: "Error", description: "Failed to load page data" });
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const {
     showAutocomplete,
@@ -332,11 +362,78 @@ export function ChatMessage({
           dangerouslySetInnerHTML={{ __html: renderContent(message.content) }}
         />
 
-        {isLoadingData ? (
-          <p className="text-body italic" style={{ color: "var(--color-text-tertiary)" }}>Loading table data...</p>
-        ) : (message.result_data || localData) ? (
-          <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: "var(--color-border-default)", height: "350px" }}>
-            <ExcelPreviewGrid result={message.result_data || localData!} />
+        {/* Render Auto Chart */}
+        {chartUrl && (
+          <div
+            className="mt-4 border rounded-xl overflow-hidden p-4 flex flex-col items-center justify-center bg-[#1E1E1E]/50 backdrop-blur-md animate-in fade-in"
+            style={{ borderColor: "var(--color-border-default)" }}
+          >
+            <span
+              className="text-ui-label font-semibold mb-2 self-start"
+              style={{ color: "var(--color-text-secondary)" }}
+            >
+              Auto Generated Chart
+            </span>
+            <img
+              src={getFullChartUrl(chartUrl)}
+              alt="Auto Generated Chart"
+              className="max-h-[300px] w-auto object-contain rounded-lg shadow-lg border"
+              style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
+              onError={(e) => {
+                console.error("Failed to load chart image:", e);
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
+          </div>
+        )}
+
+        {isLoadingData && !localData ? (
+          <p className="text-body italic mt-4 animate-pulse" style={{ color: "var(--color-text-tertiary)" }}>Loading table data...</p>
+        ) : (localData || message.result_data) ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <div
+              className="border rounded-xl overflow-hidden relative"
+              style={{ borderColor: "var(--color-border-default)", height: "300px" }}
+            >
+              {isLoadingData && (
+                <div className="absolute inset-0 bg-black/30 backdrop-blur-sm z-10 flex items-center justify-center">
+                  <span className="text-body font-medium text-white">Loading page...</span>
+                </div>
+              )}
+              <ExcelPreviewGrid result={localData || message.result_data!} />
+            </div>
+
+            {/* Pagination Controls */}
+            {((localData || message.result_data)?.total_pages ?? 1) > 1 && (
+              <div className="flex items-center justify-between px-2 py-1 bg-transparent text-ui-label mt-1">
+                <span
+                  className="text-body text-[12px]"
+                  style={{ color: "var(--color-text-tertiary)" }}
+                >
+                  Showing page {(localData || message.result_data)?.page ?? 1} of {(localData || message.result_data)?.total_pages ?? 1} ({(localData || message.result_data)?.total_rows ?? 0} rows total)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(((localData || message.result_data)?.page ?? 1) - 1)}
+                    disabled={((localData || message.result_data)?.page ?? 1) <= 1 || isLoadingData}
+                    className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30 border transition-all text-xs flex items-center gap-1 px-2.5 py-1"
+                    style={{ borderColor: "var(--color-border-default)", color: "var(--color-text-secondary)" }}
+                  >
+                    <ChevronLeft size={14} />
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => handlePageChange(((localData || message.result_data)?.page ?? 1) + 1)}
+                    disabled={((localData || message.result_data)?.page ?? 1) >= ((localData || message.result_data)?.total_pages ?? 1) || isLoadingData}
+                    className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30 border transition-all text-xs flex items-center gap-1 px-2.5 py-1"
+                    style={{ borderColor: "var(--color-border-default)", color: "var(--color-text-secondary)" }}
+                  >
+                    Next
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
 

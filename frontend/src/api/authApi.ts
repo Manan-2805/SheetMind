@@ -20,15 +20,22 @@ function handleError(error: unknown): never {
   throw { status: 0, message: "Network error" } satisfies ApiError;
 }
 
+export interface UserInfo {
+  username: string;
+  last_login?: string;
+  created_at?: string;
+}
+
 interface SetupResponse {
   username: string;
   created_at: string;
+  last_login: string;
   is_new: boolean;
 }
 
-export async function listUsers(): Promise<string[]> {
+export async function listUsers(): Promise<UserInfo[]> {
   try {
-    const res = await client.get<{ users: string[] }>("/auth/users");
+    const res = await client.get<{ users: UserInfo[] }>("/auth/users");
     return res.data.users;
   } catch {
     return [];
@@ -40,6 +47,15 @@ export async function setupUser(username: string): Promise<SetupResponse> {
     const res: AxiosResponse<SetupResponse> = await client.post("/auth/setup", {
       username,
     });
+    return res.data;
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+export async function deleteUser(username: string): Promise<{ success: boolean; username: string }> {
+  try {
+    const res = await client.delete<{ success: boolean; username: string }>(`/auth/users/${username}`);
     return res.data;
   } catch (error) {
     handleError(error);

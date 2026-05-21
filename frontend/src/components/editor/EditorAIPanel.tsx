@@ -118,7 +118,7 @@ export function EditorAIPanel({
                 }}
                 placeholder="Describe a modification to this sheet..."
                 disabled={isGenerating}
-                className="w-full rounded-xl bg-bg-base pl-24 pr-12 py-3 text-sm border border-border-default outline-none focus:border-accent transition-colors resize-none overflow-hidden"
+                className="w-full rounded-xl bg-bg-base pl-3 pr-12 py-3 text-sm border border-border-default outline-none focus:border-accent transition-colors resize-none overflow-hidden"
                 rows={1}
                 style={{ minHeight: '44px', maxHeight: '120px' }}
               />

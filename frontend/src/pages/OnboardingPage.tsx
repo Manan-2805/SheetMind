@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { UserPlus, ChevronRight } from "lucide-react";
+import { UserPlus, ChevronRight, Trash2 } from "lucide-react";
 
-import { listUsers, setupUser } from "@/api/authApi";
+import { listUsers, setupUser, deleteUser, type UserInfo } from "@/api/authApi";
 import { useToast } from "@/hooks/useToast";
 
 interface OnboardingPageProps {
@@ -10,11 +10,12 @@ interface OnboardingPageProps {
 
 export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const { addToast } = useToast();
-  const [existingUsers, setExistingUsers] = useState<string[]>([]);
+  const [existingUsers, setExistingUsers] = useState<UserInfo[]>([]);
   const [mode, setMode] = useState<"select" | "new">("select");
   const [newUsername, setNewUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 10);
@@ -43,7 +44,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     e.preventDefault();
     const name = newUsername.trim();
     if (!name) return;
-    if (existingUsers.map((u) => u.toLowerCase()).includes(name.toLowerCase())) {
+    if (existingUsers.map((u) => u.username.toLowerCase()).includes(name.toLowerCase())) {
       addToast({ type: "error", title: "Name taken", description: "That username already exists. Please select it from the list." });
       return;
     }
@@ -57,6 +58,39 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       addToast({ type: "error", title: "Setup failed", description: e?.message ?? "Could not complete setup" });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (username: string) => {
+    setIsLoading(true);
+    try {
+      await deleteUser(username);
+      addToast({
+        type: "success",
+        title: "Profile Deleted",
+        description: `Profile "${username}" was deleted successfully.`,
+      });
+      const users = await listUsers();
+      setExistingUsers(users);
+      if (users.length === 0) {
+        setMode("new");
+      }
+      setUserToDelete(null);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addToast({ type: "error", title: "Delete failed", description: e?.message ?? "Failed to delete user" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatLastLogin = (isoString?: string) => {
+    if (!isoString) return "";
+    try {
+      const d = new Date(isoString);
+      return `Last login: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    } catch {
+      return "";
     }
   };
 
@@ -124,37 +158,49 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         {mode === "select" && existingUsers.length > 0 && (
           <div className="flex flex-col gap-2">
             {existingUsers.map((user) => (
-              <button
-                key={user}
-                onClick={() => !isLoading && handleSelectUser(user)}
-                disabled={isLoading}
-                className="flex items-center justify-between rounded-lg px-4 py-3 text-body transition-all duration-[120ms] active:scale-[0.97]"
+              <div
+                key={user.username}
+                className="group relative flex items-center justify-between rounded-lg px-4 py-3 text-body transition-all duration-[120ms]"
                 style={{
                   backgroundColor: "var(--color-bg-hover)",
                   border: "1px solid var(--color-border-default)",
                   color: "var(--color-text-primary)",
                   opacity: isLoading ? 0.6 : 1,
                 }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-accent)";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-accent-subtle)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border-default)";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-bg-hover)";
-                }}
               >
-                <div className="flex items-center gap-3">
+                <button
+                  disabled={isLoading}
+                  onClick={() => !isLoading && handleSelectUser(user.username)}
+                  className="flex flex-1 items-center gap-3 text-left outline-none min-w-0"
+                >
                   <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                     style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
                   >
-                    {user.charAt(0).toUpperCase()}
+                    {user.username.charAt(0).toUpperCase()}
                   </div>
-                  <span>{user}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate font-medium">{user.username}</span>
+                    {user.last_login && (
+                      <span className="text-[10px]" style={{ color: "var(--color-text-tertiary)" }}>
+                        {formatLastLogin(user.last_login)}
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={isLoading}
+                    onClick={() => setUserToDelete(user.username)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-red-500 hover:bg-red-500/10 active:scale-95 transition-all duration-150"
+                    title="Delete Profile"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <ChevronRight size={16} style={{ color: "var(--color-text-tertiary)" }} />
                 </div>
-                <ChevronRight size={16} style={{ color: "var(--color-text-tertiary)" }} />
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -210,6 +256,46 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
           </form>
         )}
       </div>
+
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div
+            className="w-full max-w-xs rounded-xl p-5"
+            style={{
+              backgroundColor: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border-default)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+            }}
+          >
+            <h3 className="text-body-em font-semibold mb-2" style={{ color: "var(--color-text-primary)" }}>
+              Delete Profile?
+            </h3>
+            <p className="text-ui-label mb-4" style={{ color: "var(--color-text-secondary)" }}>
+              This will permanently delete all databases, uploaded files, query history, and charts for{" "}
+              <strong className="text-red-400">{userToDelete}</strong>. This action cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setUserToDelete(null)}
+                className="px-3 py-1.5 rounded text-ui-label font-medium transition-colors cursor-pointer"
+                style={{
+                  backgroundColor: "var(--color-bg-hover)",
+                  color: "var(--color-text-primary)",
+                  border: "1px solid var(--color-border-default)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteUser(userToDelete)}
+                className="px-3 py-1.5 rounded text-ui-label font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 transition-all cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

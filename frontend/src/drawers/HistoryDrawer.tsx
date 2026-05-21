@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { Edit2, Search, Star, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit2, Folder, FolderOpen, Search, Star, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { getSessions } from "@/api/chatApi";
-import { Drawer } from "@/components/ui/Drawer";
 import { SkeletonText } from "@/components/skeletons/SkeletonText";
+import { Drawer } from "@/components/ui/Drawer";
 import { useToast } from "@/hooks/useToast";
 import type { ChatSession } from "@/types/ChatMessage";
 import {
   formatRelativeTime,
   isToday,
-  isYesterday,
   isWithinLastWeek,
+  isYesterday,
 } from "@/utils/formatDate";
 
 interface HistoryDrawerProps {
@@ -52,6 +52,7 @@ export function HistoryDrawer({
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true);
 
   const load = useCallback(async () => {
     if (!open) return;
@@ -73,7 +74,9 @@ export function HistoryDrawer({
   const filtered = sessions.filter((s) =>
     s.title.toLowerCase().includes(search.toLowerCase())
   );
-  const groups = groupSessions(filtered);
+  const favorites = filtered.filter((s) => s.is_favorite);
+  const nonFavorites = filtered.filter((s) => !s.is_favorite);
+  const groups = groupSessions(nonFavorites);
   const ORDER: DateGroup[] = ["Today", "Yesterday", "Last 7 days", "Older"];
 
   return (
@@ -118,120 +121,269 @@ export function HistoryDrawer({
               ))}
             </div>
           ) : (
-            ORDER.map((group) => {
-              const items = groups[group];
-              if (!items.length) return null;
-              return (
-                <div key={group} className="mb-2">
-                  <p
-                    className="px-3 py-1 text-ui-label uppercase"
-                    style={{ color: "var(--color-text-tertiary)" }}
+            <>
+              {favorites.length > 0 && (
+                <div className="mb-4 px-2">
+                  <div
+                    className="flex items-center justify-between rounded-lg px-2.5 py-2 cursor-pointer transition-all duration-200 border border-white/5 backdrop-blur-md"
+                    style={{
+                      backgroundColor: "rgba(255, 255, 255, 0.03)",
+                    }}
+                    onClick={() => setIsFavoritesExpanded(!isFavoritesExpanded)}
                   >
-                    {group}
-                  </p>
-                  {items.map((session) => {
-                    const isActive = session.id === activeSessionId;
-                    const isHovered = hoveredId === session.id;
-                    return (
-                      <div
-                        key={session.id}
-                        className="group flex items-center rounded-md mx-1"
-                        style={{
-                          height: 36,
-                          backgroundColor: isActive
-                            ? "var(--color-bg-active)"
-                            : isHovered
-                              ? "var(--color-bg-hover)"
-                              : "transparent",
-                          cursor: "pointer",
-                        }}
-                        onMouseEnter={() => setHoveredId(session.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                        onClick={() => { onSelectSession(session.id); onClose(); }}
+                    <div className="flex items-center gap-2">
+                      {isFavoritesExpanded ? (
+                        <FolderOpen size={14} style={{ color: "var(--color-accent)" }} />
+                      ) : (
+                        <Folder size={14} style={{ color: "var(--color-accent)" }} />
+                      )}
+                      <span
+                        className="text-body font-medium"
+                        style={{ color: "var(--color-text-primary)" }}
                       >
-                        <span
-                          className="flex-1 truncate px-2 text-body"
-                          style={{
-                            color: isActive
-                              ? "var(--color-text-primary)"
-                              : "var(--color-text-secondary)",
-                          }}
-                        >
-                          {session.title}
-                        </span>
-                        {isHovered ? (
-                          <div className="flex shrink-0 items-center gap-0.5 pr-1">
-                            <button
-                              className="rounded p-1 transition-colors duration-[120ms]"
-                              style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
-                                  setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
-                                } catch {
-                                  addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
-                                }
+                        Favorites
+                      </span>
+                      <span
+                        className="rounded-full px-1.5 py-0.25 text-[10px] font-semibold"
+                        style={{
+                          backgroundColor: "rgba(255, 255, 255, 0.08)",
+                          color: "var(--color-text-secondary)",
+                        }}
+                      >
+                        {favorites.length}
+                      </span>
+                    </div>
+                    <div>
+                      {isFavoritesExpanded ? (
+                        <ChevronDown size={14} style={{ color: "var(--color-text-tertiary)" }} />
+                      ) : (
+                        <ChevronRight size={14} style={{ color: "var(--color-text-tertiary)" }} />
+                      )}
+                    </div>
+                  </div>
+                  
+                  {isFavoritesExpanded && (
+                    <div className="mt-1 flex flex-col gap-0.5 pl-1.5 border-l border-white/[0.04] ml-3.5">
+                      {favorites.map((session) => {
+                        const isActive = session.id === activeSessionId;
+                        const isHovered = hoveredId === session.id;
+                        return (
+                          <div
+                            key={session.id}
+                            className="group flex items-center rounded-md"
+                            style={{
+                              height: 36,
+                              backgroundColor: isActive
+                                ? "var(--color-bg-active)"
+                                : isHovered
+                                  ? "var(--color-bg-hover)"
+                                  : "transparent",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={() => setHoveredId(session.id)}
+                            onMouseLeave={() => setHoveredId(null)}
+                            onClick={() => { onSelectSession(session.id); onClose(); }}
+                          >
+                            <span
+                              className="flex-1 truncate px-2 text-body"
+                              style={{
+                                color: isActive
+                                  ? "var(--color-text-primary)"
+                                  : "var(--color-text-secondary)",
                               }}
-                              aria-label="Star session"
                             >
-                              <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
-                            </button>
-                            <button
-                              className="rounded p-1 transition-colors duration-[120ms]"
-                              style={{ color: "var(--color-text-tertiary)" }}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const newTitle = prompt("Enter new title for session:", session.title);
-                                if (newTitle && newTitle !== session.title) {
+                              {session.title}
+                            </span>
+                            {isHovered ? (
+                              <div className="flex shrink-0 items-center gap-0.5 pr-1">
+                                <button
+                                  className="rounded p-1 transition-colors duration-[120ms]"
+                                  style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
+                                      setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                    } catch {
+                                      addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
+                                    }
+                                  }}
+                                  aria-label="Star session"
+                                >
+                                  <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
+                                </button>
+                                <button
+                                  className="rounded p-1 transition-colors duration-[120ms]"
+                                  style={{ color: "var(--color-text-tertiary)" }}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const newTitle = prompt("Enter new title for session:", session.title);
+                                    if (newTitle && newTitle !== session.title) {
+                                      try {
+                                        const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
+                                        setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                      } catch {
+                                        addToast({ type: "error", title: "Error", description: "Failed to rename session" });
+                                      }
+                                    }
+                                  }}
+                                  aria-label="Rename session"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  className="rounded p-1 transition-colors duration-[120ms]"
+                                  style={{ color: "var(--color-text-tertiary)" }}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (confirm("Are you sure you want to delete this session?")) {
+                                      try {
+                                        await import("@/api/chatApi").then(m => m.deleteSession(session.id));
+                                        setSessions(prev => prev.filter(s => s.id !== session.id));
+                                        if (activeSessionId === session.id) {
+                                          navigate("/", { replace: true });
+                                        }
+                                      } catch {
+                                        addToast({ type: "error", title: "Error", description: "Failed to delete session" });
+                                      }
+                                    }
+                                  }}
+                                  aria-label="Delete session"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span
+                                className="shrink-0 pr-2 text-ui-label"
+                                style={{ color: "var(--color-text-tertiary)" }}
+                              >
+                                {formatRelativeTime(session.updated_at)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {ORDER.map((group) => {
+                const items = groups[group];
+                if (!items.length) return null;
+                return (
+                  <div key={group} className="mb-2">
+                    <p
+                      className="px-3 py-1 text-ui-label uppercase"
+                      style={{ color: "var(--color-text-tertiary)" }}
+                    >
+                      {group}
+                    </p>
+                    {items.map((session) => {
+                      const isActive = session.id === activeSessionId;
+                      const isHovered = hoveredId === session.id;
+                      return (
+                        <div
+                          key={session.id}
+                          className="group flex items-center rounded-md mx-1"
+                          style={{
+                            height: 36,
+                            backgroundColor: isActive
+                              ? "var(--color-bg-active)"
+                              : isHovered
+                                ? "var(--color-bg-hover)"
+                                : "transparent",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={() => setHoveredId(session.id)}
+                          onMouseLeave={() => setHoveredId(null)}
+                          onClick={() => { onSelectSession(session.id); onClose(); }}
+                        >
+                          <span
+                            className="flex-1 truncate px-2 text-body"
+                            style={{
+                              color: isActive
+                                ? "var(--color-text-primary)"
+                                : "var(--color-text-secondary)",
+                            }}
+                          >
+                            {session.title}
+                          </span>
+                          {isHovered ? (
+                            <div className="flex shrink-0 items-center gap-0.5 pr-1">
+                              <button
+                                className="rounded p-1 transition-colors duration-[120ms]"
+                                style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
                                   try {
-                                    const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
+                                    const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
                                     setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
                                   } catch {
-                                    addToast({ type: "error", title: "Error", description: "Failed to rename session" });
+                                    addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
                                   }
-                                }
-                              }}
-                              aria-label="Rename session"
-                            >
-                              <Edit2 size={12} />
-                            </button>
-                            <button
-                              className="rounded p-1 transition-colors duration-[120ms]"
-                              style={{ color: "var(--color-text-tertiary)" }}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm("Are you sure you want to delete this session?")) {
-                                  try {
-                                    await import("@/api/chatApi").then(m => m.deleteSession(session.id));
-                                    setSessions(prev => prev.filter(s => s.id !== session.id));
-                                    if (activeSessionId === session.id) {
-                                      navigate("/", { replace: true });
+                                }}
+                                aria-label="Star session"
+                              >
+                                <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
+                              </button>
+                              <button
+                                className="rounded p-1 transition-colors duration-[120ms]"
+                                style={{ color: "var(--color-text-tertiary)" }}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const newTitle = prompt("Enter new title for session:", session.title);
+                                  if (newTitle && newTitle !== session.title) {
+                                    try {
+                                      const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
+                                      setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                    } catch {
+                                      addToast({ type: "error", title: "Error", description: "Failed to rename session" });
                                     }
-                                  } catch {
-                                    addToast({ type: "error", title: "Error", description: "Failed to delete session" });
                                   }
-                                }
-                              }}
-                              aria-label="Delete session"
+                                }}
+                                aria-label="Rename session"
+                               >
+                                <Edit2 size={12} />
+                              </button>
+                              <button
+                                className="rounded p-1 transition-colors duration-[120ms]"
+                                style={{ color: "var(--color-text-tertiary)" }}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Are you sure you want to delete this session?")) {
+                                    try {
+                                      await import("@/api/chatApi").then(m => m.deleteSession(session.id));
+                                      setSessions(prev => prev.filter(s => s.id !== session.id));
+                                      if (activeSessionId === session.id) {
+                                        navigate("/", { replace: true });
+                                      }
+                                    } catch {
+                                      addToast({ type: "error", title: "Error", description: "Failed to delete session" });
+                                    }
+                                  }
+                                }}
+                                aria-label="Delete session"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className="shrink-0 pr-2 text-ui-label"
+                              style={{ color: "var(--color-text-tertiary)" }}
                             >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <span
-                            className="shrink-0 pr-2 text-ui-label"
-                            style={{ color: "var(--color-text-tertiary)" }}
-                          >
-                            {formatRelativeTime(session.updated_at)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })
+                              {formatRelativeTime(session.updated_at)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>

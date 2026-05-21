@@ -63,6 +63,7 @@ export function ChatInput({
       e.preventDefault();
       if (isLoading) return;
       if (!value.trim()) return;
+      if (value.length > 2000) return;
       onSend(value.trim(), referencedFiles);
     }
   };
@@ -91,6 +92,7 @@ export function ChatInput({
   const handleSendClick = () => {
     if (isLoading) return;
     if (!value.trim()) return;
+    if (value.length > 2000) return;
     onSend(value.trim(), referencedFiles);
   };
 
@@ -191,13 +193,15 @@ export function ChatInput({
 
           <button
             onClick={handleSendClick}
+            disabled={isLoading || value.length > 2000}
             className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-[120ms] active:scale-[0.97]"
             style={{
-              backgroundColor: value.trim()
+              backgroundColor: value.trim() && value.length <= 2000
                 ? "var(--color-accent)"
                 : "var(--color-bg-hover)",
-              color: value.trim() ? "#fff" : "var(--color-text-tertiary)",
-              cursor: "pointer",
+              color: value.trim() && value.length <= 2000 ? "#fff" : "var(--color-text-tertiary)",
+              cursor: value.trim() && value.length <= 2000 ? "pointer" : "not-allowed",
+              opacity: value.length > 2000 ? 0.5 : 1,
             }}
             aria-label="Send message"
           >
@@ -205,12 +209,20 @@ export function ChatInput({
           </button>
         </div>
 
-        <p
-          className="px-4 pb-3 text-ui-label"
+        <div
+          className="px-4 pb-3 flex justify-between items-center text-ui-label"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Type # to reference a file. Shift+Enter for new line.
-        </p>
+          <span>Type # to reference a file. Shift+Enter for new line.</span>
+          <span
+            style={{
+              color: value.length > 2000 ? "rgb(239, 68, 68)" : value.length > 1800 ? "rgb(251, 146, 60)" : "var(--color-text-tertiary)",
+              fontWeight: value.length > 1800 ? "bold" : "normal",
+            }}
+          >
+            {value.length}/2000
+          </span>
+        </div>
       </div>
     </div>
   );

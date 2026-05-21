@@ -36,6 +36,7 @@ export function AppShell() {
     regenerateResponse,
     setMessages,
     followups,
+    sqlRetryStatus,
   } = useChat();
 
   // Sync route param with chat session
@@ -149,6 +150,7 @@ export function AppShell() {
                 onRegenerateSubmit={regenerateResponse}
                 followups={followups}
                 onFollowupClick={(text) => sendChatMessage(text)}
+                sqlRetryStatus={sqlRetryStatus}
               />
             } />
             <Route path="/" element={
@@ -168,6 +170,7 @@ export function AppShell() {
                 onRegenerateSubmit={regenerateResponse}
                 followups={followups}
                 onFollowupClick={(text) => sendChatMessage(text)}
+                sqlRetryStatus={sqlRetryStatus}
               />
             } />
 

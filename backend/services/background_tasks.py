@@ -142,10 +142,10 @@ async def queue_worker():
 
 
 async def resume_pending_tasks():
-    import glob
-    db_files = glob.glob("sheetmind_*.duckdb")
-    for db_file in db_files:
-        username = db_file.replace("sheetmind_", "").replace(".duckdb", "")
+    from services.storage_service import list_account_users
+    users = list_account_users()
+    for user_info in users:
+        username = user_info["username"]
         token = current_username.set(username)
         try:
             conn = get_connection()

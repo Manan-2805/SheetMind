@@ -112,6 +112,9 @@ export function SettingsPage() {
   const [resultRowLimit, setResultRowLimit] = useState<number>(500);
   const [openaiMaxTokens, setOpenaiMaxTokens] = useState<number>(4000);
   const [ollamaMaxTokens, setOllamaMaxTokens] = useState<number>(4000);
+  const [autoSqlRetry, setAutoSqlRetry] = useState<boolean>(true);
+  const [autoSqlRetryMax, setAutoSqlRetryMax] = useState<number>(3);
+  const [autoChartDisplay, setAutoChartDisplay] = useState<boolean>(false);
 
   const [isTesting, setIsTesting] = useState(false);
   const [testStatus, setTestStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -140,6 +143,9 @@ export function SettingsPage() {
         setResultRowLimit(s.result_row_limit || 500);
         setOpenaiMaxTokens(s.openai.max_input_tokens || 4000);
         setOllamaMaxTokens(s.ollama.max_input_tokens || 4000);
+        setAutoSqlRetry(s.auto_sql_retry !== undefined ? s.auto_sql_retry : true);
+        setAutoSqlRetryMax(s.auto_sql_retry_max !== undefined ? s.auto_sql_retry_max : 3);
+        setAutoChartDisplay(s.auto_chart_display !== undefined ? s.auto_chart_display : false);
       })
       .catch((err: { message?: string }) => {
         addToast({ type: "error", title: "Error", description: err.message });
@@ -190,6 +196,9 @@ export function SettingsPage() {
         ollama: { url: ollamaUrl, model: ollamaSelectedModel, max_input_tokens: ollamaMaxTokens },
         max_concurrent_uploads: maxConcurrentUploads,
         result_row_limit: resultRowLimit,
+        auto_sql_retry: autoSqlRetry,
+        auto_sql_retry_max: autoSqlRetryMax,
+        auto_chart_display: autoChartDisplay,
       });
       addToast({ type: "success", title: "Settings Saved", description: "All changes have been persisted." });
     } catch (err: unknown) {
@@ -393,7 +402,89 @@ export function SettingsPage() {
             </div>
           </section>
 
-          {/* Data & Privacy Section */}
+          {/* Chat Behavior Section */}
+          <section>
+            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Chat Behavior</h3>
+            <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+              {/* Result Row Limit */}
+              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Result Row Limit</p>
+                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per query</p>
+                </div>
+                <input
+                  type="number"
+                  min="10"
+                  max="5000"
+                  value={resultRowLimit}
+                  onChange={(e) => setResultRowLimit(parseInt(e.target.value) || 500)}
+                  className="w-20 rounded-lg px-2 py-1.5 text-body outline-none text-center"
+                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                />
+              </div>
+
+              {/* Auto SQL Retry */}
+              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Auto SQL Error Retry</p>
+                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Automatically correct SQL syntax errors and retry query execution</p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={autoSqlRetry}
+                    onChange={(e) => setAutoSqlRetry(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div
+                    className="peer h-6 w-11 rounded-full bg-gray-600 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-[var(--color-accent)] peer-checked:after:translate-x-full peer-focus:outline-none"
+                    style={{ transition: "background-color 0.2s" }}
+                  />
+                </label>
+              </div>
+
+              {/* Max Retry Attempts */}
+              {autoSqlRetry && (
+                <div className="flex items-center justify-between py-4 animate-in fade-in slide-in-from-top-1" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                  <div>
+                    <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Max Retry Attempts</p>
+                    <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Number of automatic correction attempts</p>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={autoSqlRetryMax}
+                    onChange={(e) => setAutoSqlRetryMax(parseInt(e.target.value) || 3)}
+                    className="w-16 rounded-lg px-2 py-1.5 text-body outline-none text-center"
+                    style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                  />
+                </div>
+              )}
+
+              {/* Auto-Generate Chart */}
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Auto-Generate Charts</p>
+                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Suggest and display chart visualization above result tables</p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={autoChartDisplay}
+                    onChange={(e) => setAutoChartDisplay(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div
+                    className="peer h-6 w-11 rounded-full bg-gray-600 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-[var(--color-accent)] peer-checked:after:translate-x-full peer-focus:outline-none"
+                    style={{ transition: "background-color 0.2s" }}
+                  />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          {/* Data & Performance Section */}
           <section>
             <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Data & Performance</h3>
             <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
@@ -409,21 +500,6 @@ export function SettingsPage() {
                   value={maxConcurrentUploads}
                   onChange={(e) => setMaxConcurrentUploads(parseInt(e.target.value) || 1)}
                   className="w-16 rounded-lg px-2 py-1.5 text-body outline-none text-center"
-                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
-                />
-              </div>
-              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
-                <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Result Row Limit</p>
-                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per query</p>
-                </div>
-                <input
-                  type="number"
-                  min="10"
-                  max="5000"
-                  value={resultRowLimit}
-                  onChange={(e) => setResultRowLimit(parseInt(e.target.value) || 500)}
-                  className="w-20 rounded-lg px-2 py-1.5 text-body outline-none text-center"
                   style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
                 />
               </div>

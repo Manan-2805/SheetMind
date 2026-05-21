@@ -6,11 +6,12 @@ from typing import Any, Optional
 
 import pandas as pd
 from openpyxl import load_workbook
-from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from schemas.excel_editor_schemas import CellFormatting, SheetData, ExcelEditorFile, HistoryRecord
+from schemas.excel_editor_schemas import CellFormatting, ExcelEditorFile, HistoryRecord, SheetData
 from services.duckdb_service import get_connection
-from services.excel_import_service import safe_table_name, import_df_to_duckdb, now_utc
+from services.excel_import_service import import_df_to_duckdb, now_utc, safe_table_name
+from services.storage_service import get_backups_dir
 
 def get_available_files() -> list[ExcelEditorFile]:
     conn = get_connection()
@@ -71,18 +72,10 @@ def open_excel_file(file_id: str) -> Optional[dict]:
     }
 
 def create_backup(stored_path: str, filename: str) -> str:
-    from dependencies import current_username
-    username = current_username.get("default")
-    
-    # Base dir for backups
-    home = os.path.expanduser("~")
-    backup_dir = os.path.join(home, ".sheetmind", "users", username, ".backups")
-    os.makedirs(backup_dir, exist_ok=True)
-    
+    backup_dir = get_backups_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"{os.path.splitext(filename)[0]}_{timestamp}.xlsx"
-    backup_path = os.path.join(backup_dir, backup_filename)
-    
+    backup_path = str(backup_dir / backup_filename)
     shutil.copy2(stored_path, backup_path)
     return backup_path
 
@@ -91,31 +84,17 @@ def record_edit_history(
     sheet_name: str,
     operation_type: str,
     rows_affected: int,
-    backup_path: str
+    backup_path: str,
 ):
     conn = get_connection()
-    # Check if table exists, create if not
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS edit_history (
-            id VARCHAR PRIMARY KEY,
-            excel_file_id VARCHAR NOT NULL,
-            sheet_name VARCHAR NOT NULL,
-            operation_type VARCHAR NOT NULL,
-            rows_affected INTEGER NOT NULL,
-            applied_at TIMESTAMP NOT NULL,
-            backup_path VARCHAR NOT NULL,
-            was_confirmed BOOLEAN DEFAULT true
-        )
-    """)
-    
     history_id = f"hist-{uuid.uuid4().hex[:8]}"
     conn.execute(
         """
-        INSERT INTO edit_history 
+        INSERT INTO edit_history
         (id, excel_file_id, sheet_name, operation_type, rows_affected, applied_at, backup_path)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        [history_id, excel_file_id, sheet_name, operation_type, rows_affected, now_utc(), backup_path]
+        [history_id, excel_file_id, sheet_name, operation_type, rows_affected, now_utc(), backup_path],
     )
 
 def apply_mutation_to_disk(
@@ -296,20 +275,6 @@ def refresh_duckdb_sheet(file_id: str, sheet_name: str, file_path: str):
 
 def get_edit_history(file_id: str) -> list[HistoryRecord]:
     conn = get_connection()
-    # Check if table exists
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS edit_history (
-            id VARCHAR PRIMARY KEY,
-            excel_file_id VARCHAR NOT NULL,
-            sheet_name VARCHAR NOT NULL,
-            operation_type VARCHAR NOT NULL,
-            rows_affected INTEGER NOT NULL,
-            applied_at TIMESTAMP NOT NULL,
-            backup_path VARCHAR NOT NULL,
-            was_confirmed BOOLEAN DEFAULT true
-        )
-    """)
-    
     rows = conn.execute(
         """
         SELECT id, sheet_name, operation_type, rows_affected, applied_at, backup_path
@@ -317,9 +282,9 @@ def get_edit_history(file_id: str) -> list[HistoryRecord]:
         WHERE excel_file_id = ?
         ORDER BY applied_at DESC
         """,
-        [file_id]
+        [file_id],
     ).fetchall()
-    
+
     return [
         HistoryRecord(
             id=r[0],
@@ -327,7 +292,7 @@ def get_edit_history(file_id: str) -> list[HistoryRecord]:
             operationType=r[2],
             rowsAffected=r[3],
             appliedAt=r[4],
-            backupPath=r[5]
+            backupPath=r[5],
         )
         for r in rows
     ]

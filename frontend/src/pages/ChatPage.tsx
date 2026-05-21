@@ -29,6 +29,7 @@ interface ChatPageProps {
   onNewChat?: () => void;
   followups?: string[];
   onFollowupClick?: (text: string) => void;
+  sqlRetryStatus?: { attempt: number; max: number; error?: string } | null;
 }
 
 interface SaveQueryState {
@@ -49,6 +50,7 @@ export function ChatPage({
   onRegenerateSubmit,
   followups,
   onFollowupClick,
+  sqlRetryStatus,
 }: ChatPageProps) {
   const [inputValue, setInputValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -365,6 +367,28 @@ export function ChatPage({
                   onVersionChange={(delta: number) => msg.parent_user_message_id && handleVersionChange(msg.parent_user_message_id, delta)}
                 />
               ))}
+              {sqlRetryStatus && (
+                <div
+                  className="mb-4 flex items-center justify-between gap-3 p-4 rounded-xl backdrop-blur-md animate-pulse"
+                  style={{
+                    backgroundColor: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.2)",
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                    <span className="text-body-em text-red-400">
+                      Retrying SQL... (Attempt {sqlRetryStatus.attempt} of {sqlRetryStatus.max})
+                    </span>
+                  </div>
+                  {sqlRetryStatus.error && (
+                    <span className="text-body text-red-500 text-sm truncate max-w-md">
+                      Error: {sqlRetryStatus.error}
+                    </span>
+                  )}
+                </div>
+              )}
               <div ref={bottomRef} />
             </div>
           </div>

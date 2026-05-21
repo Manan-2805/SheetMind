@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import json
+import math
 import re
 import time
 from typing import Any
@@ -735,14 +736,19 @@ def _get_message_sql(conn, message_id: str) -> tuple[str, str]:
     return sql, str(session_id)
 
 
-def get_message_data(message_id: str) -> ResultTable:
+def get_message_data(
+    message_id: str, page: int = 1, page_size: int | None = None
+) -> ResultTable:
     conn = get_connection()
     sql, _session_id = _get_message_sql(conn, message_id)
     try:
         df = conn.execute(sql).fetchdf()
     except Exception as exc:
         raise ValueError(f"SQL Execution Failed: {str(exc)}")
-    return dataframe_to_result_table(df, _get_result_row_limit())
+    return dataframe_to_result_table(
+        df, _get_result_row_limit(), page=page, page_size=page_size
+    )
+
 
 
 def export_message(message_id: str):
@@ -999,6 +1005,124 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
             return resp.json()["response"].strip()
 
 
+
+
+_ws_clients: set = set()
+
+
+async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
+    """Broadcast an event to all connected WebSocket clients."""
+    import asyncio
+    dead = set()
+    for ws in list(_ws_clients):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.add(ws)
+    _ws_clients.difference_update(dead)
+
+
+async def _generate_combined_second_call(
+    result_rows: list,
+    columns: list,
+    user_question: str,
+) -> dict:
+    """Single second LLM call returning summary + followups JSON."""
+    prompt = f"""You are a data analysis assistant. Based on the query result below, provide:
+1. A 1-2 sentence plain English summary of what the data shows. Be specific about numbers.
+2. Exactly 3 short follow-up questions (max 12 words each) a user might ask next.
+
+User asked: {user_question}
+Columns: {columns}
+First 5 rows: {result_rows[:5]}
+Total rows: {len(result_rows)}
+
+Respond ONLY with this JSON (no markdown, no prose):
+{{
+  "summary": "<1-2 sentence summary>",
+  "followups": ["<q1>", "<q2>", "<q3>"]
+}}"""
+
+    settings = get_settings()
+    try:
+        if settings.llm_provider == "openai":
+            client = AsyncOpenAI(api_key=settings.openai.api_key)
+            model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=250,
+                response_format={"type": "json_object"},
+            )
+            text = response.choices[0].message.content or "{}"
+            in_tok = response.usage.prompt_tokens if response.usage else 0
+            out_tok = response.usage.completion_tokens if response.usage else 0
+        else:
+            url = settings.ollama.url.rstrip("/")
+            async with httpx.AsyncClient() as hclient:
+                resp = await hclient.post(
+                    f"{url}/api/generate",
+                    json={
+                        "model": settings.ollama.model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "format": "json",
+                        "options": {"temperature": 0, "num_predict": 250},
+                    },
+                    timeout=60.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                text = data.get("response", "{}")
+                in_tok = data.get("prompt_eval_count", 0)
+                out_tok = data.get("eval_count", 0)
+
+        if "{" in text and "}" in text:
+            text = text[text.find("{"):text.rfind("}") + 1]
+        parsed = json.loads(text)
+        return {
+            "summary": parsed.get("summary", ""),
+            "followups": parsed.get("followups", [])[:3],
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+        }
+    except Exception as e:
+        return {"summary": "", "followups": [], "input_tokens": 0, "output_tokens": 0}
+
+
+async def _auto_generate_chart(
+    result_rows: list,
+    columns: list,
+    user_question: str,
+    session_id: str,
+) -> str | None:
+    """Auto-generate a chart and return the URL path."""
+    import uuid as _uuid
+    from services.chart_service import generate_chart
+    from services.storage_service import get_charts_dir
+
+    if len(columns) < 1 or len(result_rows) < 2:
+        return None
+
+    x_key = columns[0]
+    y_key = columns[1] if len(columns) > 1 else columns[0]
+
+    charts_dir = get_charts_dir()
+    chart_filename = f"auto_{_uuid.uuid4().hex[:8]}.png"
+    chart_path = charts_dir / chart_filename
+
+    buf = generate_chart(
+        data=result_rows,
+        chart_type="bar",
+        x_key=x_key,
+        y_key=y_key,
+        title=user_question[:60],
+    )
+    chart_path.write_bytes(buf.read())
+    return f"/api/chat/charts/static/{chart_filename}"
+
+
 async def create_message(
     session_id: str,
     content: str,
@@ -1063,65 +1187,113 @@ async def create_message(
     sql_exec_ms = 0
     summary_gen_ms = 0
     result_table = None
-    result_rows = []
+    result_rows: list[dict] = []
+    columns: list[ResultColumn] = []
     nl_summary = llm_message or "I'm sorry, I couldn't process that request."
+    sql_error: str | None = None
+    followups_from_combined: list[str] = []
+    chart_url: str | None = None
 
     if sql:
         t2 = time.time()
-        try:
-            df = conn.execute(sql).fetchdf()
-            sql_exec_ms = int((time.time() - t2) * 1000)
-            columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
-            rows = df.to_dict('records')
-            clean_rows = []
-            for r in rows:
-                clean_r = {k: (None if pd.isna(v) else v) for k, v in r.items()}
-                clean_rows.append(clean_r)
-            
-            total_rows = len(clean_rows)
-            row_limit = _get_result_row_limit()
-            result_table = ResultTable(columns=columns, rows=clean_rows[:row_limit], total_rows=total_rows)
-            result_rows = clean_rows
-            
+        sql_exec_succeeded = False
+        auto_retry = settings.auto_sql_retry
+        max_retries = settings.auto_sql_retry_max if auto_retry else 0
+        retry_count = 0
+        current_sql = sql
+
+        while retry_count <= max_retries:
+            try:
+                df = conn.execute(current_sql).fetchdf()
+                sql_exec_ms = int((time.time() - t2) * 1000)
+                columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
+                rows_raw = df.to_dict("records")
+                clean_rows = [{k: (None if pd.isna(v) else v) for k, v in r.items()} for r in rows_raw]
+                result_rows = clean_rows
+                sql = current_sql
+                sql_exec_succeeded = True
+                break
+            except Exception as exec_err:
+                sql_exec_ms = int((time.time() - t2) * 1000)
+                sql_error = str(exec_err)
+                if auto_retry and retry_count < max_retries:
+                    retry_count += 1
+                    await _broadcast_ws_event(
+                        session_id,
+                        {"type": "sql_retry", "attempt": retry_count, "max": max_retries, "error": sql_error},
+                    )
+                    retry_content = (
+                        f"{content}\n\n[Previous SQL failed: {sql_error}. Please fix and regenerate.]"
+                    )
+                    retry_messages = build_sql_prompt(retry_content, schema_info, turns, max_input_tokens)
+                    retry_res = await generate_sql(retry_messages)
+                    current_sql = retry_res.get("sql") or ""
+                    if not current_sql:
+                        break
+                else:
+                    break
+
+        if sql_exec_succeeded:
             t3 = time.time()
             try:
-                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], content)
-                nl_summary = summary_res["summary"]
-                total_input_tokens += summary_res.get("input_tokens", 0)
-                total_output_tokens += summary_res.get("output_tokens", 0)
+                combined_res = await _generate_combined_second_call(
+                    result_rows=result_rows,
+                    columns=[c.key for c in columns],
+                    user_question=content,
+                )
+                nl_summary = combined_res.get("summary") or llm_message or "Query completed."
+                followups_from_combined = combined_res.get("followups") or []
+                total_input_tokens += combined_res.get("input_tokens", 0)
+                total_output_tokens += combined_res.get("output_tokens", 0)
             except Exception as e:
                 nl_summary = f"Results found, but summary failed: {e}"
             summary_gen_ms = int((time.time() - t3) * 1000)
-            
+        else:
+            nl_summary = f"SQL Error: {sql_error}"
+
+    row_limit = _get_result_row_limit()
+    total_db_rows = len(result_rows)
+    if result_rows:
+        page = 1
+        page_size = row_limit
+        total_pages = max(1, math.ceil(total_db_rows / page_size))
+        result_table = ResultTable(
+            columns=columns,
+            rows=result_rows[:row_limit],
+            total_rows=total_db_rows,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+        )
+
+    if result_rows and settings.auto_chart_display:
+        try:
+            chart_url = await _auto_generate_chart(result_rows, [c.key for c in columns], content, session_id)
         except Exception as e:
-            sql_exec_ms = int((time.time() - t2) * 1000)
-            nl_summary = f"SQL Error: {str(e)}"
+            print(f"Auto chart generation failed: {e}")
 
     total_ms = int((time.time() - t0) * 1000)
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-a"
     now2 = _now()
-    
-    res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
+
+    res_data_json = json.dumps(result_table.model_dump(), default=str) if result_table else None
     conn.execute(
-        """INSERT INTO chat_messages 
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
+        """INSERT INTO chat_messages
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms,
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
-            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms,
          total_input_tokens, total_output_tokens, len(result_rows), user_msg_id, res_data_json, 1,
-            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence]
+         sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_url]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
-    followups = []
-    if result_rows:
-        try:
-            followups = await generate_followups(result_rows, [c.key for c in columns], content)
-            if followups:
-                conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
-        except Exception as e:
-            print(f"Follow-up generation failed: {e}")
+    followups: list[str] = []
+    if result_rows and followups_from_combined:
+        followups = followups_from_combined
+        conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
+
 
 
     return ChatMessageResponse(
@@ -1145,7 +1317,8 @@ async def create_message(
         total_ms=total_ms,
         model_name=model_name,
         confidence_score=confidence,
-        followups=followups
+        followups=followups,
+        chart_url=chart_url,
     )
 
 
@@ -1206,7 +1379,17 @@ async def regenerate_response(
             clean_rows = [{k: (None if pd.isna(v) else v) for k, v in r.items()} for r in rows]
             total_rows = len(clean_rows)
             row_limit = _get_result_row_limit()
-            result_table = ResultTable(columns=columns, rows=clean_rows[:row_limit], total_rows=total_rows)
+            page = 1
+            page_size = row_limit
+            total_pages = max(1, math.ceil(total_rows / page_size))
+            result_table = ResultTable(
+                columns=columns,
+                rows=clean_rows[:row_limit],
+                total_rows=total_rows,
+                page=page,
+                page_size=page_size,
+                total_pages=total_pages,
+            )
             result_rows = clean_rows
             
             t3 = time.time()

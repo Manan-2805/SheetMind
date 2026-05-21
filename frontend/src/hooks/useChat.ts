@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -25,6 +25,31 @@ export function useChat() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [followups, setFollowups] = useState<string[]>([]);
+  const [sqlRetryStatus, setSqlRetryStatus] = useState<{ attempt: number; max: number; error?: string } | null>(null);
+
+  useEffect(() => {
+    const username = localStorage.getItem("sheetmind-username") || "default";
+    const ws = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${username}`);
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "sql_retry") {
+          setSqlRetryStatus({
+            attempt: payload.attempt,
+            max: payload.max,
+            error: payload.error,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const loadSessions = useCallback(async () => {
     setIsLoadingSessions(true);
@@ -120,6 +145,7 @@ export function useChat() {
       };
 
       setMessages((prev) => [...prev, userMessage, typingMessage]);
+      setSqlRetryStatus(null);
       setIsSending(true);
 
       if (isNewSession) {
@@ -131,6 +157,7 @@ export function useChat() {
 
       try {
         const response = await sendMessage(sessionId, content, referencedFiles);
+        setSqlRetryStatus(null);
         setMessages((prev) => {
           const updated = prev
             .filter((m) => m.id !== TYPING_ID)
@@ -209,10 +236,12 @@ export function useChat() {
       typingMessage
     ]);
     setFollowups([]);
+    setSqlRetryStatus(null);
     setIsSending(true);
 
     try {
       const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
+      setSqlRetryStatus(null);
       setMessages(prev => {
         const updated = prev
           .filter(m => m.id !== TYPING_ID)
@@ -261,6 +290,7 @@ export function useChat() {
       typingMessage
     ]);
     setFollowups([]);
+    setSqlRetryStatus(null);
     setIsSending(true);
 
     try {
@@ -272,6 +302,7 @@ export function useChat() {
         instruction,
         parentId // Correctly pass the user message ID
       );
+      setSqlRetryStatus(null);
       setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
       if (response.followups) {
         setFollowups(response.followups);
@@ -306,5 +337,6 @@ export function useChat() {
     setMessages,
     followups,
     setFollowups,
+    sqlRetryStatus,
   };
 }
