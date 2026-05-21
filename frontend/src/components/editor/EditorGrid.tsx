@@ -80,12 +80,19 @@ export function EditorGrid({
     const el = containerRef.current;
     if (!el) return;
 
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.target === el) {
           const h = el.offsetHeight;
           if (h > 0) {
-            setContainerHeight(h);
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => {
+              setContainerHeight(h);
+            }, 80);
           }
         }
       }
@@ -99,6 +106,9 @@ export function EditorGrid({
 
     return () => {
       observer.disconnect();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [sheetData.sheetName]);
 
@@ -112,7 +122,7 @@ export function EditorGrid({
   }, [sheetData.sheetName, sheetData.rowCount, sheetData.colCount]);
 
   const settings = useMemo(() => {
-    const isLarge = sheetData.rowCount > 5000;
+    const isLarge = sheetData.rowCount > 1000;
 
     return {
       licenseKey: 'non-commercial-and-evaluation',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -27,6 +27,12 @@ export function useChat() {
   const [followups, setFollowups] = useState<string[]>([]);
   const [sqlRetryStatus, setSqlRetryStatus] = useState<{ attempt: number; max: number; error?: string } | null>(null);
 
+  const activeSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   useEffect(() => {
     const username = localStorage.getItem("sheetmind-username") || "default";
     const ws = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${username}`);
@@ -34,6 +40,9 @@ export function useChat() {
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        if (payload.session_id && payload.session_id !== activeSessionIdRef.current) {
+          return;
+        }
         if (payload.type === "sql_retry") {
           setSqlRetryStatus({
             attempt: payload.attempt,

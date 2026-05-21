@@ -131,8 +131,11 @@ def open_excel_sheet(file_id: str, sheet_name: str) -> Optional[SheetData]:
 def create_backup(stored_path: str, filename: str) -> str:
     backup_dir = get_backups_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_filename = f"{os.path.splitext(filename)[0]}_{timestamp}.xlsx"
+    # Extract only the base name to avoid nested folder structure issues in backups
+    base_name = os.path.basename(filename)
+    backup_filename = f"{os.path.splitext(base_name)[0]}_{timestamp}.xlsx"
     backup_path = str(backup_dir / backup_filename)
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
     shutil.copy2(stored_path, backup_path)
     return backup_path
 

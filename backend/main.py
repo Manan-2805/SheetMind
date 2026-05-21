@@ -88,16 +88,19 @@ async def websocket_datasources(websocket: WebSocket):
     token = current_username.set(username)
 
     try:
-        conn = get_connection()
         while True:
-            rows = conn.execute(
-                "SELECT id, status, error_message, row_count, column_count FROM excel_files"
-            ).fetchall()
-            updates = [
-                {"id": r[0], "status": r[1], "error_message": r[2], "row_count": r[3], "column_count": r[4]}
-                for r in rows
-            ]
-            await websocket.send_json({"type": "status_update", "data": updates})
+            try:
+                conn = get_connection()
+                rows = conn.execute(
+                    "SELECT id, status, error_message, row_count, column_count FROM excel_files"
+                ).fetchall()
+                updates = [
+                    {"id": r[0], "status": r[1], "error_message": r[2], "row_count": r[3], "column_count": r[4]}
+                    for r in rows
+                ]
+                await websocket.send_json({"type": "status_update", "data": updates})
+            except Exception as loop_err:
+                print(f"WebSocket loop query error: {loop_err}")
             await asyncio.sleep(2)
     except WebSocketDisconnect:
         pass

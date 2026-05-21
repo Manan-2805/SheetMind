@@ -1,6 +1,6 @@
 .venv
 Temp
 .vscode
-backend/sheetmind.duckdb.wal
+backend/.sheetmind
 relational_excels
 debug_prompts

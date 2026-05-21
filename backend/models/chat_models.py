@@ -272,7 +272,6 @@ def estimate_tokens(text: str) -> int:
     """
     return int((len(text) / 4) * 1.1)
 
-
 def build_sql_prompt(
     current_question: str,
     schema_info: str,
@@ -305,16 +304,17 @@ STRICT RULES — violating any of these is an error:
 5. When no tables are available or referenced, ask the user to attach a file
    using #filename in their message.
 6. Respond ONLY with a valid JSON object. No prose, no markdown fences.
+7. CRITICAL: Never ask conversational confirmation questions like "Should I run this SQL?", "Would you like me to query this?", or "Would you like me to analyze X?". Confidently write and execute the SQL immediately! Do not ask the user for confirmation first.
 
 The current user question is always the block labeled "CURRENT USER QUESTION".
-Conversation history may appear after it for context only.
+Conversation history appears before it for context.
 
 Required response format:
-{{
+{
     "sql": "<complete working DuckDB SQL query, or empty string>",
     "message": "<explanation, clarification question, or conversational reply>",
     "confidence": <integer 1 to 5>
-}}"""
+}"""
 
     schema_content = f"Available DuckDB tables:\n{schema_info}"
     current_question_block = "\n".join([
@@ -326,7 +326,6 @@ Required response format:
     messages = [
         {"role": "system", "content": system_content},
         {"role": "system", "content": schema_content},
-        {"role": "user", "content": current_question_block},
     ]
 
     # Build history entries, add until token budget is reached
@@ -378,6 +377,8 @@ Required response format:
     for user_block, assistant_block in inserted:
         messages.append(user_block)
         messages.append(assistant_block)
+
+    messages.append({"role": "user", "content": current_question_block})
     return messages
 
 
@@ -402,6 +403,14 @@ def _collect_schema_refs(
         if ref and ref not in seen:
             combined.append(ref)
             seen.add(ref)
+
+    if not combined:
+        rows = conn.execute("SELECT id FROM excel_files WHERE status = 'completed'").fetchall()
+        for r in rows:
+            file_id = r[0]
+            if file_id not in seen:
+                combined.append(file_id)
+                seen.add(file_id)
 
     return combined
 
@@ -1013,10 +1022,12 @@ _ws_clients: set = set()
 async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
     """Broadcast an event to all connected WebSocket clients."""
     import asyncio
+    payload_copy = dict(payload)
+    payload_copy["session_id"] = session_id
     dead = set()
     for ws in list(_ws_clients):
         try:
-            await ws.send_json(payload)
+            await ws.send_json(payload_copy)
         except Exception:
             dead.add(ws)
     _ws_clients.difference_update(dead)
@@ -1346,11 +1357,31 @@ async def regenerate_response(
     import asyncio
     conn = get_connection()
 
+    # Query and append previous SQL error/query
+    prev_sql = None
+    prev_error = None
+    if parent_user_message_id:
+        prev_row = conn.execute(
+            """SELECT sql_generated, content FROM chat_messages 
+               WHERE session_id = ? AND role = 'assistant' AND parent_user_message_id = ? 
+               ORDER BY version DESC LIMIT 1""",
+            [session_id, parent_user_message_id]
+        ).fetchone()
+        if prev_row:
+            prev_sql = prev_row[0]
+            if prev_row[1] and ("SQL Error:" in prev_row[1] or "error" in prev_row[1].lower()):
+                prev_error = prev_row[1]
+
+    effective_content = content
+    if prev_sql and prev_error:
+        effective_content = f"{content}\n\n[Previous SQL failed: {prev_error}\nSQL attempted: {prev_sql}\nPlease fix and generate a valid SQL query.]"
+
     turns = _get_recent_turns(conn, session_id, exclude_message_id=parent_user_message_id, limit_pairs=4)
 
-    _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
-    schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
-    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, content)
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "gathering_files"})
+    _, effective_refs = _resolve_schema_tables(conn, referenced_files, effective_content)
+    schema_refs = _collect_schema_refs(conn, referenced_files, effective_content, turns)
+    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, effective_content)
     history_table_names = _extract_table_names_from_turns(turns)
     schema_tables = _merge_table_entries(schema_tables, _resolve_tables_by_name(conn, history_table_names))
     schema_info = _build_schema_info(conn, schema_tables)
@@ -1362,9 +1393,11 @@ async def regenerate_response(
     else:
         max_input_tokens = settings.ollama.max_input_tokens
 
-    messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
+    messages = build_sql_prompt(effective_content, schema_info, turns, max_input_tokens)
     _write_debug_prompt(messages, f"SQL_REGENERATE [{session_id}]")
 
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     t0 = time.time()
     sql_res = await generate_sql(messages)
     sql = sql_res.get("sql") or ""
@@ -1382,6 +1415,7 @@ async def regenerate_response(
     nl_summary = llm_message or "I'm sorry, I couldn't process that request."
 
     if sql:
+        await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "executing_sql"})
         t2 = time.time()
         try:
             df = conn.execute(sql).fetchdf()
@@ -1404,9 +1438,10 @@ async def regenerate_response(
             )
             result_rows = clean_rows
             
+            await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_summary"})
             t3 = time.time()
             try:
-                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], content)
+                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], effective_content)
                 nl_summary = summary_res["summary"]
                 total_input_tokens += summary_res.get("input_tokens", 0)
                 total_output_tokens += summary_res.get("output_tokens", 0)
@@ -1417,6 +1452,14 @@ async def regenerate_response(
             sql_exec_ms = int((time.time() - t2) * 1000)
             nl_summary = f"SQL Error: {str(e)}"
 
+    chart_url = None
+    if result_rows and settings.auto_chart_display:
+        await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_charts"})
+        try:
+            chart_url = await _auto_generate_chart(result_rows, [c.key for c in columns], effective_content, session_id)
+        except Exception as e:
+            print(f"Auto chart generation failed: {e}")
+
     total_ms = int((time.time() - t0) * 1000)
     now2 = _now()
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-r"
@@ -1424,27 +1467,29 @@ async def regenerate_response(
     v_row = conn.execute("SELECT MAX(version) FROM chat_messages WHERE parent_user_message_id = ?", [parent_user_message_id]).fetchone()
     next_version = (v_row[0] or 1) + 1 if v_row and v_row[0] else 1
 
-    res_data_json = json.dumps(result_table.dict(), default=str) if result_table else None
+    res_data_json = json.dumps(result_table.model_dump(), default=str) if result_table else None
     conn.execute(
         """INSERT INTO chat_messages
         (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
-            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
          total_input_tokens, total_output_tokens, len(result_rows), parent_user_message_id, res_data_json, next_version,
-            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence]
+            sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_url]
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
     followups = []
     if result_rows:
         try:
-            followups = await generate_followups(result_rows, [c.key for c in columns], content)
+            followups = await generate_followups(result_rows, [c.key for c in columns], effective_content)
             if followups:
                 conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
         except Exception as e:
             print(f"Follow-up generation failed: {e}")
+
+    await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "complete"})
 
     return ChatMessageResponse(
         id=assistant_msg_id,
@@ -1467,7 +1512,8 @@ async def regenerate_response(
         total_ms=total_ms,
         model_name=model_name,
         confidence_score=confidence,
-        followups=followups
+        followups=followups,
+        chart_url=chart_url,
     )
 
 

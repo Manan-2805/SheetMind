@@ -27,6 +27,11 @@ class UrlUploadRequest(BaseModel):
 router = APIRouter(prefix="/data-sources", tags=["data-sources"])
 
 
+def _safe_storage_filename(filename: str, fallback: str = "upload.xlsx") -> str:
+    base_name = Path(filename).name or fallback
+    return base_name.replace(" ", "_").replace("-", "_")
+
+
 @router.get("/list-for-autocomplete", response_model=AutocompleteResponse)
 async def list_for_autocomplete() -> AutocompleteResponse:
     return ds_models.list_for_autocomplete()
@@ -46,7 +51,7 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
     now = datetime.now(timezone.utc)
     file_id = f"ds-{uuid.uuid4().hex[:8]}"
 
-    safe_filename = filename.replace(" ", "_").replace("-", "_")
+    safe_filename = _safe_storage_filename(filename)
     stored_path = str(uploads_dir / f"{file_id}_{safe_filename}")
 
     async with aiofiles.open(stored_path, "wb") as out_file:
@@ -120,7 +125,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
     uploads_dir = get_uploads_dir(username)
     file_id = f"ds-{uuid.uuid4().hex[:8]}"
 
-    safe_filename = filename.replace(" ", "_").replace("-", "_")
+    safe_filename = _safe_storage_filename(filename)
     stored_path = str(uploads_dir / f"{file_id}_{safe_filename}")
 
     async with aiofiles.open(stored_path, "wb") as out_file:

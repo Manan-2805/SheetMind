@@ -103,6 +103,10 @@ export function useExcelEditor() {
     syncGridToSession();
 
     const targetSheet = session.sheets[index];
+
+    // Set the active sheet index immediately to trigger the skeleton loader
+    setSession((prev) => prev ? ({ ...prev, activeSheetIndex: index }) : null);
+
     if (!targetSheet.columns || !targetSheet.rows) {
       setIsLoading(true);
       try {
@@ -119,7 +123,6 @@ export function useExcelEditor() {
           };
           return {
             ...prev,
-            activeSheetIndex: index,
             sheets: updatedSheets,
           };
         });
@@ -128,9 +131,6 @@ export function useExcelEditor() {
       } finally {
         setIsLoading(false);
       }
-    } else {
-      // 2. Switch index
-      setSession((prev) => prev ? ({ ...prev, activeSheetIndex: index }) : null);
     }
   }, [session, syncGridToSession]);
 

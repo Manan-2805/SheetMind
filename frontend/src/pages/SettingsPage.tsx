@@ -109,7 +109,6 @@ export function SettingsPage() {
   const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
   const [ollamaSelectedModel, setOllamaSelectedModel] = useState<string>("");
 
-  const [maxConcurrentUploads, setMaxConcurrentUploads] = useState<number>(1);
   const [resultRowLimit, setResultRowLimit] = useState<number>(500);
   const [openaiMaxTokens, setOpenaiMaxTokens] = useState<number>(4000);
   const [ollamaMaxTokens, setOllamaMaxTokens] = useState<number>(4000);
@@ -143,7 +142,6 @@ export function SettingsPage() {
         setOpenaiModel(s.openai.model);
         setOllamaUrl(s.ollama.url);
         setOllamaSelectedModel(s.ollama.model || "");
-        setMaxConcurrentUploads(s.max_concurrent_uploads || 1);
         setResultRowLimit(s.result_row_limit || 500);
         setOpenaiMaxTokens(s.openai.max_input_tokens || 4000);
         setOllamaMaxTokens(s.ollama.max_input_tokens || 4000);
@@ -197,7 +195,6 @@ export function SettingsPage() {
         llm_provider: llmProvider,
         openai: { api_key: apiKey, model: openaiModel, max_input_tokens: openaiMaxTokens },
         ollama: { url: ollamaUrl, model: ollamaSelectedModel, max_input_tokens: ollamaMaxTokens },
-        max_concurrent_uploads: maxConcurrentUploads,
         result_row_limit: resultRowLimit,
         auto_sql_retry: autoSqlRetry,
         auto_sql_retry_max: autoSqlRetryMax,
@@ -491,21 +488,6 @@ export function SettingsPage() {
           <section>
             <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Data & Performance</h3>
             <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
-              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
-                <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Max Concurrent Uploads</p>
-                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Limit parallel processing for stability</p>
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={maxConcurrentUploads}
-                  onChange={(e) => setMaxConcurrentUploads(parseInt(e.target.value) || 1)}
-                  className="w-16 rounded-lg px-2 py-1.5 text-body outline-none text-center"
-                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
-                />
-              </div>
               <DestructiveButton
                 label="Clear Chat History"
                 description="Delete all conversation data permanently"

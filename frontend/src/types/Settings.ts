@@ -21,7 +21,6 @@ export interface Settings {
   ollama: OllamaSettings;
   username: string;
   created_at: string;
-  max_concurrent_uploads: number;
   result_row_limit: number;
   max_input_tokens: number;
   auto_sql_retry: boolean;

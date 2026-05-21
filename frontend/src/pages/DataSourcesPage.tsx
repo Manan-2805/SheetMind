@@ -78,7 +78,8 @@ export function DataSourcesPage() {
 
     function connect() {
       if (!isMounted) return;
-      ws = new WebSocket("ws://localhost:8000/api/ws/datasources");
+      const username = localStorage.getItem("sheetmind-username") || "default";
+      ws = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`);
 
       ws.onmessage = (e) => {
         try {
