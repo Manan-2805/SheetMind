@@ -1,0 +1,19 @@
+services:
+  postgres:
+    ports: !reset []
+
+  backend:
+    volumes: !reset []
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    volumes: !reset []
+    command: !reset ""
+    entrypoint: !reset []
+
+  nginx:
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
