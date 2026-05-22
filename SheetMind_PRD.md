@@ -1,102 +1,112 @@
-**SheetMind**
+# SheetMind
 
-Product Requirements Document
+**Product Requirements Document**
 
-_Version 1.1 · Desktop Application_
+_Version 1.2 · Desktop Application_
 
 Windows · macOS · Linux
 
 _Intelligence built into every sheet._
 
-_v1.1 - Updated with implemented features, Excel mutation engine, and feature checklist_
+_v1.2 — Added Excel Editor page, Live Dashboard page, updated sidebar, expanded error states and suggestions._
 
-# **1\. Product Overview**
+---
 
-## **1.1 Vision**
+# 1. Product Overview
 
-SheetMind is a cross-platform portable desktop application that lets users upload Excel files and query them using natural language. It converts queries into SQL, executes them against a local DuckDB database, and returns results as tables, charts, or downloadable Excel files - with no cloud dependency or complex setup. Users can also mutate Excel data and inject formulas using natural language, with a diff-preview and confirmation step before any changes are applied.
+## 1.1 Vision
 
-## **1.2 Target Platforms**
+SheetMind is a cross-platform portable desktop application that lets users upload Excel files and query them using natural language. It converts queries into SQL, executes them against a local DuckDB database, and returns results as tables, charts, or downloadable Excel files — with no cloud dependency or complex setup. Users can also mutate Excel data and inject formulas using natural language, edit spreadsheets directly in a full grid editor, and build visual dashboards powered entirely by their saved queries — all with a required confirmation step before any destructive action.
+
+## 1.2 Target Platforms
 
 - Windows (x64)
 - macOS (x64 + Apple Silicon universal binary)
 - Linux (x64)
 
-## **1.3 Distribution**
+## 1.3 Distribution
 
 Portable: single installer or executable per platform. No external database server, no cloud backend required. Internet is only needed for OpenAI API calls when the user selects OpenAI as the LLM provider.
 
-## **1.4 Core Tech Stack**
+## 1.4 Core Tech Stack
 
-| **Layer** | **Technology**                 | **Rationale**                                       |
-| --------- | ------------------------------ | --------------------------------------------------- |
-| Shell     | Electron                       | Cross-platform desktop, spawns Python backend       |
-| Frontend  | React + TypeScript + Vite      | Type safety, fast dev iteration, small bundles      |
-| Styling   | Tailwind CSS v4 + shadcn/ui    | Utility-first with accessible Radix primitives      |
-| Charts    | react-apexcharts (core import) | 10 chart types, built-in dark theme, tree-shakeable |
-| Backend   | FastAPI + Uvicorn              | Async, streaming-friendly, easy to bundle           |
-| Database  | DuckDB                         | Vectorized analytical queries, file-native          |
-| LLM       | OpenAI API or Ollama (local)   | User's choice, full offline support via Ollama      |
-| Packaging | PyInstaller + electron-builder | Battle-tested cross-platform bundling               |
+| Layer | Technology | Rationale |
+|---|---|---|
+| Shell | Electron | Cross-platform desktop, spawns Python backend |
+| Frontend | React + TypeScript + Vite | Type safety, fast dev iteration, small bundles |
+| Styling | Tailwind CSS v4 + shadcn/ui | Utility-first with accessible Radix primitives |
+| Charts | react-apexcharts (core import) | 10 chart types, built-in dark theme, tree-shakeable |
+| Grid Editor | Handsontable + @handsontable/react | Full spreadsheet editing with freeze, sort, context menu |
+| Dashboard Layout | react-grid-layout | Drag-and-drop responsive grid, well-maintained |
+| Dashboard Export | html2canvas | DOM-to-PNG snapshot for dashboard export |
+| Backend | FastAPI + Uvicorn | Async, streaming-friendly, easy to bundle |
+| Database | DuckDB | Vectorised analytical queries, file-native |
+| LLM | OpenAI API or Ollama (local) | User's choice, full offline support via Ollama |
+| Packaging | PyInstaller + electron-builder | Battle-tested cross-platform bundling |
 
-# **2\. Architecture Overview**
+---
 
-## **2.1 Process Model**
+# 2. Architecture Overview
+
+## 2.1 Process Model
 
 Electron spawns a PyInstaller-bundled FastAPI process on startup. The frontend communicates with this backend over localhost. On quit, Electron terminates the child process cleanly.
 
-## **2.2 Multi-User Model**
+## 2.2 Multi-User Model
 
-SheetMind supports multiple local user accounts. On first launch, the user enters a username. All subsequent launches show a list of existing accounts to select from. Each user account has a completely isolated DuckDB database file, upload folder, and settings - no data bleeds between accounts.
+SheetMind supports multiple local user accounts. On first launch, the user enters a username. All subsequent launches show a list of existing accounts to select from. Each user account has a completely isolated DuckDB database file, upload folder, and settings — no data bleeds between accounts.
 
-Future: Replace username-only login with Google OAuth. The multi-user infrastructure is already in place - auth upgrade is a swap of the login screen only.
+Future: Replace username-only login with Google OAuth. The multi-user infrastructure is already in place — auth upgrade is a swap of the login screen only.
 
-## **2.3 Local Data Storage**
+## 2.3 Local Data Storage
 
 Data is stored per user under a shared app directory:
 
-| **Path**                                       | **Contents**                                  |
-| ---------------------------------------------- | --------------------------------------------- |
-| ~/.sheetmind/users/{username}/main.duckdb      | All Excel data + app metadata for this user   |
-| ~/.sheetmind/users/{username}/uploaded_excels/ | Copies of original Excel files                |
-| ~/.sheetmind/users/{username}/exports/         | Generated Excel exports from query results    |
-| ~/.sheetmind/users/{username}/charts/          | Saved chart images                            |
-| ~/.sheetmind/users/{username}/.backups/        | Auto-versioned backups before Excel mutations |
-| ~/.sheetmind/users/{username}/settings.json    | User preferences (theme, LLM config, limits)  |
-| ~/.sheetmind/accounts.json                     | List of registered usernames for login screen |
+| Path | Contents |
+|---|---|
+| `~/.sheetmind/users/{username}/main.duckdb` | All Excel data + app metadata for this user |
+| `~/.sheetmind/users/{username}/uploaded_excels/` | Copies of original Excel files |
+| `~/.sheetmind/users/{username}/exports/` | Generated Excel exports from query results |
+| `~/.sheetmind/users/{username}/charts/` | Saved chart images |
+| `~/.sheetmind/users/{username}/.backups/` | Auto-versioned backups before Excel mutations and saves |
+| `~/.sheetmind/users/{username}/dashboard_exports/` | PNG snapshots exported from dashboards |
+| `~/.sheetmind/users/{username}/settings.json` | User preferences (theme, LLM config, limits) |
+| `~/.sheetmind/accounts.json` | List of registered usernames for login screen |
 
-## **2.4 Database Schema (DuckDB - per user)**
+## 2.4 Database Schema (DuckDB — per user)
 
-| **Table**     | **Purpose**               | **Key Columns**                                                                                                                            |
-| ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| excel_files   | Excel file registry       | id, original_filename, stored_path, uploaded_at, file_size_bytes                                                                           |
-| excel_sheets  | Sheet to DuckDB table map | id, excel_file_id, sheet_name, table_name, row_count, col_count                                                                            |
-| chat_sessions | Chat history sessions     | id, title, created_at, updated_at, is_favorite                                                                                             |
-| chat_messages | Individual messages       | id, session_id, role, content, sql_generated, sql_execution_ms, llm_generation_ms, token_count_input, token_count_output, confidence_score |
-| saved_queries | Labeled reusable queries  | id, label, nl_query, sql_query, use_count, last_used_at, is_favorite                                                                       |
-| artifacts     | Exports and chart files   | id, type, filename, file_path, source_message_id, title, created_at                                                                        |
-| edit_history  | Excel mutation audit log  | id, excel_file_id, sheet_name, operation_type, rows_affected, applied_at, backup_path, was_confirmed                                       |
+| Table | Purpose | Key Columns |
+|---|---|---|
+| `excel_files` | Excel file registry | id, original_filename, stored_path, uploaded_at, file_size_bytes |
+| `excel_sheets` | Sheet to DuckDB table map | id, excel_file_id, sheet_name, table_name, row_count, col_count |
+| `chat_sessions` | Chat history sessions | id, title, created_at, updated_at, is_favorite |
+| `chat_messages` | Individual messages | id, session_id, role, content, sql_generated, sql_execution_ms, llm_generation_ms, token_count_input, token_count_output, confidence_score |
+| `saved_queries` | Labeled reusable queries | id, label, nl_query, sql_query, use_count, last_used_at, is_favorite |
+| `artifacts` | Exports and chart files | id, type, filename, file_path, source_message_id, title, created_at |
+| `edit_history` | Excel mutation audit log | id, excel_file_id, sheet_name, operation_type, rows_affected, applied_at, backup_path, was_confirmed |
+| `dashboards` | Dashboard registry | id, title, layout_json, created_at, updated_at, is_favorite, thumbnail_path |
+| `dashboard_widgets` | Individual widgets on a dashboard | id, dashboard_id, widget_type, label, saved_query_id, column_config_json, position_json, size |
 
-## **2.5 NL to SQL Pipeline**
+## 2.5 NL to SQL Pipeline
 
 The core pipeline runs on every user query. Self-correction is limited to 2 retries.
 
-- User types query with #filename reference in chat input
-- Frontend parser extracts #refs and resolves them to DuckDB table names
-- POST /query sends NL text + resolved table list to FastAPI
+- User types query with `#filename` reference in chat input
+- Frontend parser extracts `#refs` and resolves them to DuckDB table names
+- `POST /query` sends NL text + resolved table list to FastAPI
 - Schema fetcher pulls column names, types, and 3 sample rows for referenced tables only
 - Prompt builder injects schema + NL into a structured system prompt template
 - LLM provider router sends to OpenAI or Ollama based on user settings
-- LLM returns candidate SQL + a self-assessed confidence score (1-5)
+- LLM returns candidate SQL + a self-assessed confidence score (1–5)
 - SQL executor runs the query on DuckDB. On error: send error back to LLM for correction (max 2 retries)
 - Result returned to frontend as: table, auto-detected chart suggestion, Excel export option, NL summary
 
-## **2.6 NL to Excel Mutation Pipeline**
+## 2.6 NL to Excel Mutation Pipeline
 
 A separate pipeline handles user requests that modify Excel data rather than query it. Triggered when the LLM classifies a message as a mutation intent.
 
-- User describes a change in natural language (e.g. increase column D by 0.25 where column E is less than 50)
-- Backend detects mutation intent and routes to excel_edit_service
+- User describes a change in natural language
+- Backend detects mutation intent and routes to `excel_edit_service`
 - Schema fetcher pulls column names and types for the target sheet
 - LLM generates a structured operation JSON (type, condition, target_column, expression)
 - AST safety validator checks the expression against an allowlist of permitted node types
@@ -106,120 +116,132 @@ A separate pipeline handles user requests that modify Excel data rather than que
 - On confirm: pandas operation applied, file written back via openpyxl, DuckDB table refreshed, backup created
 - On cancel: no changes applied, diff discarded
 
-Security: All LLM-generated expressions are validated against an AST allowlist before eval. No imports, no file system access, no function calls beyond pandas column operations are permitted.
+Security: All LLM-generated expressions are validated against an AST allowlist before `eval`. No imports, no file system access, no function calls beyond pandas column operations are permitted.
 
-# **3\. Application Layout**
+---
 
-## **3.1 Shell Structure**
+# 3. Application Layout
+
+## 3.1 Shell Structure
 
 A 52px fixed left sidebar (icon-only, always visible) sits alongside the main content area. The sidebar never collapses. Tooltips appear on hover after a 300ms delay. All navigation is icon-based with no text labels.
 
-## **3.2 Left Sidebar Navigation**
+## 3.2 Left Sidebar Navigation
 
-| **Position** | **Icon**  | **Label**     | **Action**                         | **Opens As**            |
-| ------------ | --------- | ------------- | ---------------------------------- | ----------------------- |
-| Top          | SquarePen | New chat      | Opens a fresh chat session         | Replaces main area      |
-| Top          | Clock     | History       | Browse and search past sessions    | Slide-in drawer (220px) |
-| Top          | Layers    | Artifacts     | View all exports and charts        | Slide-in drawer (280px) |
-| Top          | Bookmark  | Saved queries | Browse and reuse labeled queries   | Slide-in drawer (300px) |
-| Top          | Database  | Data sources  | Upload and manage Excel files      | Replaces main area      |
-| Bottom       | Settings  | Settings      | Theme, LLM config, data management | Replaces main area      |
+| Position | Icon | Label | Action | Opens As |
+|---|---|---|---|---|
+| Top | SquarePen | New chat | Opens a fresh chat session | Replaces main area |
+| Top | Clock | History | Browse and search past sessions | Slide-in drawer (220px) |
+| Top | Layers | Artifacts | View all exports and charts | Slide-in drawer (280px) |
+| Top | Bookmark | Saved queries | Browse and reuse labeled queries | Slide-in drawer (300px) |
+| Top | Database | Data Sources | Upload and manage Excel files | Replaces main area |
+| Top | TableProperties | Excel Editor | Full spreadsheet grid editor | Replaces main area |
+| Top | LayoutDashboard | Dashboards | Create and view dashboards | Replaces main area |
+| Bottom | Settings | Settings | Theme, LLM config, data management | Replaces main area |
 
-Active sidebar item: 36x36px violet background pill behind icon, 8px radius, white icon. Hover: bg-hover background, icon brightens, 120ms transition.
+Active sidebar item: 36×36px violet background pill behind icon, 8px radius, white icon. Hover: bg-hover background, icon brightens, 120ms transition.
 
-# **4\. Feature Specifications**
+---
 
-## **4.1 Onboarding / User Login**
+# 4. Feature Specifications
+
+## 4.1 Onboarding / User Login
 
 Shown on first launch and when no active session exists in localStorage.
 
 - Full-screen centered card with violet radial glow behind it.
-- App logo, name SheetMind, and tagline displayed above the input.
-- Input: What should we call you? - username only, no password.
-- On submit: checks accounts.json for existing accounts and shows a list of previous users to select from. New users are added to the list.
+- App logo, name **SheetMind**, and tagline displayed above the input.
+- Input: "What should we call you?" — username only, no password.
+- On submit: checks `accounts.json` for existing accounts and shows a list of previous users to select from. New users are added to the list.
 - Account selection shows username + last login date. Clicking a name logs in immediately.
 - Card fade-in + slide-up 12px animation on mount (300ms ease-out).
 
 Planned upgrade: Replace username-only login with Google OAuth in v2. The multi-user infrastructure (per-user DuckDB, per-user folder) is already built to support this without structural changes.
 
-## **4.2 Chat Page**
+---
 
-### **Empty state**
+## 4.2 Chat Page
+
+### Empty state
 
 - Centered: SheetMind logo, tagline, and three suggestion chip buttons.
 - Each chip pre-fills the chat input with a sample query on click.
 
-### **Chat input**
+### Chat input
 
 - Multi-line textarea. Shift+Enter for newline, Enter to send.
-- \# triggers a file autocomplete dropdown positioned at cursor using textarea-caret library.
+- `#` triggers a file autocomplete dropdown positioned at cursor using `textarea-caret` library.
 - Dropdown shows filename rows with indented sheet name sub-rows. Two-level, keyboard-navigable (arrow keys, Enter, Escape).
 - Send button: violet, disabled when empty or while streaming.
 - Character counter appears above 2,000 characters only.
 
-### **Message display**
+### Message display
 
 - User messages: right-aligned, bg-hover background, rounded corners (bottom-right 2px), max 60% width.
 - Assistant messages: left-aligned, violet circle S icon, no bubble background, full content width.
 - Optimistic UI: user message appears in the list immediately before the API call returns.
-- TypingIndicator: three pulsing dots + Generating SQL... text appears while the pipeline runs.
+- TypingIndicator: three pulsing dots + "Generating SQL..." text appears while the pipeline runs.
 
-### **Result table**
+### Result table
 
 - Inline sortable table below assistant message. Click column header to sort asc/desc.
 - Configurable row display: user can set how many rows are shown (default 8, options 10, 25, 50, 100).
-- Results above the row limit show: Showing N of M rows with export prompt.
+- Results above the row limit show: "Showing N of M rows" with export prompt.
 - Alternating row backgrounds. 36px row height.
-- NL summary: 1-2 sentence plain English interpretation below the table, in text-secondary italic.
+- NL summary: 1–2 sentence plain English interpretation below the table, in text-secondary italic.
 
-### **Per-message action bar (hover to reveal)**
+### Per-message action bar (hover to reveal)
 
-| **Action**      | **Icon**   | **Behaviour**                                                                                           |
-| --------------- | ---------- | ------------------------------------------------------------------------------------------------------- |
-| Regenerate      | RotateCcw  | Re-sends the same NL query. Opens an optional input to add correction instructions before regenerating. |
-| Like            | ThumbsUp   | Marks message positively, stored locally in DuckDB.                                                     |
-| Dislike         | ThumbsDown | Marks negatively. Opens a one-line feedback input.                                                      |
-| Export as chart | BarChart2  | Opens chart builder panel pre-loaded with this result set.                                              |
-| Export to Excel | Download   | Generates .xlsx from result, saves to artifacts, shows toast.                                           |
-| View SQL        | Code2      | Opens a read-only modal showing the generated SQL in JetBrains Mono.                                    |
-| Save query      | Star       | Opens save-query dialog. Label is pre-filled by LLM, user can edit.                                     |
+| Action | Icon | Behaviour |
+|---|---|---|
+| Regenerate | RotateCcw | Re-sends the same NL query. Opens an optional input to add correction instructions before regenerating. |
+| Like | ThumbsUp | Marks message positively, stored locally in DuckDB. |
+| Dislike | ThumbsDown | Marks negatively. Opens a one-line feedback input. |
+| Export as chart | BarChart2 | Opens chart builder panel pre-loaded with this result set. |
+| Export to Excel | Download | Generates .xlsx from result, saves to artifacts, shows toast. |
+| View SQL | Code2 | Opens a read-only modal showing the generated SQL in JetBrains Mono. |
+| Save query | Star | Opens save-query dialog. Label is pre-filled by LLM, user can edit. |
 
-### **Debug info footer (collapsed by default)**
+### Debug info footer (collapsed by default)
 
-- Collapsed: small chevron row showing Query details.
-- Expanded: input tokens / output tokens, LLM generation time (ms), SQL execution time (ms), confidence score (1-5 coloured dots: red 1-2, amber 3, green 4-5).
+- Collapsed: small chevron row showing "Query details."
+- Expanded: input tokens / output tokens, LLM generation time (ms), SQL execution time (ms), confidence score (1–5 coloured dots: red 1–2, amber 3, green 4–5).
 - Confidence 1 or 2: inline yellow warning banner above the result table.
 
-## **4.3 Chart Builder**
+---
 
-Opens as a panel from the Export as chart action bar button or from the Artifacts page.
+## 4.3 Chart Builder
+
+Opens as a panel from the "Export as chart" action bar button or from the Artifacts page.
 
 - Chart type dropdown: Bar, Horizontal Bar, Line, Area, Pie, Donut, Scatter, Histogram, Heatmap, Pivot.
-- X-axis dropdown, Y-axis dropdown, Group by dropdown - populated from result column names.
+- X-axis dropdown, Y-axis dropdown, Group by dropdown — populated from result column names.
 - Color palette selector: 5 preset palettes. Primary colour is violet to match app theme.
 - Title input pre-filled from the NL query text.
 - Live preview updates as user changes settings.
 - Auto-detection: backend sends a second lightweight LLM call after SQL execution to suggest chart type + axis mapping. User can accept or dismiss.
 - Export as PNG button. Export as SVG button. Save to Artifacts button.
 
-| **Chart type** | **Best for**                                |
-| -------------- | ------------------------------------------- |
-| Bar            | Categorical comparisons                     |
-| Horizontal bar | Long category labels                        |
-| Line           | Time series and trends                      |
-| Area           | Cumulative trends                           |
-| Pie            | Part-of-whole (7 or fewer categories)       |
-| Donut          | Part-of-whole with center statistic         |
-| Scatter        | Correlation between two numeric columns     |
-| Histogram      | Distribution of a single numeric column     |
-| Heatmap        | Two categorical axes with numeric intensity |
-| Pivot table    | Grouped aggregations                        |
+| Chart type | Best for |
+|---|---|
+| Bar | Categorical comparisons |
+| Horizontal bar | Long category labels |
+| Line | Time series and trends |
+| Area | Cumulative trends |
+| Pie | Part-of-whole (7 or fewer categories) |
+| Donut | Part-of-whole with center statistic |
+| Scatter | Correlation between two numeric columns |
+| Histogram | Distribution of a single numeric column |
+| Heatmap | Two categorical axes with numeric intensity |
+| Pivot table | Grouped aggregations |
 
-## **4.4 Chat History Drawer**
+---
+
+## 4.4 Chat History Drawer
 
 Slides in from left over the main content, 220px wide, 200ms ease-out. No backdrop.
 
-- Search bar at top - filters sessions by title client-side.
+- Search bar at top — filters sessions by title client-side.
 - Favorites section pinned at top, collapsible with chevron.
 - Sessions grouped by: Today, Yesterday, Last 7 days, Older.
 - Per row: title (truncated), relative timestamp right-aligned.
@@ -228,17 +250,19 @@ Slides in from left over the main content, 220px wide, 200ms ease-out. No backdr
 - Delete shows a confirmation prompt.
 - Active session: violet 2px left border + background-active.
 
-## **4.5 Artifacts Page**
+---
+
+## 4.5 Artifacts Page
 
 Slide-in drawer, 280px wide. Two tabs: Excel Exports and Charts.
 
-### **Excel Exports tab**
+### Excel Exports tab
 
 - Filter by filename (search input) and date range picker.
 - Each row: file icon, filename, source session name, file size, created date.
 - Row hover actions: Download, Rename (inline), Delete (with confirmation), Preview (opens modal with first 50 rows), Generate Chart (opens chart builder pre-loaded with this file).
 
-### **Charts tab**
+### Charts tab
 
 - 2-column grid of thumbnail cards.
 - Each card: chart preview thumbnail (violet-to-purple gradient placeholder), chart type badge, source session, date.
@@ -248,7 +272,9 @@ Slide-in drawer, 280px wide. Two tabs: Excel Exports and Charts.
 
 Artifacts are independent from chat sessions. Deleting a session does not delete its artifacts.
 
-## **4.6 Saved Queries Drawer**
+---
+
+## 4.6 Saved Queries Drawer
 
 Slide-in drawer, 300px wide.
 
@@ -256,280 +282,420 @@ Slide-in drawer, 300px wide.
 - Time filter dropdown: All time, Today, Last 7 days, Last 30 days.
 - Favorite toggle: star icon, pinned favorites section at top.
 
-### **Per-query card shows**
+### Per-query card shows
 
 - User label (editable inline on click).
 - NL query text (2 lines max, truncated with ellipsis).
-- Use count badge (e.g. x12) and last-used relative date.
-- {} View SQL toggle: expands a JetBrains Mono code block below the card.
+- Use count badge (e.g. ×12) and last-used relative date.
+- `{}` View SQL toggle: expands a JetBrains Mono code block below the card.
 
-### **Per-query actions**
+### Per-query actions
 
-- Run: inserts the NL query into the current active chat input and sends immediately.
+- **Run:** inserts the NL query into the current active chat input and sends immediately.
 - Result appears at the right side of the drawer as a mini result panel with the table, save to artifacts button, and generate chart button.
-- Rename label: inline edit.
-- Delete: with confirmation.
-- Favorite: toggles pinned state.
+- **Rename label:** inline edit.
+- **Delete:** with confirmation.
+- **Favorite:** toggles pinned state.
 
-## **4.7 Data Sources Page**
+---
+
+## 4.7 Data Sources Page
 
 Replaces the main content area. Full panel layout.
 
-### **Upload zone**
+### Upload zone
 
-- Drag-and-drop zone + Browse files button. Accepts .xlsx and .xls.
+- Drag-and-drop zone + Browse files button. Accepts `.xlsx` and `.xls`.
 - Multiple file upload supported. Per-file indeterminate progress bar (violet, 4px height, 8px radius) during import.
 - On completion: success checkmark animation per file, or error reason (Corrupted file, Password protected, etc.).
 
-### **File list table**
+### File list table
 
-| **Column** | **Notes**                                     |
-| ---------- | --------------------------------------------- |
-| Filename   | Expand chevron on left to show sheet sub-rows |
-| Sheets     | Count of sheets, shown as a pill badge        |
-| Rows       | Total rows across all sheets                  |
-| Size       | File size in KB or MB                         |
-| Uploaded   | Relative timestamp (e.g. 2 hours ago)         |
-| Actions    | Preview, Delete (with confirmation)           |
+| Column | Notes |
+|---|---|
+| Filename | Expand chevron on left to show sheet sub-rows |
+| Sheets | Count of sheets, shown as a pill badge |
+| Rows | Total rows across all sheets |
+| Size | File size in KB or MB |
+| Uploaded | Relative timestamp (e.g. 2 hours ago) |
+| Actions | Preview, Delete (with confirmation) |
 
-### **Sheet sub-rows (expanded)**
+### Sheet sub-rows (expanded)
 
 - Indented 16px, violet 2px left border, bg-hover background.
 - Shows: sheet name, row count, column count.
 - Click to preview that specific sheet (opens modal with first 50 rows + SkeletonTable while loading).
 
-### **Search and filter**
+### Search and filter
 
 - Search by filename, filter by sheet count, row count, size, and upload date.
 
-## **4.8 Excel Mutation via Natural Language**
+### Per-file additional actions (planned)
 
-Users can describe data changes in plain English and SheetMind will apply them to the source Excel file with a required confirmation step.
+- **Re-import:** re-reads the stored file and refreshes the DuckDB table.
+- **Restore previous version:** dropdown of timestamped backups per file (created by mutations and saves).
 
-### **Supported mutation types**
+---
 
-- Value update: change column values based on conditions (e.g. increase column D by 0.25 where column E is less than 50).
-- Formula injection: write Excel formulas into cells based on conditions (e.g. in column C where column D equals A, set formula: if E is greater than 50% of F then E plus F else F times 0.5).
-- Row deletion: remove rows matching a condition (e.g. delete all rows where Status is Cancelled and RefundAmount is zero).
-- Value fill: fill empty cells in a column based on adjacent column logic.
+## 4.8 Excel Mutation via Natural Language
 
-### **Mutation flow**
+Users can describe data changes in plain English and SheetMind applies them to the source Excel file with a required confirmation step.
 
-- User types a mutation request in the chat (the LLM classifies it as mutation intent).
-- Backend generates a structured operation and performs a dry-run.
-- Diff is returned: rows affected count, before/after value table.
-- User reviews the diff preview in the chat and clicks Apply or Cancel.
-- On Apply: change is written to the Excel file, DuckDB table is refreshed, a timestamped backup is created.
-- On Cancel: nothing is changed.
+### Supported mutation types
 
-### **Backup and restore**
+- **Value update:** change column values based on conditions.
+- **Formula injection:** write Excel formulas into cells based on conditions.
+- **Row deletion:** remove rows matching a condition.
+- **Value fill:** fill empty cells in a column based on adjacent column logic.
 
-- Before every write, a timestamped backup is created in .backups/ (e.g. Sales_Orders_20240315_143022.xlsx).
+### Mutation flow
+
+1. User types a mutation request in the chat (LLM classifies it as mutation intent).
+2. Backend generates a structured operation and performs a dry-run.
+3. Diff is returned: rows affected count, before/after value table.
+4. User reviews the diff preview in the chat and clicks **Apply** or **Cancel**.
+5. On Apply: change is written to the Excel file, DuckDB table is refreshed, a timestamped backup is created.
+6. On Cancel: nothing is changed.
+
+### Backup and restore
+
+- Before every write, a timestamped backup is created in `.backups/` (e.g. `Sales_Orders_20240315_143022.xlsx`).
 - Last 5 backups per file are retained. Older ones are auto-deleted.
-- Restore previous version option available in the Data Sources page per file (opens a dropdown of available backup timestamps).
+- Restore previous version option available in Data Sources page per file (opens a dropdown of available backup timestamps).
 
 Security: LLM-generated expressions are validated via Python AST before execution. Only arithmetic, comparison, and pandas column operations are permitted. No imports or file system access.
 
-## **4.9 Settings Page**
+---
+
+## 4.9 Settings Page
 
 Replaces the main content area. Two-column layout: 180px left nav + content area.
 
-### **Appearance**
+### Appearance
 
 - Theme segmented control: Light / Dark / System. Applied immediately and persisted.
 
-### **LLM Provider**
+### LLM Provider
 
 - Segmented control at top: OpenAI / Ollama.
-- OpenAI: masked API key input with show/hide toggle, Test Connection button (shows spinner during test, then green tick or red X inline for 3 seconds), model dropdown (gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini).
-- Ollama: base URL input (default <http://localhost:11434>), Test Connection button, model dropdown (populated after successful test), Pull New Model (text input + Pull button + indeterminate violet progress bar).
+- **OpenAI:** masked API key input with show/hide toggle, Test Connection button (spinner → green tick or red X inline for 3 seconds), model dropdown (gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini).
+- **Ollama:** base URL input (default `http://localhost:11434`), Test Connection button, model dropdown (populated after successful test), Pull New Model (text input + Pull button + indeterminate violet progress bar).
 - Active provider indicator: green dot = connected, red dot = not configured or unreachable.
 
-### **Data configuration**
+### Data configuration
 
-| **Setting**            | **Description**                                                                           | **Default** |
-| ---------------------- | ----------------------------------------------------------------------------------------- | ----------- |
-| Max Concurrent Uploads | How many Excel files can be importing at the same time                                    | 3           |
-| Result Row Limit       | Maximum rows shown inline in the chat result table                                        | 500         |
-| Clear Chat History     | Permanently delete all sessions and messages (3-second countdown confirmation)            | -           |
-| Delete All Files       | Remove all uploaded Excel files and their DuckDB tables (3-second countdown confirmation) | -           |
+| Setting | Description | Default |
+|---|---|---|
+| Max Concurrent Uploads | How many Excel files can be importing at the same time | 3 |
+| Result Row Limit | Maximum rows shown inline in the chat result table | 500 |
+| Clear Chat History | Permanently delete all sessions and messages (3-second countdown confirmation) | — |
+| Delete All Files | Remove all uploaded Excel files and their DuckDB tables (3-second countdown confirmation) | — |
 
 API keys are stored in the OS keychain via Keytar (Electron). Never in plaintext files or environment variables.
 
-# **5\. Feature Implementation Checklist**
+---
 
-Status key: Done = fully implemented and working | Partial = built but incomplete | Planned = not yet started | v2 = intentionally deferred
+## 4.10 Excel Editor Page
 
-## **5.1 Authentication and User Management**
+Replaces the main content area. A full spreadsheet editing environment backed by Handsontable, with an AI mutation panel and change stack at the bottom.
 
-| **Feature**                            | **Status** | **Notes**                                         |
-| -------------------------------------- | ---------- | ------------------------------------------------- |
-| Username-only login screen             | **Done**   | Card animation, account list on return visit      |
-| Multiple user account support          | **Done**   | Separate DuckDB per user, separate upload folder  |
-| Account list on login (returning user) | **Done**   | Shows all registered usernames with last login    |
-| Google OAuth login                     | **v2**     | Infrastructure ready, just needs auth screen swap |
+### Mode A — File Selector
 
-## **5.2 Chat Page**
+Shown when no file is open. Centered card (520px wide) with violet glow.
 
-| **Feature**                               | **Status**  | **Notes**                                          |
-| ----------------------------------------- | ----------- | -------------------------------------------------- |
-| Empty state with suggestion chips         | **Done**    | Three pre-fill chips, centered layout              |
-| \# file autocomplete dropdown             | **Done**    | Two-level file/sheet list, keyboard nav            |
-| Optimistic user message display           | **Done**    | Message appears before API returns                 |
-| Typing indicator (animated dots)          | **Done**    | Three pulsing dots + Generating SQL... text        |
-| Result table with sortable columns        | **Done**    | Click header to sort asc/desc                      |
-| Configurable result row count             | **Done**    | User can set rows shown: 8/10/25/50/100            |
-| NL summary below result                   | **Done**    | 1-2 sentence plain English interpretation          |
-| Regenerate with correction input          | **Done**    | Opens optional correction text before regenerating |
-| Like / Dislike with feedback input        | **Done**    | Dislike opens one-line feedback field              |
-| Export as chart (full chart builder)      | **Done**    | Chart type, axes, palette, PNG/SVG export          |
-| Export to Excel (saves to Artifacts)      | **Done**    | Generates xlsx, saves to artifacts, toast shown    |
-| View SQL query modal                      | **Done**    | Read-only JetBrains Mono code block                |
-| Save query with AI-generated label        | **Done**    | LLM pre-fills label, user can edit before saving   |
-| Debug info footer (tokens, timing, score) | **Done**    | Collapsed by default, confidence dots coloured     |
-| Confidence warning banner                 | **Done**    | Yellow inline banner for score 1-2                 |
-| Skeleton loaders for messages             | **Done**    | YouTube-style shimmer, matches message shape       |
-| Auto chart type suggestion                | **Planned** | Second LLM call to suggest chart type post-query   |
+- File list fetched from uploaded Excel files.
+- Each row: filename, sheet count badge, file size, upload date.
+- Clicking a row opens it in Mode B.
+- Empty state links to Data Sources page.
+- SkeletonRow × 4 while loading.
 
-## **5.3 Chat History Drawer**
+### Mode B — Editor Layout
 
-| **Feature**                                       | **Status**  | **Notes**                                |
-| ------------------------------------------------- | ----------- | ---------------------------------------- |
-| Session list with grouping (Today/Yesterday/etc.) | **Done**    | Four time groups, reverse-chronological  |
-| Search sessions by title                          | **Done**    | Client-side filter                       |
-| Favorite sessions (pinned at top)                 | **Done**    | Star icon, collapsible favorites section |
-| Rename session (inline double-click)              | **Done**    | Inline edit on double-click              |
-| Delete session with confirmation                  | **Done**    | Confirm prompt before deletion           |
-| Search session message content                    | **Planned** | Full-text search across message content  |
+```
+┌──────────────────────────────────────────────────────┐
+│  Editor Header (48px) — filename · Save · Close       │
+├──────────────────────────────────────────────────────┤
+│  Editor Toolbar (40px) — formatting controls          │
+├──────────────────────────────────────────────────────┤
+│  Sheet Tabs (36px) — one tab per sheet                │
+├──────────────────────────────────────────────────────┤
+│  Handsontable Grid (flex-grow, top panel)             │
+├──────────── drag handle (8px) ───────────────────────┤
+│  AI Panel (bottom panel)                              │
+│  Change Stack │ Diff View │ Prompt input bar          │
+└──────────────────────────────────────────────────────┘
+```
 
-## **5.4 Artifacts**
+### Editor Header (48px)
 
-| **Feature**                  | **Status** | **Notes**                                           |
-| ---------------------------- | ---------- | --------------------------------------------------- |
-| Excel exports tab            | **Done**   | Filter by name and date, list with actions          |
-| Charts tab (thumbnail grid)  | **Done**   | 2-col grid, violet gradient placeholder, type badge |
-| Filter by filename           | **Done**   | Search input filters in real-time                   |
-| Filter by date               | **Done**   | Date range picker                                   |
-| Rename artifact              | **Done**   | Inline rename                                       |
-| Delete artifact              | **Done**   | With confirmation                                   |
-| Preview Excel export         | **Done**   | Opens modal with first 50 rows                      |
-| Generate chart from artifact | **Done**   | Opens chart builder pre-loaded with artifact data   |
-| Full chart preview modal     | **Done**   | Click chart thumbnail to view full size             |
+- Left: back arrow (returns to Mode A), filename, sheet count badge.
+- Right: amber "Unsaved" dot (visible only when `isDirty` is true), violet Save button, X close button.
 
-## **5.5 Saved Queries Drawer**
+### Editor Toolbar (40px)
 
-| **Feature**                      | **Status** | **Notes**                                          |
-| -------------------------------- | ---------- | -------------------------------------------------- |
-| Query card list                  | **Done**   | Label, NL text (2 lines), use count, last used     |
-| Search by label or query text    | **Done**   | Real-time filter                                   |
-| Time filter dropdown             | **Done**   | All time, Today, Last 7 days, Last 30 days         |
-| Favorite queries (pinned)        | **Done**   | Star toggle, pinned section at top                 |
-| Run query from drawer            | **Done**   | Inserts into active chat and sends                 |
-| Result panel in drawer sidebar   | **Done**   | Mini result table, save to artifacts, chart button |
-| View SQL (expandable code block) | **Done**   | JetBrains Mono, collapsible                        |
-| Rename label (inline)            | **Done**   | Click label to edit                                |
-| Delete with confirmation         | **Done**   | Confirm before delete                              |
+Groups left to right: Bold, Italic, font size input (8–72pt) · Text color, background color (native color picker, shows current color swatch) · Border All, Border None · Align Left, Center, Right · Freeze rows input, Freeze cols input, Apply button · Add Row Below, Delete Row, Add Column Right, Delete Column.
 
-## **5.6 Data Sources Page**
+All toolbar actions call Handsontable API on ref directly. Row/col add and delete update local state and set `isDirty = true`. No backend call until Save.
 
-| **Feature**                             | **Status**  | **Notes**                                          |
-| --------------------------------------- | ----------- | -------------------------------------------------- |
-| Drag-and-drop upload zone               | **Done**    | HTML5 drag events, violet border on drag-over      |
-| Multiple file upload with progress bars | **Done**    | Per-file indeterminate violet progress bar         |
-| File list table                         | **Done**    | Name, sheets, rows, size, uploaded date            |
-| Search and filter file list             | **Done**    | Filter by name, sheet count, row count, size, date |
-| Expand file to show sheets              | **Done**    | Chevron expands sheet sub-rows with violet border  |
-| Preview sheet (first 50 rows)           | **Done**    | Modal with SkeletonTable loading state             |
-| Delete file with confirmation           | **Done**    | Removes from DuckDB and uploaded_excels folder     |
-| Excel mutation via chat                 | **Planned** | NL-driven data changes with diff preview           |
-| Re-import file                          | **Planned** | Re-read stored file and refresh DuckDB table       |
-| Backup and restore versions             | **Planned** | Per-file backup history, restore dropdown          |
+### Sheet Tabs (36px)
 
-## **5.7 Settings Page**
+- Horizontal scrollable tab row. Active tab: bg-elevated, 2px violet top border.
+- Switching tab syncs current Handsontable data back to session state before loading the new sheet.
+- Add sheet tab (+): visible but disabled with tooltip "Add sheet coming in a future version."
 
-| **Feature**                            | **Status**  | **Notes**                                    |
-| -------------------------------------- | ----------- | -------------------------------------------- |
-| Theme toggle (Light/Dark/System)       | **Done**    | Immediate apply, persisted to settings.json  |
-| OpenAI API key input (masked)          | **Done**    | Show/hide toggle                             |
-| OpenAI model selection dropdown        | **Done**    | gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini   |
-| OpenAI Test Connection                 | **Done**    | 800ms mock delay, green tick or red X inline |
-| Ollama base URL input                  | **Done**    | Pre-filled <http://localhost:11434>          |
-| Ollama Test Connection                 | **Done**    | Same behavior as OpenAI test                 |
-| Ollama model dropdown (after test)     | **Done**    | Populated from Ollama API on successful test |
-| Pull new Ollama model                  | **Done**    | Text input + Pull button + progress bar      |
-| Max Concurrent Uploads setting         | **Done**    | Numeric input, default 3                     |
-| Result Row Limit setting               | **Done**    | Numeric input, default 500                   |
-| Clear Chat History (countdown confirm) | **Done**    | 3-second countdown, inline no modal          |
-| Delete All Files (countdown confirm)   | **Done**    | 3-second countdown, inline no modal          |
-| Open data folder in OS file browser    | **Planned** | Electron shell.openPath()                    |
-| Export settings to JSON                | **Planned** | Backup settings.json via save dialog         |
-| Import settings from JSON              | **Planned** | Restore from backup file                     |
+### Editor Grid
 
-## **5.8 Excel Mutation Engine**
+Handsontable with `licenseKey: 'non-commercial-and-evaluation'`. Features enabled: row headers, column headers, manual row/col resize, context menu, column sorting, dropdown menu, filters, frozen rows/cols. `afterChange` callback updates session state and sets `isDirty = true` on every cell edit. Formatting is stored in a `CellFormattingMap` (frontend only) and applied via the `cells()` callback. For sheets over 5,000 rows, virtualization is enabled and a toast warning is shown.
 
-| **Feature**               | **Status**  | **Notes**                                 |
-| ------------------------- | ----------- | ----------------------------------------- |
-| Value update mutations    | **Planned** | Change numeric/text values by condition   |
-| Formula injection         | **Planned** | Write Excel formulas via openpyxl         |
-| Row deletion by condition | **Planned** | Delete matching rows with confirmation    |
-| Value fill (empty cells)  | **Planned** | Fill nulls based on adjacent column logic |
-| Diff preview before apply | **Planned** | Before/after table, rows affected count   |
-| AST safety validator      | **Planned** | Allowlist-based expression validation     |
-| Auto-backup before write  | **Planned** | Timestamped backup, last 5 retained       |
-| Restore from backup       | **Planned** | Dropdown of backup timestamps per file    |
-| Edit audit log            | **Planned** | edit_history table, full mutation record  |
+### AI Panel
 
-# **6\. Non-Functional Requirements**
+Three-column layout: Change Stack (200px fixed) | Diff View (flex-grow) | Prompt input bar (full-width, 56px fixed at bottom).
 
-## **6.1 Performance Targets**
+**Change Stack:** Lists all changes (newest first). Each card shows: operation type badge, status (pending=amber, accepted=green, rejected=muted red), prompt text (2 lines), affected row count, sheet name. Clicking a card shows its diff in the center.
 
-| **Metric**                                        | **Target**        |
-| ------------------------------------------------- | ----------------- |
+**Diff View:** Shows before/after table for the selected change. Columns: Row # | Column | Current Value | New Value. Current value: red-tinted background. New value: green-tinted background. Formula values shown in JetBrains Mono. For pending changes: Accept (violet) and Reject (outline destructive) buttons shown. For accepted changes: read-only with timestamp. For rejected changes: Restore button creates a new pending change.
+
+**Prompt input bar:** Active sheet chip ("Editing: SheetName"), textarea (Shift+Enter for newline, Enter to send), Send button. Up to 3 suggestion chips above the bar, replaced after each AI response.
+
+### Change Stack Rules
+
+1. Changes are never auto-applied. Every AI change requires explicit Accept.
+2. Multiple pending changes can coexist. Each is independent.
+3. Accepting a later change that overlaps columns applies on top of the already-live data (frontend always sends current rows to `/apply`).
+4. Rejected changes show a Restore button that creates a new pending entry.
+5. "Continue editing" link dismisses diff view without accepting or rejecting.
+
+### Save Behavior
+
+- Save button calls `/save` with all sheet data and `formattingMap`.
+- Backup is created before every write.
+- On success: `isDirty = false`, success toast shown.
+- On failure: error toast, `isDirty` remains true.
+
+---
+
+## 4.11 Live Dashboard Page
+
+Replaces the main content area. Lets users build visual dashboards powered entirely by their saved queries. Dashboards auto-refresh their data when opened by re-running all bound saved queries against the current DuckDB state.
+
+### Widget Types (v1)
+
+Four widget types are supported in v1. All are fully functional.
+
+| Widget | Data requirement | Configuration |
+|---|---|---|
+| KPI Card | 1 saved query returning at least 1 numeric column | Value column + aggregation (SUM / COUNT / AVG / MAX / MIN). Optional: second saved query + column for % change comparison. |
+| Chart | 1 saved query returning at least 2 columns | X-axis column, Y-axis column, chart type (Bar, Line, or Pie only in v1). |
+| Data Table | 1 saved query | Optional column subset selection. Row limit (default 50). |
+| Text Label | None | Static text input. Used for headings or notes on the canvas. |
+
+### Dashboard List Page
+
+This is the default view when the user navigates to Dashboards.
+
+- **Header:** "Dashboards" title (left), "Create Dashboard" violet button (right).
+- **Search bar:** filters the list by dashboard title in real time.
+- **Filter dropdown:** All / Favorites / Recent (last 7 days).
+- **Sort:** by Name (A–Z), Date Created, Last Viewed.
+- **Favorites:** star icon per row. Favorited dashboards always appear above non-favorites regardless of sort order. Clicking the star toggles the state immediately.
+- **Dashboard list table:**
+
+| Column | Notes |
+|---|---|
+| Name | Dashboard title |
+| Widgets | Count of widgets as a pill badge |
+| Last viewed | Relative timestamp |
+| Created | Relative timestamp |
+| Actions | View, Rename (inline), Redesign, Delete (with confirmation) |
+
+- **Empty state:** illustration + "No dashboards yet. Create your first one." with a Create Dashboard button centered below.
+
+### Dashboard Creation Flow
+
+Clicking "Create Dashboard" opens a full-screen creation wizard with three steps.
+
+#### Step 1 — Layout Picker
+
+Full-screen step. Heading: "Choose a starting layout." Subtext: "Pick a grid arrangement. You can always add, remove, and resize widgets later."
+
+Grid of layout preview cards (visual wireframe thumbnails showing empty widget slots). Each card shows a label below it:
+
+| Layout name | Grid arrangement |
+|---|---|
+| 2 KPI Cards | 2 equal columns, 1 row |
+| 4 KPI Cards | 4 equal columns, 1 row |
+| KPIs + Chart | 3 KPI cards (top row) + 1 wide chart (full width below) |
+| KPIs + Table | 2 KPI cards (top row) + 1 full-width table below |
+| Chart Focus | 1 full-width chart (top) + 2 equal charts below |
+| KPIs + Charts + Table | 4 KPIs (top) + 2 charts (middle) + 1 table (bottom) |
+| Custom — Manual | Empty canvas. User adds and arranges widgets freely. |
+| Custom — AI | User describes the layout to the AI agent. |
+
+Selecting any pre-made layout or Custom Manual advances to Step 2 immediately. Selecting Custom AI opens the AI layout conversation panel within the same step (see below).
+
+**Custom AI layout sub-flow:**
+
+- Panel slides in from the right (or replaces the card grid).
+- Heading: "Describe your dashboard to the AI."
+- Textarea: "What should this dashboard show? How many widgets, and what should each one do?" (Shift+Enter for newline, Enter sends.)
+- AI responds with a proposed layout description (e.g. "I'll create: 2 KPI cards for Total Revenue and Order Count, 1 bar chart for monthly revenue, and 1 data table for top products. Does this look right?").
+- User can confirm or ask for changes. Once confirmed, the canvas renders with the proposed widget slots (empty, unbound) and the user proceeds to the canvas editor in Step 2.
+- The AI does not bind queries — it only determines widget types, labels, and positions.
+
+#### Step 2 — Canvas Editor (Bind & Arrange)
+
+The canvas editor opens with the chosen layout rendered as empty widget slots. The user binds saved queries to each widget and may freely rearrange the layout.
+
+**Canvas grid system:** Uses `react-grid-layout`. 3-column responsive grid. Each widget occupies a grid position defined by `x, y, w, h` (column and row units). Widget sizes:
+
+| Size label | Grid units (w × h) |
+|---|---|
+| Small | 1 × 1 |
+| Medium | 2 × 1 |
+| Large | 3 × 1 (full width) |
+| Tall | 1 × 2 |
+| Large Tall | 2 × 2 |
+
+Dragging a widget by its header reorders it on the grid. Resize handle at the bottom-right corner. Minimum sizes enforced per widget type (KPI Card: 1×1, Chart: 2×1, Table: 2×2, Text Label: 1×1).
+
+**Unbound widget state:** Each empty slot shows a dashed violet border, the widget type icon, and a "Bind query →" button centered inside it.
+
+**Query binding panel (opens when "Bind query →" is clicked):**
+
+1. **Saved query dropdown** (searchable by label). Shows query label + last-used date.
+2. **Test button** → runs the saved query against DuckDB and shows a preview: column names, data types, row count, and first 5 rows in a small table. This validates that the query is working and shows what columns are available.
+3. **Column configuration** (shown after a successful test):
+   - KPI Card: Value Column dropdown (numeric columns only), Aggregation dropdown (SUM / COUNT / AVG / MAX / MIN), optional Comparison Query dropdown + Comparison Column for % change.
+   - Chart: X-axis column, Y-axis column (numeric columns only), Chart Type (Bar / Line / Pie).
+   - Data Table: Column subset multi-select (default: all), Row limit numeric input (default 50, max 500).
+   - Text Label: Static text textarea (no query needed).
+4. **Confirm binding** button (violet). Closes the panel and marks the widget as bound (dashed border replaced with solid, preview rendered with live data).
+
+**Widget header (on bound widgets):**
+- Label text (editable inline double-click).
+- Three-dot menu: Edit binding, Resize, Duplicate, Delete.
+
+**Canvas toolbar (top of Step 2):**
+- "+ Add Widget" dropdown: KPI Card, Chart, Data Table, Text Label. Adds a new unbound widget at the bottom of the grid.
+- "Clear all" (ghost, destructive) — removes all widgets with confirmation.
+- Widget count indicator: "N widgets" (11px, text-tertiary, right side).
+
+#### Step 3 — Name & Save
+
+Triggered when the user clicks "Save Dashboard" (violet button, top right of canvas editor). If no widget has been bound, the button is disabled with tooltip "Bind at least one widget to save."
+
+A dialog (420px wide modal) appears:
+
+- Heading: "Name your dashboard"
+- Text input: placeholder "e.g. Sales Overview Q1 2024." Pre-filled with "Untitled Dashboard."
+- Below the input: "Generate name with AI" button (magic wand icon, 13px, violet text). Clicking this sends the widget labels and types to the LLM and populates the input with the suggested name. The user can accept it or type their own.
+- "Save" button (violet) + "Cancel" (ghost).
+
+On save:
+- Dashboard record written to `dashboards` table with `layout_json` and `is_favorite = false`.
+- All widget records written to `dashboard_widgets` table.
+- User is redirected to the Dashboard List page. A success toast appears: "Dashboard saved. Click View to open it."
+
+### Dashboard View Page
+
+Opens when the user clicks "View" on any dashboard from the list.
+
+**Header (48px):**
+- Left: ChevronLeft back arrow → returns to Dashboard List. Dashboard title (14px, font-semibold).
+- Right: "Export PNG" button (outline), "Redesign" button (outline), last-updated timestamp (11px, text-tertiary).
+
+**Auto-refresh on open:**
+- All widgets re-run their bound saved queries against DuckDB immediately on page load.
+- Each widget shows a skeleton loader while its query runs.
+- If a query fails (e.g. the saved query's source table was deleted): the widget shows an inline error state — "Query failed. Source may have been removed." with a "Check Data Sources" link. Other widgets continue loading normally.
+- No manual refresh button. Data is always fresh on open.
+
+**Widget rendering:**
+
+- **KPI Card:** Large number (24px, font-semibold) with aggregation applied. Below it: comparison trend line showing % change with colored arrow (green up, red down) if a comparison query was bound. Widget label above the number (12px, text-secondary).
+- **Chart:** Full react-apexcharts render using the bound chart type and columns. Chart title = widget label. Legend shown below. No interactions beyond hover tooltip (no drill-down in v1).
+- **Data Table:** Sortable table. Click column header to sort asc/desc. Row count shown in footer ("Showing N rows"). Alternating row backgrounds, 36px row height.
+- **Text Label:** Rendered text, no background. Font size inherits from app theme.
+
+**Export PNG:**
+- Clicking "Export PNG" uses `html2canvas` to capture the entire dashboard canvas (including all rendered widgets) as a PNG.
+- File is saved to `~/.sheetmind/users/{username}/dashboard_exports/` with filename `{dashboard_title}_{timestamp}.png`.
+- A download dialog opens via Electron's `dialog.showSaveDialog` so the user can choose where to save it.
+- Toast: "Dashboard exported as PNG."
+
+**Redesign shortcut:**
+- "Redesign" button opens the canvas editor (Step 2) pre-loaded with the current dashboard layout and all existing bindings intact. Saving from redesign updates the existing dashboard record.
+
+---
+
+# 5. Non-Functional Requirements
+
+## 5.1 Performance Targets
+
+| Metric | Target |
+|---|---|
 | App cold start (including Python backend startup) | 4 seconds or less |
-| Excel import (10,000 rows)                        | 2 seconds or less |
-| SQL execution (simple query, 100k rows)           | 500ms or less     |
-| LLM SQL generation (OpenAI GPT-4o)                | 5 seconds or less |
-| Chart render                                      | 300ms or less     |
-| Excel mutation dry-run (10k rows)                 | 1 second or less  |
-| File write-back after confirmed mutation          | 2 seconds or less |
+| Excel import (10,000 rows) | 2 seconds or less |
+| SQL execution (simple query, 100k rows) | 500ms or less |
+| LLM SQL generation (OpenAI GPT-4o) | 5 seconds or less |
+| Chart render | 300ms or less |
+| Excel mutation dry-run (10k rows) | 1 second or less |
+| File write-back after confirmed mutation | 2 seconds or less |
+| Dashboard load (all widgets, 4–6 queries) | 3 seconds or less |
+| Dashboard PNG export | 2 seconds or less |
 
-## **6.2 Security**
+## 5.2 Security
 
 - API keys stored in OS keychain via Keytar, never in plaintext.
 - No telemetry, no analytics, no data sent anywhere except user-initiated LLM API calls.
 - LLM-generated mutation expressions validated via Python AST allowlist before execution.
-- CORS restricted to <http://localhost:5173> only in development; Electron origin in production.
-- All data (Excel files, query history, exports) remains local per user.
+- CORS restricted to `http://localhost:5173` only in development; Electron origin in production.
+- All data (Excel files, query history, exports, dashboards) remains local per user.
+- Dashboard widget data is served only from the local DuckDB instance — no external queries.
 
-## **6.3 Reliability**
+## 5.3 Reliability
 
 - NL to SQL self-correction: max 2 retries on SQL error before returning a user-facing error.
-- Failed Excel imports are rolled back completely - no partial data in DuckDB.
+- Failed Excel imports are rolled back completely — no partial data in DuckDB.
 - Excel mutations: timestamped backup created before every write, last 5 retained per file.
+- Excel Editor saves: timestamped backup created before every save, last 5 retained per file.
 - App crash recovery: last active session and active user restored on next launch.
+- Dashboard widget query failure: fails gracefully per widget — other widgets still render.
 
-## **6.4 Accessibility**
+## 5.4 Accessibility
 
 - Full keyboard navigation through sidebar and all drawers.
 - Focus traps in modals and drawers.
 - WCAG AA colour contrast in both light and dark themes.
 
-# **7\. Error States**
+---
 
-| **Scenario**                           | **User-facing message**                                                                  |
-| -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| LLM provider not configured            | Set up your LLM provider in Settings before querying. \[Settings\]                       |
-| SQL generation failed after 2 retries  | Couldn't generate a valid query. Try rephrasing or specify which columns to use.         |
-| No #filename reference in query        | Mention a data source using #filename to query your data.                                |
-| Referenced file not found in DB        | #filename.xlsx was not found. It may have been deleted. Go to Data Sources to re-upload. |
-| Excel file is password protected       | This file is password protected and cannot be imported.                                  |
-| DuckDB query timeout (over 30 seconds) | This query is taking too long. Try narrowing your question or filtering the data first.  |
-| Ollama unreachable                     | Cannot reach Ollama at \[url\]. Make sure Ollama is running.                             |
-| Mutation AST validation failed         | This edit contains an unsafe operation and cannot be applied. Try rephrasing the change. |
-| Mutation dry-run produced zero changes | No rows matched your condition. The data was not changed.                                |
-| Backup creation failed before write    | Could not create a backup. The edit was not applied to protect your data.                |
+# 6. Error States
 
-# **8\. Out of Scope - v1**
+| Scenario | User-facing message |
+|---|---|
+| LLM provider not configured | Set up your LLM provider in Settings before querying. [Settings] |
+| SQL generation failed after 2 retries | Couldn't generate a valid query. Try rephrasing or specify which columns to use. |
+| No #filename reference in query | Mention a data source using #filename to query your data. |
+| Referenced file not found in DB | #filename.xlsx was not found. It may have been deleted. Go to Data Sources to re-upload. |
+| Excel file is password protected | This file is password protected and cannot be imported. |
+| DuckDB query timeout (over 30 seconds) | This query is taking too long. Try narrowing your question or filtering the data first. |
+| Ollama unreachable | Cannot reach Ollama at [url]. Make sure Ollama is running. |
+| Mutation AST validation failed | This edit contains an unsafe operation and cannot be applied. Try rephrasing the change. |
+| Mutation dry-run produced zero changes | No rows matched your condition. The data was not changed. |
+| Backup creation failed before write | Could not create a backup. The edit was not applied to protect your data. |
+| Excel Editor: sheet over 50,000 rows | "This sheet has N rows. Opening large sheets may affect performance. Continue?" (Continue / Cancel dialog) |
+| Excel Editor: save failure | Could not save the file. Your unsaved changes are still in the editor. |
+| Excel Editor: /apply network error | Could not apply the change. The edit is still pending — you can retry. |
+| Dashboard: widget query failed on load | Query failed. The source query or its data may have been removed. [Check Data Sources] |
+| Dashboard: saved query has no numeric column (KPI) | This query has no numeric columns. KPI cards require at least one numeric column. |
+| Dashboard: saved query returns 0 rows | This query returned no data. The dashboard widget will appear empty. |
+| Dashboard: PNG export failed | Could not export the dashboard. Try again or resize your window. |
+| Dashboard creation: AI layout call failed | Couldn't generate a layout. You can pick a preset or start with a blank canvas instead. |
+
+---
+
+# 7. Out of Scope — v1
 
 Explicitly deferred to keep v1 shippable:
 
@@ -537,58 +703,91 @@ Explicitly deferred to keep v1 shippable:
 - Multi-user collaboration or shared sessions
 - Cloud sync or backup
 - Plugin or extension system
-- SQL editor / manual query mode (v2 candidate)
+- SQL editor / manual query mode
 - Scheduled or recurring queries
 - Slack, email, or other integrations
 - Formula-aware Excel parsing (cells with formulas read as computed values only)
 - Electron packaging and portable installer (phase 2 of the build)
+- Dashboard: drill-down on chart click
+- Dashboard: widget-level refresh (only full-dashboard refresh on open)
+- Dashboard: export formats other than PNG (PDF, HTML embed)
+- Dashboard: chart types beyond Bar, Line, Pie in v1
+- Dashboard: sharing or embedding dashboards
+- Excel Editor: add sheet tab
+- Excel Editor: collaborative editing
 
-# **9\. Suggested Improvements**
+---
 
-## **9.1 High Value, Low Complexity**
+# 8. Unique Suggestions & Improvements
 
-- SQL editor pane - show generated SQL in an editable code block below the result. Let the user tweak it and re-run. One toggle away once the infrastructure exists.
-- Keyboard shortcuts - Cmd/Ctrl+K for new chat, Cmd/Ctrl+H for history, Cmd/Ctrl+comma for settings. Standard pattern, immediate perceived quality boost.
-- Pin columns in result table - freeze the first column when scrolling wide results horizontally.
-- Copy cell or copy row - right-click on any table cell to copy the value. Right-click row to copy the whole row as CSV.
-- Voice input - Web Speech API is available in Electron's Chromium. Zero dependency cost. Hands-free querying for power users.
+The suggestions below are additions that would meaningfully raise SheetMind's quality, usefulness, and impressiveness as a portfolio project — beyond what v1 ships with. They are grouped by effort and area.
 
-## **9.2 High Value, Medium Complexity**
+---
 
-- Auto-relationship detection - on upload, scan all loaded tables for columns with the same name and type. Surface these as suggested JOIN paths in the schema context sent to the LLM. Dramatically improves multi-file query accuracy.
-- Query templates - ship 10-15 built-in query templates (Top 10 by revenue, Month-over-month growth, Find duplicates) that apply to any uploaded file. Good for non-technical users who don't know how to start.
-- Diff view for re-imports - when a user re-imports an updated Excel file, show which rows were added, changed, or removed before committing to the DuckDB table.
-- Named report auto-refresh - saved queries re-run automatically when their source file is re-imported. Results shown in a Reports section with change indicators.
-- Result pinning - pin a result table to the top of the chat for reference while continuing to ask follow-up questions below it.
+## 8.1 High Value, Low Effort
 
-## **9.3 Architecture-Level Improvements**
+**Keyboard shortcut system**
+Cmd/Ctrl+K for new chat, Cmd/Ctrl+H for history drawer, Cmd/Ctrl+D for dashboards, Cmd/Ctrl+, for settings. Standard pattern that immediately makes the app feel polished. One configuration file, no architectural change.
 
-- Schema versioning - track column changes across re-imports. Surface a warning badge in saved queries that reference renamed or removed columns.
-- Streaming results - stream rows to the frontend as DuckDB produces them rather than waiting for the full result set. Makes large queries feel faster.
-- Background import queue - imports run in a background thread with a progress indicator in the sidebar so the user can keep chatting while large files are processing.
-- LLM context window management - for very long chat sessions, auto-summarise older messages to stay within token limits rather than silently truncating them.
+**Copy cell / copy row in result tables**
+Right-click on any cell in a chat result table, Excel Editor, or dashboard table widget to copy the value. Right-click a row to copy the whole row as CSV. Works via the browser clipboard API. Trivial to add, frequently expected by anyone who works with data.
 
-## **9.4 Excel Mutation Improvements (once the engine is shipped)**
+**Dashboard widget notes**
+Each widget on a dashboard can have an optional footnote — a small line of text below the widget (e.g. "Excludes refunded orders" or "Source: Q1 Sales sheet"). Stored in `dashboard_widgets.column_config_json`. No backend change needed.
 
-- Batch mutations - apply multiple changes in a single transaction. Show a combined diff for all changes before confirming.
-- Mutation templates - pre-built common transforms (normalise percentages, fill nulls with column mean, round all numeric columns to 2 decimals).
-- Undo stack - keep the last 10 mutations in memory per session so the user can step backward without touching the backup files.
-- Mutation history panel - show all edits applied to a file with who triggered them, when, and how many rows were affected.
+**Confidence score history chart in debug footer**
+The debug footer already shows the current message's confidence score. Add a tiny sparkline showing the last 10 scores for this session. Visually communicates query stability at a glance.
 
-# **10\. Changelog from v1.0**
+**Saved query "last result" cache**
+When a saved query is run from the drawer, cache the result with a timestamp. Next time the drawer opens, show the last result instantly with a "from N minutes ago" label and a Refresh button. Makes the saved queries drawer feel live without hitting DuckDB on every open.
 
-| **Change**                              | **Type** | **Detail**                                                                                                                             |
-| --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Multi-user account system               | New      | Per-user isolated DuckDB, folder, settings. Username login with account list on return.                                                |
-| Excel mutation engine                   | New      | NL-driven data changes: value update, formula injection, row deletion, fill empty. Full diff-preview + AST safety guard + auto-backup. |
-| edit_history DuckDB table               | New      | Audit log for all mutations: file, sheet, operation, rows affected, backup path, confirmation status.                                  |
-| Artifacts: filter and chart button      | Updated  | Added date filter, rename, and Generate Chart button directly from artifacts page.                                                     |
-| Saved queries: favorites + result panel | Updated  | Favorite toggle, pinned section, mini result panel when running a query from the drawer.                                               |
-| Data sources: search and filter         | Updated  | Filter by name, sheet count, row count, size, upload date.                                                                             |
-| Settings: Max Concurrent Uploads        | Updated  | New configurable setting with default of 3.                                                                                            |
-| Settings: Result Row Limit              | Updated  | Configurable cap on inline result rows, default 500.                                                                                   |
-| Backup and restore per file             | New      | Timestamped backups before every mutation, restore dropdown in Data Sources.                                                           |
-| Feature checklist added                 | New      | Section 5 tracks every feature with Done/Partial/Planned/v2 status.                                                                    |
-| Charts: Recharts replaced               | Updated  | react-apexcharts (core import) used instead. Better dark theme, more chart types.                                                      |
-| Styling: Tailwind v4 + shadcn/ui        | Updated  | Replaced generic CSS approach. All design tokens via CSS variables in global.css.                                                      |
-| Auto chart type suggestion              | Planned  | Post-query second LLM call to suggest best chart type and axis mapping.                                                                |
+---
+
+## 8.2 High Value, Medium Effort
+
+**Auto-relationship detection across files**
+On upload, scan all loaded tables for columns with matching names and compatible types. Surface these as suggested JOIN paths inside the `#` autocomplete dropdown (e.g. "orders.customer_id → customers.id"). Inject these join hints into the LLM schema context. This dramatically improves multi-file query accuracy and is a genuine differentiator — most tools miss this.
+
+**Query templates library**
+Ship 10–15 built-in query templates (Top 10 by revenue, Month-over-month growth, Find duplicates, Null value audit, Distribution summary). Each template has a title, description, and a parameterised NL query. Templates appear in the empty chat state and in a "Templates" section in the saved queries drawer. Good for non-technical users and demonstrates product thinking.
+
+**Excel Editor: mutation history panel**
+The `edit_history` table already records every mutation. Add a History tab inside the AI panel that shows all past edits for the currently open file — timestamp, operation type, rows affected, the original prompt. Each row has a Restore button that re-opens the diff and lets the user undo the change via a reverse mutation. This turns the audit log into an actual feature.
+
+**Dashboard: NL query slot (AI helper)**
+Inside the query binding panel (Step 2), add an alternative to picking a saved query: a small textarea where the user types a NL question on the spot. SheetMind generates the SQL, runs a test, and if it looks correct, auto-saves it as a new saved query and binds it to the widget in one step. Lowers the barrier for users who haven't built their saved query library yet.
+
+**Diff view for re-imports**
+When a user re-imports an updated Excel file in Data Sources, show a diff before committing: rows added (green), rows changed (amber), rows removed (red). Row count summary at the top. The user can review and confirm or cancel the import. Protects against accidental overwrites and is a feature no basic tool provides.
+
+---
+
+## 8.3 Architecture-Level Improvements
+
+**Streaming SQL results**
+Stream rows to the frontend as DuckDB produces them rather than waiting for the full result set. Makes large queries feel significantly faster. Requires switching the `/query` response to `StreamingResponse` on the FastAPI side and using a `ReadableStream` reader on the frontend.
+
+**Background import queue**
+Move all Excel imports to a background thread. Show a small progress badge on the Data Sources sidebar icon while files are importing. The user can keep chatting and using the app without waiting. Large files (100k+ rows) currently block the UI — this fix raises the practical file size ceiling considerably.
+
+**LLM context window management**
+For very long chat sessions, auto-summarise messages older than a configurable threshold (default: 20 messages) into a compact context summary before sending the next prompt. Prevents silent truncation that causes the LLM to lose schema context and produce wrong SQL. Surface this in the debug footer as "Context: summarised N messages."
+
+**Schema versioning**
+Track column schema changes across re-imports. When a re-import adds, renames, or removes a column, write the diff to a `schema_versions` table. Surface a warning badge in the saved queries drawer on any saved query that references a column that no longer exists in the current schema. Prevents silent failures in dashboards and saved queries after a file update.
+
+---
+
+## 8.4 Dashboard-Specific Improvements (post-v1)
+
+**Dashboard templates by use case**
+Pre-built dashboard templates (Sales Overview, Financial Summary, Inventory Status, HR Headcount) that are fully wired — they include layout, widget types, labels, and even suggested query prompts for each slot. The user opens a template, runs the suggested queries in the chat, saves them, and snaps them into the pre-labelled slots. Dramatically reduces time-to-first-dashboard for non-technical users.
+
+**Widget-level drill-down (click to query)**
+Clicking a bar in a dashboard chart or a row in a dashboard table opens a side panel that runs a drill-down query — e.g. clicking the "March" bar in a revenue chart runs "Show me the individual orders in March." The drill-down query is generated by the LLM from the widget's bound query context. Makes dashboards interactive rather than static.
+
+**Scheduled dashboard snapshot**
+A setting per dashboard: "Auto-export PNG every day at 9am." Uses Electron's background timer to open the dashboard in a headless renderer, export the PNG, and save it to the exports folder. No server required. Useful for users who want a daily snapshot of their data without manual action.
+
+**Dashboard grid templates as user assets**
+Let users save their own custom grid layouts as reusable templates (alongside the built-in ones). After designing a dashboard they like, a "Save layout as template" option strips the data bindings and saves the grid arrangement for reuse on future dashboards.

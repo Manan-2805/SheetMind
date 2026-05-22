@@ -14,7 +14,6 @@ def get_app_root() -> Path:
         or os.environ.get("NODE_ENV") == "development"
         or (not getattr(sys, "frozen", False) and (Path(__file__).parent.parent.parent / ".git").exists())
     )
-    
     if is_dev:
         base = Path(__file__).parent.parent / ".sheetmind"
     else:
