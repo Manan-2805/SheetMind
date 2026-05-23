@@ -36,9 +36,16 @@ if (-not $isAdmin) {
     Write-Host ""
 }
 
+# Kill any running instances of SheetMind or its backend to unlock files
+Write-Host "Closing any active processes to release file locks..." -ForegroundColor DarkGray
+Stop-Process -Name "sheetmind-backend" -Force -ErrorAction SilentlyContinue
+Stop-Process -Name "electron" -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+
 # Step 1: Clean and Prepare Build Directory
 Write-Host "`n[1/5] Cleaning and preparing build directories..." -ForegroundColor Yellow
 $BuildDir = "$ROOT\build"
+
 $BackendBuildDir = "$BuildDir\backend"
 $FrontendBuildDir = "$BuildDir\frontend"
 
@@ -103,7 +110,6 @@ python -B -m nuitka `
     --include-package=matplotlib `
     --include-package=numpy `
     --include-package=httpx `
-    --include-package=jinja2 `
     --include-package=routers `
     --include-package=services `
     --include-package=models `

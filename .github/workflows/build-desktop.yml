@@ -114,7 +114,6 @@ jobs:
             --include-package=matplotlib `
             --include-package=numpy `
             --include-package=httpx `
-            --include-package=jinja2 `
             --include-package=routers `
             --include-package=services `
             --include-package=models `
@@ -152,7 +151,6 @@ jobs:
             --include-package=matplotlib \
             --include-package=numpy \
             --include-package=httpx \
-            --include-package=jinja2 \
             --include-package=routers \
             --include-package=services \
             --include-package=models \
