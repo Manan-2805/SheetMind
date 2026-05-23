@@ -32,7 +32,7 @@ def get_logger() -> logging.Logger:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # 2. File Handler (rotating daily, keep 5 days)
+    # 2. File Handler (rotating daily, keep 3 days)
     logs_dir = get_app_root() / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_file = logs_dir / "app.log"
@@ -42,7 +42,7 @@ def get_logger() -> logging.Logger:
             str(log_file),
             when="D",
             interval=1,
-            backupCount=5,
+            backupCount=3,
             encoding="utf-8"
         )
         file_handler.setFormatter(formatter)

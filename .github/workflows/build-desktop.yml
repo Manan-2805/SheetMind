@@ -1,0 +1,200 @@
+name: Package SheetMind Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    name: Build & Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+            binary-suffix: .exe
+          - os: macos-latest
+            platform: macos
+            binary-suffix: ''
+          - os: ubuntu-latest
+            platform: linux
+            binary-suffix: ''
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            desktop-application/frontend/package-lock.json
+            desktop-application/electron/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ========================================================
+      # 1. Clean & Prepare Build Directories
+      # ========================================================
+      - name: Create Build Folders
+        shell: bash
+        run: |
+          mkdir -p desktop-application/build/backend
+          mkdir -p desktop-application/build/frontend
+
+      # ========================================================
+      # 2. Build Frontend (React + Vite)
+      # ========================================================
+      - name: Build Frontend
+        shell: bash
+        run: |
+          cd desktop-application/frontend
+          npm ci
+          npm run build
+          cp -r dist/* ../build/frontend/
+
+      # ========================================================
+      # 3. Setup Python Backend Environment & Compile with Nuitka
+      # ========================================================
+      - name: Install UV and Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          cd desktop-application/backend
+          uv venv
+          # Activate and install dependencies
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
+          uv pip install -r pyproject.toml
+          uv pip install nuitka ordered-set zstandard
+
+      - name: Compile Backend with Nuitka (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd desktop-application/backend
+          . .venv\Scripts\Activate.ps1
+          python -B -m nuitka `
+            --standalone `
+            --onefile `
+            --jobs=4 `
+            --lto=no `
+            --output-dir=../build/backend `
+            --output-filename=sheetmind-backend `
+            --include-package=fastapi `
+            --include-package=uvicorn `
+            --include-package=duckdb `
+            --include-package=pandas `
+            --include-package=openpyxl `
+            --include-package=openai `
+            --include-package=websockets `
+            --include-package=starlette `
+            --include-package=anyio `
+            --include-package=aiofiles `
+            --include-package=seaborn `
+            --include-package=matplotlib `
+            --include-package=numpy `
+            --include-package=httpx `
+            --include-package=jinja2 `
+            --include-package=routers `
+            --include-package=services `
+            --include-package=models `
+            --include-package=schemas `
+            --include-package=dependencies `
+            --include-package-data=uvicorn `
+            --windows-console-mode=disable `
+            --remove-output `
+            main.py
+
+      - name: Compile Backend with Nuitka (macOS / Linux)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cd desktop-application/backend
+          source .venv/bin/activate
+          python -B -m nuitka \
+            --standalone \
+            --onefile \
+            --jobs=4 \
+            --lto=no \
+            --output-dir=../build/backend \
+            --output-filename=sheetmind-backend \
+            --include-package=fastapi \
+            --include-package=uvicorn \
+            --include-package=duckdb \
+            --include-package=pandas \
+            --include-package=openpyxl \
+            --include-package=openai \
+            --include-package=websockets \
+            --include-package=starlette \
+            --include-package=anyio \
+            --include-package=aiofiles \
+            --include-package=seaborn \
+            --include-package=matplotlib \
+            --include-package=numpy \
+            --include-package=httpx \
+            --include-package=jinja2 \
+            --include-package=routers \
+            --include-package=services \
+            --include-package=models \
+            --include-package=schemas \
+            --include-package=dependencies \
+            --include-package-data=uvicorn \
+            --remove-output \
+            main.py
+
+      # ========================================================
+      # 4. Package with Electron Builder
+      # ========================================================
+      - name: Install Electron dependencies & Package
+        shell: bash
+        run: |
+          cd desktop-application/electron
+          # Set version if manual dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            npm version ${{ github.event.inputs.version }} --no-git-tag-version
+          fi
+          npm ci
+          # Package using electron-builder for the host platform
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            npm run dist -- --win
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            # Bypass code signing on macOS CI runner
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            npm run dist -- --mac
+          else
+            npm run dist -- --linux
+          fi
+
+      # ========================================================
+      # 5. Upload Packaged Installers
+      # ========================================================
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheetmind-installer-${{ matrix.platform }}
+          path: |
+            desktop-application/electron/dist/*.exe
+            desktop-application/electron/dist/*.dmg
+            desktop-application/electron/dist/*.AppImage
+            desktop-application/electron/dist/*.deb
+          if-no-files-found: error

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -22,13 +23,19 @@ from services.logging_service import get_logger
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from services.background_tasks import queue_worker, resume_pending_tasks
+    from services.logging_service import get_logger
+
+    logger = get_logger()
+    logger.info("Application starting up...")
 
     await resume_pending_tasks()
     worker_task = asyncio.create_task(queue_worker())
 
     yield
 
+    logger.info("Application shutting down...")
     worker_task.cancel()
+
 
 
 app = FastAPI(title="SheetMind API", version="1.0.0", lifespan=lifespan)
@@ -125,4 +132,6 @@ async def websocket_datasources(websocket: WebSocket):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+    uvicorn.run(app, host="127.0.0.1", port=port)
+

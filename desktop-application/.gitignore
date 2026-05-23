@@ -4,3 +4,9 @@ Temp
 backend/.sheetmind
 relational_excels
 debug_prompts
+build
+electron/dist
+electron/node_modules
+log.txt
+build.log
+*.log

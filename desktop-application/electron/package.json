@@ -1,0 +1,53 @@
+{
+    "name":  "sheetmind",
+    "version":  "1.0.0",
+    "description":  "SheetMind - AI-powered excel and data companion",
+    "main":  "main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "pack":  "electron-builder --dir",
+                    "dist":  "electron-builder"
+                },
+    "devDependencies":  {
+                            "electron":  "^30.0.0",
+                            "electron-builder":  "^24.13.3"
+                        },
+    "build":  {
+                  "appId":  "com.sheetmind.app",
+                  "productName":  "SheetMind",
+                  "win":  {
+                              "target":  "nsis",
+                              "icon":  "assets/icon.ico"
+                          },
+                  "mac":  {
+                              "target":  "dmg",
+                              "icon":  "assets/icon.png"
+                          },
+                  "linux":  {
+                                "target":  "AppImage",
+                                "icon":  "assets/icon.png"
+                            },
+                  "nsis":  {
+                               "oneClick":  true,
+                               "allowToChangeInstallationDirectory":  false,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "SheetMind"
+                           },
+                  "extraResources":  [
+                                         {
+                                             "from":  "../build/backend",
+                                             "to":  "backend"
+                                         },
+                                         {
+                                             "from":  "../build/frontend",
+                                             "to":  "frontend"
+                                         }
+                                     ],
+                  "files":  [
+                                "main.js",
+                                "preload.js",
+                                "assets/**/*"
+                            ]
+              }
+}
