@@ -1,5 +1,6 @@
 class WebSocketService {
   private socket: WebSocket | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private listeners: Set<(data: any) => void> = new Set();
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private username: string = "default";
@@ -69,11 +70,13 @@ class WebSocketService {
     }, 3000);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public addListener(listener: (data: any) => void) {
     this.listeners.add(listener);
     return () => this.removeListener(listener);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public removeListener(listener: (data: any) => void) {
     this.listeners.delete(listener);
   }
