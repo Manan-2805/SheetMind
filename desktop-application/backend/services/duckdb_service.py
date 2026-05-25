@@ -151,3 +151,28 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             was_confirmed BOOLEAN DEFAULT true
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dashboards (
+            id VARCHAR PRIMARY KEY,
+            title VARCHAR NOT NULL,
+            layout_json VARCHAR NOT NULL,
+            created_at TIMESTAMP NOT NULL,
+            updated_at TIMESTAMP NOT NULL,
+            is_favorite BOOLEAN DEFAULT false,
+            thumbnail_path VARCHAR
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dashboard_widgets (
+            id VARCHAR PRIMARY KEY,
+            dashboard_id VARCHAR NOT NULL,
+            widget_type VARCHAR NOT NULL,
+            label VARCHAR NOT NULL,
+            saved_query_id VARCHAR,
+            column_config_json VARCHAR NOT NULL,
+            position_json VARCHAR NOT NULL,
+            size VARCHAR NOT NULL
+        )
+    """)
