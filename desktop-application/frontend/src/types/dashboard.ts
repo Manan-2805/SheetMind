@@ -1,4 +1,10 @@
-export type WidgetType = 'KpiWidget' | 'ChartWidget' | 'TableWidget' | 'TextWidget';
+export type WidgetType =
+  | 'KpiWidget'
+  | 'ChartWidget'
+  | 'TableWidget'
+  | 'TextWidget'
+  | 'PlaceholderWidget'
+  | 'GaugeWidget';
 
 export interface DashboardWidget {
   id: string;
@@ -27,6 +33,30 @@ export interface WidgetResult {
   error?: string;
 }
 
+export interface WidgetStyles {
+  margin?: { top: number; right: number; bottom: number; left: number };
+  padding?: { top: number; right: number; bottom: number; left: number };
+  width?: string;
+  height?: string;
+
+  borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none';
+  borderWidth?: number;
+  borderRadius?: number;
+  borderColor?: string;
+
+  backgroundColor?: string;
+  backgroundImageUrl?: string;
+  backgroundVideoUrl?: string;
+  backgroundOpacity?: number;
+  backgroundBlur?: number;
+
+  textColor?: string;
+  fontSize?: number;
+  fontFamily?: 'sans-serif' | 'serif' | 'monospace' | 'Inter' | 'Outfit';
+
+  loopAnimation?: 'none' | 'fade-in' | 'zoom-in' | 'slide-in' | 'pulse' | 'float' | 'bounce';
+}
+
 export interface ColumnConfig {
   valueColumn?: string;
   aggregation?: string;
@@ -38,6 +68,11 @@ export interface ColumnConfig {
   selectedColumns?: string[];
   rowLimit?: number;
   textContext?: string;
+  textRowIndex?: string; // 'first', 'last', or index
+  progressColumn?: string;
+  targetColumn?: string;
+  targetValue?: number;
+  styles?: WidgetStyles;
 }
 
 export interface WidgetPosition {
@@ -46,3 +81,4 @@ export interface WidgetPosition {
   w: number;
   h: number;
 }
+

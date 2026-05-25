@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Play, Search, Star, X } from "lucide-react";
+import { Check, Play, Search, Star, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Menu } from "lucide-react";
 
 import {
     deleteSavedQuery,
@@ -41,6 +41,10 @@ export function SavedQueriesPage() {
     const [isExporting, setIsExporting] = useState(false);
     const [runningId, setRunningId] = useState<string | null>(null);
     const [chartModalOpen, setChartModalOpen] = useState(false);
+
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const filters = useMemo(() => {
         const from = dateFrom ? new Date(dateFrom) : null;
@@ -118,10 +122,12 @@ export function SavedQueriesPage() {
         }
     };
 
-    const handleRun = async (query: SavedQuery) => {
+    const handleRun = async (query: SavedQuery, page: number = 1, size: number = pageSize) => {
         setRunningId(query.id);
+        setCurrentPage(page);
+        setPageSize(size);
         try {
-            const res = await runSavedQuery(query.id);
+            const res = await runSavedQuery(query.id, page, size);
             setActiveResult(res);
             setChartModalOpen(false);
             // Update run count and last_used_at in local state
@@ -161,8 +167,13 @@ export function SavedQueriesPage() {
         >
             {/* Left Panel: Filters and List */}
             <div
-                className="w-full lg:w-[400px] xl:w-[450px] h-[350px] lg:h-full flex-shrink-0 flex flex-col overflow-y-auto scrollbar-thin"
-                style={{ borderRight: "1px solid var(--color-border-default)" }}
+                className={`h-[350px] lg:h-full flex-shrink-0 flex flex-col overflow-y-auto scrollbar-thin transition-all duration-300 ${
+                    isSidebarCollapsed ? "w-0 lg:w-0 overflow-hidden border-none" : "w-full lg:w-[400px] xl:w-[450px]"
+                }`}
+                style={{
+                    borderRight: isSidebarCollapsed ? "none" : "1px solid var(--color-border-default)",
+                    display: isSidebarCollapsed ? "none" : "flex",
+                }}
             >
                 <div className="p-6">
                     <div
@@ -335,7 +346,7 @@ export function SavedQueriesPage() {
                                                         Delete
                                                     </button>
                                                     <button
-                                                        onClick={() => handleRun(query)}
+                                                        onClick={() => handleRun(query, 1, pageSize)}
                                                         disabled={runningId === query.id}
                                                         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
                                                         style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: runningId === query.id ? 0.7 : 1 }}
@@ -356,34 +367,130 @@ export function SavedQueriesPage() {
 
             {/* Right Panel: Result Table */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--color-bg-base)]">
+                {/* Header bar that is always present */}
+                <div className="h-14 border-b border-border flex items-center px-6 bg-bg-elevated shrink-0 gap-3 justify-between">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidebarCollapsed(prev => !prev)}
+                            className="p-1.5 rounded-lg hover:bg-bg-hover transition-colors"
+                            style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-elevated)", color: "var(--color-text-secondary)" }}
+                            title={isSidebarCollapsed ? "Expand List" : "Collapse List"}
+                        >
+                            <Menu size={16} />
+                        </button>
+                        {activeResult && (
+                            <div className="min-w-0">
+                                <h2 className="text-sm font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>
+                                    {activeResult.label}
+                                </h2>
+                            </div>
+                        )}
+                    </div>
+                    {activeResult && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setChartModalOpen(true)}
+                                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                                style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-base)", color: "var(--color-text-secondary)" }}
+                            >
+                                Build Chart
+                            </button>
+                            <button
+                                onClick={handleExport}
+                                disabled={isExporting}
+                                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                                style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isExporting ? 0.7 : 1 }}
+                            >
+                                {isExporting ? "Exporting..." : "Export Excel"}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
                 {activeResult ? (
                     <div className="flex-1 flex flex-col p-6 overflow-hidden">
-                        <div className="mb-4 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>{activeResult.label}</h2>
-                                <p className="text-sm mt-1" style={{ color: "var(--color-text-tertiary)" }}>{activeResult.nl_query}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setChartModalOpen(true)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium transition-all duration-[120ms]"
-                                    style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-elevated)", color: "var(--color-text-secondary)" }}
-                                >
-                                    Build Chart
-                                </button>
-                                <button
-                                    onClick={handleExport}
-                                    disabled={isExporting}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium transition-all duration-[120ms]"
-                                    style={{ backgroundColor: "var(--color-accent)", color: "#fff", opacity: isExporting ? 0.7 : 1 }}
-                                >
-                                    {isExporting ? "Exporting..." : "Export Excel"}
-                                </button>
-                            </div>
+                        <div className="mb-2 text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                            Query: <code className="font-mono text-accent bg-bg-hover px-1.5 py-0.5 rounded">{activeResult.sql_query}</code>
                         </div>
-
                         <div className="flex-1 overflow-hidden rounded-xl" style={{ border: "1px solid var(--color-border-default)" }}>
                             <ExcelPreviewGrid result={activeResult.result} />
+                        </div>
+
+                        {/* Pagination Footer */}
+                        <div className="mt-4 flex items-center justify-between py-2 text-sm select-none" style={{ color: "var(--color-text-secondary)" }}>
+                            <div className="flex items-center gap-2">
+                                <span>Show:</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => {
+                                        const newSize = Number(e.target.value);
+                                        const activeQuery = queries.find(q => q.id === activeResult.id);
+                                        if (activeQuery) handleRun(activeQuery, 1, newSize);
+                                    }}
+                                    className="bg-bg-elevated border border-border rounded px-2 py-1 outline-none text-xs"
+                                    style={{ color: "var(--color-text-primary)" }}
+                                >
+                                    <option value={10}>10 rows</option>
+                                    <option value={20}>20 rows</option>
+                                    <option value={50}>50 rows</option>
+                                    <option value={100}>100 rows</option>
+                                </select>
+                                <span className="text-xs text-tertiary">
+                                    Total: {activeResult.result.total_rows} rows
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => {
+                                        const activeQuery = queries.find(q => q.id === activeResult.id);
+                                        if (activeQuery) handleRun(activeQuery, 1, pageSize);
+                                    }}
+                                    disabled={currentPage === 1 || runningId !== null}
+                                    className="p-1 rounded hover:bg-bg-hover disabled:opacity-30 disabled:hover:bg-transparent"
+                                    title="First Page"
+                                >
+                                    <ChevronsLeft size={16} />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const activeQuery = queries.find(q => q.id === activeResult.id);
+                                        if (activeQuery) handleRun(activeQuery, currentPage - 1, pageSize);
+                                    }}
+                                    disabled={currentPage === 1 || runningId !== null}
+                                    className="p-1 rounded hover:bg-bg-hover disabled:opacity-30 disabled:hover:bg-transparent"
+                                    title="Previous Page"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+
+                                <span className="mx-2 text-xs font-medium">
+                                    Page {currentPage} of {activeResult.result.total_pages}
+                                </span>
+
+                                <button
+                                    onClick={() => {
+                                        const activeQuery = queries.find(q => q.id === activeResult.id);
+                                        if (activeQuery) handleRun(activeQuery, currentPage + 1, pageSize);
+                                    }}
+                                    disabled={currentPage === activeResult.result.total_pages || runningId !== null}
+                                    className="p-1 rounded hover:bg-bg-hover disabled:opacity-30 disabled:hover:bg-transparent"
+                                    title="Next Page"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const activeQuery = queries.find(q => q.id === activeResult.id);
+                                        if (activeQuery) handleRun(activeQuery, activeResult.result.total_pages, pageSize);
+                                    }}
+                                    disabled={currentPage === activeResult.result.total_pages || runningId !== null}
+                                    className="p-1 rounded hover:bg-bg-hover disabled:opacity-30 disabled:hover:bg-transparent"
+                                    title="Last Page"
+                                >
+                                    <ChevronsRight size={16} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (

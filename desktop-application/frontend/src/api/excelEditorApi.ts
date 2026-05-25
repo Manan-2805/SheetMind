@@ -19,6 +19,7 @@ export interface OpenFileResponse {
   fileId: string;
   filename: string;
   sheets: SheetData[];
+  formattingMap?: Record<string, CellFormatting>;
 }
 
 export const openFile = async (fileId: string): Promise<OpenFileResponse> => {

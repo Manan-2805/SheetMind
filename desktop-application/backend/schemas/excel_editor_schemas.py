@@ -84,3 +84,5 @@ class OpenFileResponse(BaseModel):
     fileId: str
     filename: str
     sheets: list[SheetData]
+    formattingMap: dict[str, CellFormatting] = Field(default_factory=dict)
+

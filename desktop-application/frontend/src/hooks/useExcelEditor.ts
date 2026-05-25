@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { FUniver } from '@univerjs/presets';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,6 +23,11 @@ export function useExcelEditor() {
 
   const univerRef = useRef<FUniver | null>(null);
   const { addToast } = useToast();
+
+  const sessionRef = useRef<EditorSession | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const loadAvailableFiles = useCallback(async () => {
     setIsLoading(true);
@@ -58,7 +63,7 @@ export function useExcelEditor() {
         filename: data.filename,
         activeSheetIndex: 0,
         sheets: data.sheets,
-        formattingMap: {},
+        formattingMap: data.formattingMap || {},
         changeStack: [],
         isDirty: false,
         frozenRows: 0,
@@ -76,34 +81,9 @@ export function useExcelEditor() {
     setSelectedChangeId(null);
   }, []);
 
-  // Called by EditorGrid once Univer is initialized and workbook is loaded
-  const onWorkbookReady = useCallback((univerAPI: FUniver) => {
-    univerRef.current = univerAPI;
-
-    // Sync active sheet index when user clicks Univer's built-in sheet bar
-    univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, (params: unknown) => {
-      const p = params as { activeSheet?: { getSheetId: () => string } } | undefined;
-      const workbook = univerAPI.getActiveWorkbook();
-      if (!workbook) return;
-      const allSheets = workbook.getSheets();
-      const newIndex = allSheets.findIndex(
-        (s) => s.getSheetId() === p?.activeSheet?.getSheetId()
-      );
-      if (newIndex !== -1) {
-        setSession((prev) => prev ? { ...prev, activeSheetIndex: newIndex } : null);
-      }
-    });
-  }, []);
-
-  // Fired by EditorGrid on SheetValueChanged event — marks file as dirty
-  const onCellChanged = useCallback(() => {
-    setSession((prev) => prev ? { ...prev, isDirty: true } : null);
-  }, []);
-
   const setActiveSheet = useCallback(async (index: number) => {
     if (!session) return;
 
-    // Activate the sheet in Univer
     if (univerRef.current) {
       const workbook = univerRef.current.getActiveWorkbook();
       if (workbook) {
@@ -117,18 +97,15 @@ export function useExcelEditor() {
     const targetSheet = session.sheets[index];
     setSession((prev) => prev ? { ...prev, activeSheetIndex: index } : null);
 
-    // Lazy-load sheet data if not yet fetched
     if (!targetSheet.columns || !targetSheet.rows) {
       setIsLoading(true);
       try {
         const data = await api.getSheetData(session.fileId, targetSheet.sheetName);
         
-        // Write lazy loaded data dynamically to Univer sheet
         if (univerRef.current) {
           const workbook = univerRef.current.getActiveWorkbook();
           const sheet = workbook?.getSheetByName(targetSheet.sheetName);
           if (sheet) {
-            // Prepend column names as row 0
             if (data.columns) {
               data.columns.forEach((colName, cIdx) => {
                 const cellRange = sheet.getRange(0, cIdx, 1, 1);
@@ -138,7 +115,6 @@ export function useExcelEditor() {
                 cellRange.setBackground('#F3F4F6');
               });
             }
-            // Populate actual data rows 1..N
             if (data.rows) {
               data.rows.forEach((row, rIdx) => {
                 row.forEach((cellValue, colIndex) => {
@@ -147,8 +123,7 @@ export function useExcelEditor() {
                     if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
                       cellRange.setFormula(cellValue);
                     } else {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      cellRange.setValue(cellValue as any);
+                      cellRange.setValue(cellValue as never);
                     }
                   }
                 });
@@ -177,6 +152,49 @@ export function useExcelEditor() {
     }
   }, [session]);
 
+  const onWorkbookReady = useCallback((univerAPI: FUniver) => {
+    univerRef.current = univerAPI;
+
+    univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, (params: unknown) => {
+      const p = params as { activeSheet?: { getSheetId: () => string } } | undefined;
+      const workbook = univerAPI.getActiveWorkbook();
+      if (!workbook) return;
+      const allSheets = workbook.getSheets();
+      const newIndex = allSheets.findIndex(
+        (s) => s.getSheetId() === p?.activeSheet?.getSheetId()
+      );
+      
+      if (newIndex !== -1) {
+        const curSession = sessionRef.current;
+        if (curSession) {
+          if (curSession.isDirty && curSession.activeSheetIndex !== newIndex) {
+            const prevSheet = allSheets[curSession.activeSheetIndex];
+            if (prevSheet) {
+              prevSheet.activate();
+              addToast({
+                type: 'error',
+                title: 'Unsaved Changes',
+                description: 'Please save your current sheet changes before switching sheets.',
+              });
+              return;
+            }
+          }
+          
+          setSession((prev) => prev ? { ...prev, activeSheetIndex: newIndex } : null);
+          
+          const targetSheet = curSession.sheets[newIndex];
+          if (targetSheet && (!targetSheet.columns || !targetSheet.rows)) {
+            setActiveSheet(newIndex);
+          }
+        }
+      }
+    });
+  }, [setActiveSheet, addToast]);
+
+  const onCellChanged = useCallback(() => {
+    setSession((prev) => prev ? { ...prev, isDirty: true } : null);
+  }, []);
+
   const applyFormatting = useCallback((formatting: CellFormatting) => {
     if (!univerRef.current || !session) return;
     const workbook = univerRef.current.getActiveWorkbook();
@@ -191,8 +209,7 @@ export function useExcelEditor() {
     if (formatting.fontSize) selection.setFontSize(formatting.fontSize);
     if (formatting.textColor) selection.setFontColor(formatting.textColor);
     if (formatting.bgColor) selection.setBackground(formatting.bgColor);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (formatting.align) selection.setHorizontalAlignment(formatting.align as any);
+    if (formatting.align) selection.setHorizontalAlignment(formatting.align as never);
 
     // Persist to formattingMap for backend save (borders included even though
     // Univer canvas visual is a v2 item)
@@ -352,8 +369,7 @@ export function useExcelEditor() {
           if (diff.isFormula && typeof diff.newValue === 'string') {
             range.setFormula(diff.newValue);
           } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            range.setValue(diff.newValue as any);
+            range.setValue(diff.newValue as never);
           }
         });
 

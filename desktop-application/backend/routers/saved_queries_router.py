@@ -97,7 +97,11 @@ def _get_row_limit() -> int:
 
 
 @router.post("/{query_id}/run", response_model=RunSavedQueryResponse)
-async def run_saved_query(query_id: str) -> RunSavedQueryResponse:
+async def run_saved_query(
+    query_id: str,
+    page: int = Query(default=1),
+    page_size: int = Query(default=10),
+) -> RunSavedQueryResponse:
     saved_query = sq_models.get_by_id(query_id)
     if not saved_query:
         raise HTTPException(status_code=404, detail="Saved query not found")
@@ -110,7 +114,7 @@ async def run_saved_query(query_id: str) -> RunSavedQueryResponse:
 
     sq_models.mark_used(query_id)
 
-    result_table = dataframe_to_result_table(df, _get_row_limit())
+    result_table = dataframe_to_result_table(df, row_limit=500, page=page, page_size=page_size)
     return RunSavedQueryResponse(
         id=saved_query.id,
         label=saved_query.label,
