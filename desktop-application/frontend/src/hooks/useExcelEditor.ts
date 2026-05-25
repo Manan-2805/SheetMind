@@ -147,6 +147,7 @@ export function useExcelEditor() {
                     if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
                       cellRange.setFormula(cellValue);
                     } else {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       cellRange.setValue(cellValue as any);
                     }
                   }
@@ -190,6 +191,7 @@ export function useExcelEditor() {
     if (formatting.fontSize) selection.setFontSize(formatting.fontSize);
     if (formatting.textColor) selection.setFontColor(formatting.textColor);
     if (formatting.bgColor) selection.setBackground(formatting.bgColor);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (formatting.align) selection.setHorizontalAlignment(formatting.align as any);
 
     // Persist to formattingMap for backend save (borders included even though
@@ -350,6 +352,7 @@ export function useExcelEditor() {
           if (diff.isFormula && typeof diff.newValue === 'string') {
             range.setFormula(diff.newValue);
           } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             range.setValue(diff.newValue as any);
           }
         });

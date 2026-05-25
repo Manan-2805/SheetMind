@@ -13,9 +13,10 @@ import { DataSourcesPage } from "@/pages/DataSourcesPage";
 import { ExcelEditorPage } from "@/pages/ExcelEditorPage";
 import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { DashboardsPage } from "@/pages/DashboardsPage";
 import { websocketService } from "@/services/websocketService";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor";
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor" | "dashboards";
 type ActiveDrawer = "history" | null;
 
 export function AppShell() {
@@ -53,7 +54,7 @@ export function AppShell() {
     const match = location.pathname.match(/^\/([^/]+)$/);
     // Ignore routes that are named paths
     const isNamedPath = [
-      "data-sources", "settings", "saved-queries", "artifacts", "excel-editor"
+      "data-sources", "settings", "saved-queries", "artifacts", "excel-editor", "dashboards"
     ].includes(match?.[1] ?? "");
 
     if (match && match[1] !== "" && !isNamedPath) {
@@ -72,6 +73,7 @@ export function AppShell() {
     if (location.pathname.startsWith("/artifacts")) return "artifacts";
     if (location.pathname.startsWith("/settings")) return "settings";
     if (location.pathname.startsWith("/excel-editor")) return "excel-editor";
+    if (location.pathname.startsWith("/dashboards")) return "dashboards";
     return "chat";
   };
 
@@ -82,6 +84,7 @@ export function AppShell() {
     if (view === "artifacts") navigate("/artifacts");
     if (view === "settings") navigate("/settings");
     if (view === "excel-editor") navigate("/excel-editor");
+    if (view === "dashboards") navigate("/dashboards");
     setActiveDrawer(null);
   }, [navigate]);
 
@@ -114,7 +117,7 @@ export function AppShell() {
   }, [setMessages]);
 
   return (
-    <TooltipProvider delay={500}>
+    <TooltipProvider delay={300}>
       <div
         className="flex h-screen overflow-hidden"
         style={{ backgroundColor: "var(--color-bg-base)" }}
@@ -141,6 +144,7 @@ export function AppShell() {
             <Route path="/artifacts" element={<ArtifactsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/excel-editor" element={<ExcelEditorPage onViewChange={handleViewChange} />} />
+            <Route path="/dashboards" element={<DashboardsPage />} />
 
             <Route path="/:sessionId" element={
               <ChatPage

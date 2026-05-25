@@ -7,6 +7,7 @@ import {
   PenLine,
   Settings,
   TableProperties,
+  LayoutDashboard,
 } from "lucide-react";
 
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/utils/cn";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor";
+type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor" | "dashboards";
 type ActiveDrawer = "history" | null;
 
 interface SidebarProps {
@@ -167,6 +168,12 @@ export function Sidebar({
         label="Excel Editor"
         isActive={activeView === "excel-editor"}
         onClick={() => onViewChange("excel-editor")}
+      />
+      <SidebarButton
+        icon={LayoutDashboard}
+        label="Dashboards"
+        isActive={activeView === "dashboards"}
+        onClick={() => onViewChange("dashboards")}
       />
       <SidebarButton
         icon={Settings}

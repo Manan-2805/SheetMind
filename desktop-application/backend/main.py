@@ -12,6 +12,7 @@ from dependencies import current_username
 from routers.artifacts_router import router as artifacts_router
 from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
+from routers.dashboard_router import router as dashboard_router
 from routers.data_sources_router import router as data_sources_router
 from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
@@ -62,6 +63,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 app.include_router(data_sources_router, prefix="/api")
 app.include_router(artifacts_router, prefix="/api")
 app.include_router(saved_queries_router, prefix="/api")
