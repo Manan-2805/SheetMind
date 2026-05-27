@@ -115,13 +115,12 @@ export function Sidebar({
         borderRight: "1px solid var(--color-border-default)",
       }}
     >
-      <div
-        className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold"
-        style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
-        aria-label="SheetMind"
-      >
-        S
-      </div>
+      <img
+        src="/favicon.png"
+        alt="SheetMind"
+        className="mb-2 flex h-8 w-8 shrink-0 rounded-sm object-contain shadow-sm"
+        aria-hidden="true"
+      />
 
       <div
         className="my-1 w-6"
@@ -143,25 +142,10 @@ export function Sidebar({
         onClick={() => onDrawerToggle("history")}
       />
       <SidebarButton
-        icon={Package}
-        label="Artifacts"
-        isActive={activeView === "artifacts"}
-        onClick={() => onViewChange("artifacts")}
-      />
-      <SidebarButton
         icon={Bookmark}
         label="Saved Queries"
         isActive={activeView === "saved-queries"}
         onClick={() => onViewChange("saved-queries")}
-      />
-
-      <div className="flex-1" />
-
-      <SidebarButton
-        icon={Database}
-        label="Data Sources"
-        isActive={activeView === "data-sources"}
-        onClick={() => onViewChange("data-sources")}
       />
       <SidebarButton
         icon={TableProperties}
@@ -175,6 +159,21 @@ export function Sidebar({
         isActive={activeView === "dashboards"}
         onClick={() => onViewChange("dashboards")}
       />
+      <SidebarButton
+        icon={Package}
+        label="Artifacts"
+        isActive={activeView === "artifacts"}
+        onClick={() => onViewChange("artifacts")}
+      />
+      <SidebarButton
+        icon={Database}
+        label="Data Sources"
+        isActive={activeView === "data-sources"}
+        onClick={() => onViewChange("data-sources")}
+      />
+
+      <div className="flex-1" />
+
       <SidebarButton
         icon={Settings}
         label="Settings"

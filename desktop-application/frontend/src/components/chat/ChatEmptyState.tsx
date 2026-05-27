@@ -22,12 +22,12 @@ const SUGGESTIONS = [
 export function ChatEmptyState({ onSuggestion }: ChatEmptyStateProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
-      <div
-        className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-xl font-bold"
-        style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
-      >
-        S
-      </div>
+      <img
+        src="/favicon.png"
+        alt="SheetMind"
+        className="mb-4 h-12 w-12 shrink-0 rounded-sm object-contain shadow-sm"
+        aria-hidden="true"
+      />
       <h1
         className="text-page-heading mb-1 text-center"
         style={{ color: "var(--color-text-primary)" }}
