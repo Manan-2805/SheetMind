@@ -1,9 +1,13 @@
+"""Module containing excel_editor_router functionality."""
+
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+import httpx
+from openai import AsyncOpenAI
 import pandas as pd
 
 from models.settings_models import get_settings
@@ -82,38 +86,42 @@ router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
 
 @router.get("/files", response_model=FileListResponse)
 async def list_files():
+    """Execute the list_files operation."""
     files = get_available_files()
     return FileListResponse(files=files)
 
 @router.get("/open", response_model=OpenFileResponse)
-async def open_file(fileId: str):
-    if not fileId:
+async def open_file(file_id: str):
+    """Execute the open_file operation."""
+    if not file_id:
         raise HTTPException(status_code=400, detail="fileId is required")
-    
-    data = open_excel_file(fileId)
+
+    data = open_excel_file(file_id)
     if not data:
         raise HTTPException(status_code=404, detail="File not found")
-        
+
     return OpenFileResponse(**data)
 
 @router.get("/sheet-data", response_model=SheetData)
-async def get_sheet_data(fileId: str, sheetName: str):
-    if not fileId or not sheetName:
+async def get_sheet_data(file_id: str, sheet_name: str):
+    """Execute the get_sheet_data operation."""
+    if not file_id or not sheet_name:
         raise HTTPException(status_code=400, detail="fileId and sheetName are required")
-        
-    data = open_excel_sheet(fileId, sheetName)
+
+    data = open_excel_sheet(file_id, sheet_name)
     if not data:
         raise HTTPException(status_code=404, detail="Sheet not found")
-        
+
     return data
 
 @router.post("/mutate", response_model=MutationResponse)
 async def mutate_file(body: MutationRequest):
     # 1. Build prompt
+    """Execute the mutate_file operation."""
     df = pd.DataFrame(body.currentRows, columns=body.columns)
     col_types = {col: str(df[col].dtype) for col in df.columns}
     sample_rows = df.head(5).values.tolist()
-    
+
     prompt_msgs = build_mutation_prompt(
         user_instruction=body.userInstruction,
         sheet_name=body.sheetName,
@@ -124,13 +132,12 @@ async def mutate_file(body: MutationRequest):
     )
     debug_path = _write_debug_prompt(prompt_msgs, f"EXCEL_MUTATION [{body.fileId}]")
 
-    
+
     # 2. Call LLM
     settings = get_settings()
     llm_response_text = ""
-    
+
     if settings.llm_provider == "openai":
-        from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
@@ -140,7 +147,6 @@ async def mutate_file(body: MutationRequest):
         )
         llm_response_text = response.choices[0].message.content
     else:
-        import httpx
         url = settings.ollama.url.rstrip("/")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -160,10 +166,10 @@ async def mutate_file(body: MutationRequest):
     try:
         data = json.loads(llm_response_text)
         _append_debug_response(debug_path, data, f"EXCEL_MUTATION RESPONSE [{body.fileId}]")
-    except Exception:
+    except Exception as exc:
         _append_debug_response(debug_path, llm_response_text, f"EXCEL_MUTATION RESPONSE RAW (FAILED PARSE) [{body.fileId}]")
         # Simple retry once if parsing fails (Ollama sometimes misses JSON wrapper)
-        raise HTTPException(status_code=500, detail="LLM returned invalid JSON")
+        raise HTTPException(status_code=500, detail="LLM returned invalid JSON") from exc
 
     pandas_code = data.get("pandas_code", "")
     if not pandas_code:
@@ -183,13 +189,13 @@ async def mutate_file(body: MutationRequest):
 
     # 4. Dry run
     try:
-        diff_rows, df_modified = dry_run_mutation(
+        diff_rows, _df_modified = dry_run_mutation(
             df=df,
             pandas_code=pandas_code,
             affected_columns=data.get("affected_columns", [])
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Mutation execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Mutation execution failed: {str(e)}") from e
 
     return MutationResponse(
         operationType=data.get("operation_type"),
@@ -204,10 +210,11 @@ async def mutate_file(body: MutationRequest):
 @router.post("/apply", response_model=SuccessResponse)
 async def apply_mutation(body: ApplyRequest):
     # Re-validate for safety
+    """Execute the apply_mutation operation."""
     is_safe, reason = validate_pandas_expression(body.pandasCode)
     if not is_safe:
         raise HTTPException(status_code=400, detail=f"Safety validation failed: {reason}")
-        
+
     try:
         apply_mutation_to_disk(
             file_id=body.fileId,
@@ -218,10 +225,11 @@ async def apply_mutation(body: ApplyRequest):
         )
         return SuccessResponse(success=True)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.post("/save", response_model=SuccessResponse)
 async def save_edits(body: SaveRequest):
+    """Execute the save_edits operation."""
     try:
         save_manual_edits(
             file_id=body.fileId,
@@ -230,22 +238,24 @@ async def save_edits(body: SaveRequest):
         )
         return SuccessResponse(success=True)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @router.get("/history/{file_id}", response_model=HistoryResponse)
 async def get_history(file_id: str):
+    """Execute the get_history operation."""
     history = get_edit_history(file_id)
     return HistoryResponse(history=history)
 
 @router.post("/restore", response_model=SuccessResponse)
 async def restore(body: dict):
+    """Execute the restore operation."""
     file_id = body.get("fileId")
     backup_path = body.get("backupPath")
     if not file_id or not backup_path:
         raise HTTPException(status_code=400, detail="fileId and backupPath are required")
-        
+
     try:
         restore_backup(file_id, backup_path)
         return SuccessResponse(success=True)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -1,3 +1,5 @@
+"""Module containing chat_schemas functionality."""
+
 from datetime import datetime
 from typing import Any, Optional
 
@@ -5,11 +7,13 @@ from pydantic import BaseModel
 
 
 class ResultColumn(BaseModel):
+    """Schema or class representation for ResultColumn."""
     key: str
     label: str
 
 
 class ResultTable(BaseModel):
+    """Schema or class representation for ResultTable."""
     columns: list[ResultColumn]
     rows: list[dict[str, Any]]
     total_rows: int
@@ -19,6 +23,7 @@ class ResultTable(BaseModel):
 
 
 class ChatSessionResponse(BaseModel):
+    """Schema or class representation for ChatSessionResponse."""
     id: str
     title: str
     created_at: datetime
@@ -28,6 +33,7 @@ class ChatSessionResponse(BaseModel):
 
 
 class ChatMessageResponse(BaseModel):
+    """Schema or class representation for ChatMessageResponse."""
     id: str
     session_id: str
     role: str
@@ -59,15 +65,18 @@ class ChatMessageResponse(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
+    """Schema or class representation for SendMessageRequest."""
     content: str
     referenced_files: list[str] = []
     parent_user_message_id: Optional[str] = None
 
 
 class ChatSessionCreate(BaseModel):
+    """Schema or class representation for ChatSessionCreate."""
     title: Optional[str] = None
 
 
 class ChatSessionUpdate(BaseModel):
+    """Schema or class representation for ChatSessionUpdate."""
     title: Optional[str] = None
     is_favorite: Optional[bool] = None

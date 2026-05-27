@@ -1,10 +1,9 @@
+"""Module containing data_source_models functionality."""
+
 from datetime import datetime, timezone
 import logging
 import os
 from typing import Any
-
-logger = logging.getLogger(__name__)
-
 
 import pandas as pd
 
@@ -17,12 +16,16 @@ from schemas.data_source_schemas import (
 )
 from services.duckdb_service import get_connection
 
+logger = logging.getLogger(__name__)
+
 
 def _now() -> datetime:
+    """Execute the _now operation."""
     return datetime.now(timezone.utc)
 
 
 def get_all() -> list[DataSourceResponse]:
+    """Execute the get_all operation."""
     conn = get_connection()
     rows = conn.execute(
         """
@@ -77,6 +80,7 @@ def get_all() -> list[DataSourceResponse]:
 
 
 def delete(source_id: str) -> None:
+    """Execute the delete operation."""
     conn = get_connection()
     row = conn.execute("SELECT stored_path FROM excel_files WHERE id = ?", [source_id]).fetchone()
     if row:
@@ -100,6 +104,7 @@ def delete(source_id: str) -> None:
 
 
 def get_preview(source_id: str, sheet_name: str | None = None) -> PreviewResponse:
+    """Execute the get_preview operation."""
     conn = get_connection()
     table_name = None
     if sheet_name:
@@ -145,6 +150,7 @@ def get_preview(source_id: str, sheet_name: str | None = None) -> PreviewRespons
 
 
 def list_for_autocomplete() -> AutocompleteResponse:
+    """Execute the list_for_autocomplete operation."""
     conn = get_connection()
     rows = conn.execute(
         """

@@ -1,14 +1,17 @@
-import asyncio
-import sys
-from contextlib import asynccontextmanager
+"""Module containing main functionality."""
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+import asyncio
+from contextlib import asynccontextmanager
+import sys
+
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketState
 import uvicorn
 
 from dependencies import current_username
+from models.chat_models import _ws_clients
 from routers.artifacts_router import router as artifacts_router
 from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
@@ -17,15 +20,15 @@ from routers.data_sources_router import router as data_sources_router
 from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
+from services.background_tasks import queue_worker, resume_pending_tasks
 from services.duckdb_service import get_connection
 from services.logging_service import get_logger
+from services.storage_service import get_charts_dir
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    from services.background_tasks import queue_worker, resume_pending_tasks
-    from services.logging_service import get_logger
-
+async def lifespan(_app: FastAPI):
+    """Execute the lifespan operation."""
     logger = get_logger()
     logger.info("Application starting up...")
 
@@ -44,6 +47,7 @@ app = FastAPI(title="SheetMind API", version="1.0.0", lifespan=lifespan)
 
 @app.middleware("http")
 async def extract_username_middleware(request: Request, call_next):
+    """Execute the extract_username_middleware operation."""
     username = request.headers.get("X-Username", "default")
     token = current_username.set(username)
     try:
@@ -73,30 +77,29 @@ app.include_router(excel_editor_router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():
+    """Execute the health_check operation."""
     return {"status": "ok", "version": "1.0.0"}
 
 
 @app.get("/api/chat/charts/static/{filename}")
 async def serve_chart_static(filename: str):
     """Serve auto-generated chart images from the user's charts dir."""
-    from services.storage_service import get_charts_dir
     chart_path = get_charts_dir() / filename
     if not chart_path.exists():
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Chart not found")
     return FileResponse(str(chart_path), media_type="image/png")
 
 
 @app.websocket("/api/ws/datasources")
 async def websocket_datasources(websocket: WebSocket):
-    from models.chat_models import _ws_clients
+    """Execute the websocket_datasources operation."""
     await websocket.accept()
     _ws_clients.add(websocket)
 
     username = websocket.query_params.get("username", "default")
     token = current_username.set(username)
     logger = get_logger()
-    logger.info(f"WebSocket Connected: username={username}")
+    logger.info("WebSocket Connected: username=%s", username)
 
     try:
         while True:
@@ -114,26 +117,25 @@ async def websocket_datasources(websocket: WebSocket):
                     {"id": r[0], "status": r[1], "error_message": r[2], "row_count": r[3], "column_count": r[4]}
                     for r in rows
                 ]
-                logger.info(f"WebSocket Broadcast (status_update): username={username}, data={updates}")
+                logger.info("WebSocket Broadcast (status_update): username=%s, data=%s", username, updates)
                 await websocket.send_json({"type": "status_update", "data": updates})
             except WebSocketDisconnect:
                 break
             except RuntimeError as loop_err:
                 if "Cannot call \"send\"" in str(loop_err):
                     break
-                logger.error(f"WebSocket loop query error: {loop_err}")
+                logger.error("WebSocket loop query error: %s", loop_err)
             except Exception as loop_err:
-                logger.error(f"WebSocket loop query error: {loop_err}")
+                logger.error("WebSocket loop query error: %s", loop_err)
             await asyncio.sleep(2)
     except Exception as e:
-        logger.error(f"WebSocket connection error: {e}")
+        logger.error("WebSocket connection error: %s", e)
     finally:
         _ws_clients.discard(websocket)
-        logger.info(f"WebSocket Disconnected: username={username}")
+        logger.info("WebSocket Disconnected: username=%s", username)
         current_username.reset(token)
 
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     uvicorn.run(app, host="127.0.0.1", port=port)
-

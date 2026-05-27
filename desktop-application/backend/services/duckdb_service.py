@@ -1,3 +1,5 @@
+"""Module containing duckdb_service functionality."""
+
 import threading
 
 import duckdb
@@ -10,6 +12,7 @@ _conn_lock = threading.Lock()
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
+    """Execute the get_connection operation."""
     global _conns
     username = current_username.get("default")
     safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-")) or "default"

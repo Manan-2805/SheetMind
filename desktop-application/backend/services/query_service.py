@@ -1,3 +1,5 @@
+"""Module containing query_service functionality."""
+
 import math
 from typing import Any
 
@@ -12,6 +14,7 @@ def dataframe_to_result_table(
     page: int = 1,
     page_size: int | None = None,
 ) -> ResultTable:
+    """Execute the dataframe_to_result_table operation."""
     columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
     rows = df.to_dict("records")
 
@@ -41,4 +44,3 @@ def dataframe_to_result_table(
         page_size=p_size,
         total_pages=total_pages,
     )
-

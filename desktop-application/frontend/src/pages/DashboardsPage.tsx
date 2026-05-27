@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Star, Plus, Trash2, Layout, Search, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Star, Plus, Trash2, Layout, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { dashboardsApi } from '../api/dashboardsApi';
 import { DashboardView } from '../components/dashboard/DashboardView';
@@ -15,7 +15,7 @@ export const DashboardsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('name');
-  
+
   const [viewMode, setViewMode] = useState<ViewMode>('view');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dashboardToRedesign, setDashboardToRedesign] = useState<Dashboard | null>(null);
@@ -41,7 +41,7 @@ export const DashboardsPage: React.FC = () => {
       loadDashboards();
     }, 0);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, sort]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,9 +104,9 @@ export const DashboardsPage: React.FC = () => {
   if (viewMode === 'create' || viewMode === 'redesign') {
     return (
       <div className="w-full h-full overflow-hidden bg-background">
-        <DashboardWizard 
-          onCancel={handleCancelWizard} 
-          onSaveSuccess={handleSaveSuccess} 
+        <DashboardWizard
+          onCancel={handleCancelWizard}
+          onSaveSuccess={handleSaveSuccess}
           initialDashboard={dashboardToRedesign}
         />
       </div>
@@ -116,17 +116,16 @@ export const DashboardsPage: React.FC = () => {
   return (
     <div className="w-full h-full flex bg-background text-foreground overflow-hidden">
       {/* Left Collapsible Sidebar */}
-      <div 
-        className={`border-r border-border bg-card flex flex-col transition-all duration-300 relative shrink-0 ${
-          sidebarOpen ? 'w-80' : 'w-0 border-r-0'
-        }`}
+      <div
+        className={`border-r border-border bg-card flex flex-col transition-all duration-300 relative shrink-0 ${sidebarOpen ? 'w-80' : 'w-0 border-r-0'
+          }`}
       >
         {sidebarOpen && (
           <div className="flex flex-col h-full overflow-hidden">
             {/* Sidebar Header */}
             <div className="p-4 border-b border-border flex items-center justify-between">
               <h1 className="text-lg font-bold tracking-tight">Dashboards</h1>
-              <button 
+              <button
                 onClick={handleCreate}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground p-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-colors"
               >
@@ -139,9 +138,9 @@ export const DashboardsPage: React.FC = () => {
             <div className="p-4 space-y-3 border-b border-border bg-muted/20">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search..." 
+                <input
+                  type="text"
+                  placeholder="Search..."
                   value={search}
                   onChange={handleSearch}
                   className="w-full bg-background border border-input rounded-md pl-9 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all"
@@ -149,8 +148,8 @@ export const DashboardsPage: React.FC = () => {
               </div>
 
               <div className="flex space-x-2">
-                <select 
-                  value={filter} 
+                <select
+                  value={filter}
                   onChange={e => setFilter(e.target.value)}
                   className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer"
                 >
@@ -158,8 +157,8 @@ export const DashboardsPage: React.FC = () => {
                   <option value="favorites">Favorites</option>
                   <option value="recent">Recent</option>
                 </select>
-                <select 
-                  value={sort} 
+                <select
+                  value={sort}
                   onChange={e => setSort(e.target.value)}
                   className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer"
                 >
@@ -178,14 +177,13 @@ export const DashboardsPage: React.FC = () => {
                 <div className="p-4 text-center text-xs text-muted-foreground">No dashboards found.</div>
               ) : (
                 dashboards.map(db => (
-                  <div 
-                    key={db.id} 
+                  <div
+                    key={db.id}
                     onClick={() => setSelectedId(db.id)}
-                    className={`flex flex-col p-3 rounded-lg cursor-pointer transition-all border group relative ${
-                      selectedId === db.id 
-                        ? 'bg-primary/10 border-primary text-foreground' 
+                    className={`flex flex-col p-3 rounded-lg cursor-pointer transition-all border group relative ${selectedId === db.id
+                        ? 'bg-primary/10 border-primary text-foreground'
                         : 'border-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2 truncate">
@@ -193,13 +191,13 @@ export const DashboardsPage: React.FC = () => {
                         <span className="font-medium text-sm truncate">{db.title}</span>
                       </div>
                       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
+                        <button
                           onClick={(e) => toggleFavorite(db.id, db.is_favorite, e)}
                           className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-yellow-400"
                         >
                           <Star size={12} className={db.is_favorite ? 'text-yellow-400 fill-yellow-400' : ''} />
                         </button>
-                        <button 
+                        <button
                           onClick={(e) => handleDelete(db.id, e)}
                           className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-destructive"
                         >
@@ -219,7 +217,7 @@ export const DashboardsPage: React.FC = () => {
         )}
 
         {/* Sidebar Toggle Handle */}
-        <button 
+        <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="absolute -right-3 top-1/2 transform -translate-y-1/2 bg-card border border-border rounded-full p-0.5 z-20 shadow-md hover:bg-muted transition-colors"
         >
@@ -229,19 +227,10 @@ export const DashboardsPage: React.FC = () => {
 
       {/* Right Details Panel */}
       <div className="flex-1 h-full overflow-hidden flex flex-col">
-        {!sidebarOpen && (
-          <button 
-            onClick={() => setSidebarOpen(true)}
-            className="absolute left-4 top-4 bg-card border border-border rounded-md p-1.5 z-20 shadow-sm hover:bg-muted transition-colors"
-          >
-            <Menu size={16} />
-          </button>
-        )}
-
         {selectedId ? (
-          <DashboardView 
-            dashboardId={selectedId} 
-            onBack={() => setSelectedId(null)} 
+          <DashboardView
+            dashboardId={selectedId}
+            onBack={() => setSelectedId(null)}
             onRedesign={handleRedesign}
           />
         ) : (
@@ -251,7 +240,7 @@ export const DashboardsPage: React.FC = () => {
             <p className="text-sm text-muted-foreground max-w-sm mt-1">
               Select an existing dashboard from the sidebar, or create a brand new interactive dashboard layout.
             </p>
-            <button 
+            <button
               onClick={handleCreate}
               className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition-colors shadow-sm"
             >

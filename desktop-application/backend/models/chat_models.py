@@ -1,3 +1,6 @@
+"""Module containing chat_models functionality."""
+
+import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 import math
@@ -5,6 +8,7 @@ from pathlib import Path
 import re
 import time
 from typing import Any
+import uuid
 
 import httpx
 from openai import AsyncOpenAI
@@ -18,16 +22,24 @@ from schemas.chat_schemas import (
     ResultColumn,
     ResultTable,
 )
+from services.chart_service import generate_chart
+from services.duckdb_service import get_connection
 from services.logging_service import get_logger
 from services.query_service import dataframe_to_result_table
-from services.storage_service import get_debug_prompts_dir, get_exports_dir
+from services.storage_service import (
+    get_charts_dir,
+    get_debug_prompts_dir,
+    get_exports_dir,
+)
 
 
 def _now() -> datetime:
+    """Execute the _now operation."""
     return datetime.now(timezone.utc)
 
 
 def _ago(days: int = 0, hours: int = 0, minutes: int = 0) -> datetime:
+    """Execute the _ago operation."""
     return _now() - timedelta(days=days, hours=hours, minutes=minutes)
 
 
@@ -150,9 +162,8 @@ MOCK_MESSAGES: list[dict[str, Any]] = [
 ]
 
 
-from services.duckdb_service import get_connection
-
 def get_sessions() -> list[ChatSessionResponse]:
+    """Execute the get_sessions operation."""
     conn = get_connection()
     result = conn.execute("""
         SELECT s.id, s.title, s.created_at, s.updated_at, s.is_favorite, COUNT(m.id) as message_count
@@ -161,7 +172,7 @@ def get_sessions() -> list[ChatSessionResponse]:
         GROUP BY s.id, s.title, s.created_at, s.updated_at, s.is_favorite
         ORDER BY s.updated_at DESC
     """).fetchall()
-    
+
     sessions = []
     for row in result:
         sessions.append(ChatSessionResponse(
@@ -176,10 +187,11 @@ def get_sessions() -> list[ChatSessionResponse]:
 
 
 def get_messages(session_id: str) -> list[ChatMessageResponse]:
+    """Execute the get_messages operation."""
     conn = get_connection()
     result = conn.execute("""
-         SELECT id, session_id, role, content, created_at, sql_generated, 
-             sql_execution_ms, llm_generation_ms, token_count_input, 
+         SELECT id, session_id, role, content, created_at, sql_generated,
+             sql_execution_ms, llm_generation_ms, token_count_input,
              token_count_output, confidence_score, result_row_count,
              parent_user_message_id, feedback, feedback_reason, result_data_json, version,
              sql_gen_ms, summary_gen_ms, total_ms, model_name,
@@ -188,7 +200,7 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
         WHERE session_id = ?
         ORDER BY created_at ASC
     """, [session_id]).fetchall()
-    
+
     messages = []
     for row in result:
         res_data = None
@@ -226,7 +238,7 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
 
 
 def create_session(title: str | None = None) -> ChatSessionResponse:
-    import uuid
+    """Execute the create_session operation."""
     now = _now()
     session_id = f"sess-{uuid.uuid4().hex[:8]}"
     title = title or "New conversation"
@@ -246,12 +258,13 @@ def create_session(title: str | None = None) -> ChatSessionResponse:
 
 
 def update_session(session_id: str, title: str | None = None, is_favorite: bool | None = None) -> ChatSessionResponse:
+    """Execute the update_session operation."""
     conn = get_connection()
     if title is not None:
         conn.execute("UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?", [title, _now(), session_id])
     if is_favorite is not None:
         conn.execute("UPDATE chat_sessions SET is_favorite = ?, updated_at = ? WHERE id = ?", [is_favorite, _now(), session_id])
-    
+
     # fetch updated session
     row = conn.execute("SELECT id, title, created_at, updated_at, is_favorite FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
     if row:
@@ -261,6 +274,7 @@ def update_session(session_id: str, title: str | None = None, is_favorite: bool 
     raise ValueError("Session not found")
 
 def delete_session(session_id: str):
+    """Execute the delete_session operation."""
     conn = get_connection()
     conn.execute("DELETE FROM chat_messages WHERE session_id = ?", [session_id])
     conn.execute("DELETE FROM chat_sessions WHERE id = ?", [session_id])
@@ -281,6 +295,7 @@ def build_sql_prompt(
     max_input_tokens: int,     # from user settings
 ) -> list[dict]:
 
+    """Execute the build_sql_prompt operation."""
     system_content = """You are an expert DuckDB SQL analyst embedded in
 SheetMind, a data querying desktop application.
 
@@ -338,7 +353,7 @@ Required response format:
             "role": "user",
             "content": f"[Previous user message - context only]\n{user_text}"
         }
-        
+
         assistant_parts = []
         if turn.get("bot_message"):
             assistant_parts.append(turn["bot_message"])
@@ -353,7 +368,7 @@ Required response format:
             assistant_parts.append(f"[SQL: {turn['sql_generated']}]")
         if turn.get("sql_error"):
             assistant_parts.append(f"[SQL Error: {turn['sql_error']}]")
-        
+
         assistant_block = {
             "role": "assistant",
             "content": "\n".join(["[Previous assistant response - context only]"] + assistant_parts)
@@ -390,6 +405,7 @@ def _collect_schema_refs(
     content: str,
     turns: list[dict[str, Any]],
 ) -> list[str]:
+    """Execute the _collect_schema_refs operation."""
     refs = [r for r in referenced_files if r.strip()]
     if not refs:
         refs = _extract_references_from_content(conn, content)
@@ -418,12 +434,14 @@ def _collect_schema_refs(
 
 
 def _extract_table_names_from_sql(sql: str) -> list[str]:
+    """Execute the _extract_table_names_from_sql operation."""
     if not sql:
         return []
     return re.findall(r"\bfile_[0-9A-Za-z_]+\b", sql)
 
 
 def _extract_table_names_from_turns(turns: list[dict[str, Any]]) -> list[str]:
+    """Execute the _extract_table_names_from_turns operation."""
     names: list[str] = []
     seen = set()
     for turn in turns:
@@ -436,6 +454,7 @@ def _extract_table_names_from_turns(turns: list[dict[str, Any]]) -> list[str]:
 
 
 def _resolve_tables_by_name(conn, table_names: list[str]) -> list[dict[str, str]]:
+    """Execute the _resolve_tables_by_name operation."""
     if not table_names:
         return []
 
@@ -465,6 +484,7 @@ def _merge_table_entries(
     base: list[dict[str, str]],
     extra: list[dict[str, str]],
 ) -> list[dict[str, str]]:
+    """Execute the _merge_table_entries operation."""
     seen = {entry.get("table_name") for entry in base}
     for entry in extra:
         table_name = entry.get("table_name")
@@ -480,6 +500,7 @@ def _get_recent_turns(
     exclude_message_id: str | None = None,
     limit_pairs: int = 4,
 ) -> list[dict[str, Any]]:
+    """Execute the _get_recent_turns operation."""
     params: list[Any] = [session_id]
     user_query = """
         SELECT id, content, created_at, referenced_files_json
@@ -532,6 +553,7 @@ def _get_recent_turns(
 
 
 def set_message_feedback(message_id: str, feedback: str, reason: str | None = None) -> None:
+    """Execute the set_message_feedback operation."""
     conn = get_connection()
     conn.execute(
         "UPDATE chat_messages SET feedback = ?, feedback_reason = ? WHERE id = ?",
@@ -550,7 +572,7 @@ def _extract_json_sql(raw: str) -> dict[str, Any]:
         if lines[-1].strip() == "```":
             end_idx = -1
         text = "\n".join(lines[start_idx:end_idx])
-    
+
     # Clean up any leading/trailing non-json characters (sometimes LLMs add prose)
     if "{" in text and "}" in text:
         text = text[text.find("{"):text.rfind("}")+1]
@@ -562,8 +584,8 @@ def _extract_json_sql(raw: str) -> dict[str, Any]:
             "message": str(data.get("message") or ""),
             "confidence": data.get("confidence", 3)
         }
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON response from LLM")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid JSON response from LLM") from exc
 
 def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
     """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir and return the path."""
@@ -610,6 +632,7 @@ def _append_debug_response(filepath: Path | None, response_content: Any, label: 
 
 
 def _split_reference(value: str) -> tuple[str, str | None]:
+    """Execute the _split_reference operation."""
     if "::" in value:
         filename, sheet_name = value.split("::", 1)
         return filename.strip(), sheet_name.strip() or None
@@ -620,6 +643,7 @@ def _split_reference(value: str) -> tuple[str, str | None]:
 
 
 def _extract_references_from_content(conn, content: str) -> list[str]:
+    """Execute the _extract_references_from_content operation."""
     if not content:
         return []
 
@@ -657,6 +681,7 @@ def _extract_references_from_content(conn, content: str) -> list[str]:
 
 
 def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> tuple[list[dict[str, str]], list[str]]:
+    """Execute the _resolve_schema_tables operation."""
     effective_refs = [r for r in referenced_files if r.strip()]
     if not effective_refs:
         effective_refs = _extract_references_from_content(conn, content)
@@ -722,6 +747,7 @@ def _resolve_schema_tables(conn, referenced_files: list[str], content: str) -> t
 
 
 def _build_schema_info(conn, tables: list[dict[str, str]]) -> str:
+    """Execute the _build_schema_info operation."""
     schema_info = ""
     for entry in tables:
         filename = entry["filename"]
@@ -743,6 +769,7 @@ def _build_schema_info(conn, tables: list[dict[str, str]]) -> str:
 
 
 def _get_result_row_limit() -> int:
+    """Execute the _get_result_row_limit operation."""
     settings = get_settings()
     limit = settings.result_row_limit if hasattr(settings, "result_row_limit") else 500
     try:
@@ -753,6 +780,7 @@ def _get_result_row_limit() -> int:
 
 
 def _get_message_sql(conn, message_id: str) -> tuple[str, str]:
+    """Execute the _get_message_sql operation."""
     row = conn.execute(
         "SELECT sql_generated, session_id FROM chat_messages WHERE id = ?",
         [message_id],
@@ -769,12 +797,13 @@ def _get_message_sql(conn, message_id: str) -> tuple[str, str]:
 def get_message_data(
     message_id: str, page: int = 1, page_size: int | None = None
 ) -> ResultTable:
+    """Execute the get_message_data operation."""
     conn = get_connection()
     sql, _session_id = _get_message_sql(conn, message_id)
     try:
         df = conn.execute(sql).fetchdf()
     except Exception as exc:
-        raise ValueError(f"SQL Execution Failed: {str(exc)}")
+        raise ValueError(f"SQL Execution Failed: {str(exc)}") from exc
     return dataframe_to_result_table(
         df, _get_result_row_limit(), page=page, page_size=page_size
     )
@@ -782,12 +811,13 @@ def get_message_data(
 
 
 def export_message(message_id: str):
+    """Execute the export_message operation."""
     conn = get_connection()
     sql, session_id = _get_message_sql(conn, message_id)
     try:
         df = conn.execute(sql).fetchdf()
     except Exception as exc:
-        raise ValueError(f"SQL Execution Failed: {str(exc)}")
+        raise ValueError(f"SQL Execution Failed: {str(exc)}") from exc
 
     session_row = conn.execute(
         "SELECT title FROM chat_sessions WHERE id = ?",
@@ -881,6 +911,7 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
 
     return fallback_res
 async def generate_nl_summary(result_rows: list, columns: list, user_question: str) -> dict[str, Any]:
+    """Execute the generate_nl_summary operation."""
     prompt = f"""Summarize this query result in 1-2 sentences in plain English.
 Be specific about numbers. Do not use technical terms.
 
@@ -972,11 +1003,11 @@ Row count: {len(result_rows)}"""
                 )
                 resp.raise_for_status()
                 text = resp.json()["response"]
-        
+
         # Simple cleanup if not pure json
         if "[" in text and "]" in text:
             text = text[text.find("["):text.rfind("]")+1]
-        
+
         data = json.loads(text)
         if isinstance(data, list):
             return data[:3]
@@ -992,6 +1023,7 @@ Row count: {len(result_rows)}"""
 
 
 async def generate_title(content: str) -> str:
+    """Execute the generate_title operation."""
     prompt = f"Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: \"{content}\". Do not use quotes or prefixes, just the title text."
     debug_path = _write_debug_prompt(prompt, "TITLE GENERATION")
     settings = get_settings()
@@ -1020,6 +1052,7 @@ async def generate_title(content: str) -> str:
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
+    """Execute the generate_query_label operation."""
     prompt = f"Create a short, human-readable label (max 6 words) for a saved SQL query.\nThe user asked: \"{nl_query}\"\nThe SQL generated: {sql_query[:200]}\nReturn ONLY the label text, no quotes, no punctuation at end."
     debug_path = _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = get_settings()
@@ -1054,11 +1087,10 @@ _ws_clients: set = set()
 
 async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
     """Broadcast an event to all connected WebSocket clients."""
-    import asyncio
     payload_copy = dict(payload)
     payload_copy["session_id"] = session_id
     logger = get_logger()
-    logger.info(f"WebSocket Broadcast (chat/sql): session_id={session_id}, data={payload}")
+    logger.info("WebSocket Broadcast (chat/sql): session_id=%s, data=%s", session_id, payload)
     dead = set()
     for ws in list(_ws_clients):
         try:
@@ -1142,7 +1174,7 @@ Respond ONLY with this JSON (no markdown, no prose):
             "input_tokens": in_tok,
             "output_tokens": out_tok,
         }
-    except Exception as e:
+    except Exception:
         return {"summary": "", "followups": [], "chart_config": {}, "input_tokens": 0, "output_tokens": 0}
 
 
@@ -1150,14 +1182,10 @@ async def _auto_generate_chart(
     result_rows: list,
     columns: list,
     user_question: str,
-    session_id: str,
+    _session_id: str,
     chart_config: dict | None = None,
 ) -> str | None:
     """Auto-generate a chart and return the URL path."""
-    import uuid as _uuid
-    from services.chart_service import generate_chart
-    from services.storage_service import get_charts_dir
-
     if len(columns) < 1 or len(result_rows) < 2:
         return None
 
@@ -1188,7 +1216,7 @@ async def _auto_generate_chart(
             title = str(cfg_title)
 
     charts_dir = get_charts_dir()
-    chart_filename = f"auto_{_uuid.uuid4().hex[:8]}.png"
+    chart_filename = f"auto_{uuid.uuid4().hex[:8]}.png"
     chart_path = charts_dir / chart_filename
 
     try:
@@ -1212,18 +1240,17 @@ async def create_message(
     referenced_files: list[str],
     parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
-    import uuid
-    import asyncio
+    """Execute the create_message operation."""
     now = _now()
     conn = get_connection()
     user_msg_id = f"msg-{uuid.uuid4().hex[:8]}-u"
-    
+
     # Insert user message
     conn.execute(
         "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id, referenced_files_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [user_msg_id, session_id, "user", content, now, parent_user_message_id, json.dumps(referenced_files)]
     )
-    
+
     settings = get_settings()
     turns = _get_recent_turns(conn, session_id, exclude_message_id=user_msg_id, limit_pairs=4)
 
@@ -1235,7 +1262,7 @@ async def create_message(
     history_table_names = _extract_table_names_from_turns(turns)
     schema_tables = _merge_table_entries(schema_tables, _resolve_tables_by_name(conn, history_table_names))
     schema_info = _build_schema_info(conn, schema_tables)
-    
+
     max_input_tokens = 6000
     if settings.llm_provider == "openai":
         max_input_tokens = settings.openai.max_input_tokens
@@ -1254,7 +1281,7 @@ async def create_message(
 
     t0 = time.time()
     session_title = None
-    
+
     # 3. Generating SQL
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     if is_first:
@@ -1318,7 +1345,7 @@ async def create_message(
                         session_id,
                         {"type": "sql_retry", "attempt": retry_count, "max": max_retries, "error": sql_error},
                     )
-                    
+
                     failed_attempts_str = ""
                     for idx, attempt in enumerate(failed_attempts):
                         failed_attempts_str += f"\nAttempt {idx+1} SQL:\n{attempt['sql']}\nAttempt {idx+1} Error:\n{attempt['error']}\n"
@@ -1384,7 +1411,7 @@ async def create_message(
                 result_rows=result_rows,
                 columns=[c.key for c in columns],
                 user_question=content,
-                session_id=session_id,
+                _session_id=session_id,
                 chart_config=chart_config_from_combined
             )
         except Exception as e:
@@ -1449,8 +1476,6 @@ async def regenerate_response(
     parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
     """Re-run SQL generation + execution for an existing user query without inserting a new user message."""
-    import uuid
-    import asyncio
     conn = get_connection()
 
     # Query and append previous SQL error/query
@@ -1458,8 +1483,8 @@ async def regenerate_response(
     prev_error = None
     if parent_user_message_id:
         prev_row = conn.execute(
-            """SELECT sql_generated, content FROM chat_messages 
-               WHERE session_id = ? AND role = 'assistant' AND parent_user_message_id = ? 
+            """SELECT sql_generated, content FROM chat_messages
+               WHERE session_id = ? AND role = 'assistant' AND parent_user_message_id = ?
                ORDER BY version DESC LIMIT 1""",
             [session_id, parent_user_message_id]
         ).fetchone()
@@ -1481,7 +1506,7 @@ async def regenerate_response(
     history_table_names = _extract_table_names_from_turns(turns)
     schema_tables = _merge_table_entries(schema_tables, _resolve_tables_by_name(conn, history_table_names))
     schema_info = _build_schema_info(conn, schema_tables)
-    
+
     settings = get_settings()
     max_input_tokens = 6000
     if settings.llm_provider == "openai":
@@ -1510,6 +1535,8 @@ async def regenerate_response(
     result_table = None
     result_rows = []
     nl_summary = llm_message or "I'm sorry, I couldn't process that request."
+    chart_config_from_combined = None
+    followups = []
 
     if sql:
         await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "executing_sql"})
@@ -1534,7 +1561,7 @@ async def regenerate_response(
                 total_pages=total_pages,
             )
             result_rows = clean_rows
-            
+
             await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_summary"})
             t3 = time.time()
             chart_config_from_combined = None
@@ -1564,7 +1591,7 @@ async def regenerate_response(
                 result_rows=result_rows,
                 columns=[c.key for c in columns],
                 user_question=effective_content,
-                session_id=session_id,
+                _session_id=session_id,
                 chart_config=chart_config_from_combined
             )
         except Exception as e:
@@ -1580,11 +1607,11 @@ async def regenerate_response(
     res_data_json = json.dumps(result_table.model_dump(), default=str) if result_table else None
     conn.execute(
         """INSERT INTO chat_messages
-        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms, 
+        (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms,
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
             sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence_score, chart_url)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms, 
+        [assistant_msg_id, session_id, "assistant", nl_summary, now2, sql, sql_exec_ms, sql_gen_ms + summary_gen_ms,
          total_input_tokens, total_output_tokens, len(result_rows), parent_user_message_id, res_data_json, next_version,
             sql_gen_ms, summary_gen_ms, total_ms, model_name, confidence, chart_url]
     )

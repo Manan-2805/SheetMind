@@ -1,3 +1,5 @@
+"""Module containing excel_mutation_service functionality."""
+
 import ast
 
 import pandas as pd
@@ -31,6 +33,7 @@ def build_mutation_prompt(
     sample_rows: list[list],
     row_count: int,
 ) -> list[dict]:
+    """Execute the build_mutation_prompt operation."""
     system = """You are an expert data transformation assistant embedded in
 SheetMind, an Excel editing application.
 
@@ -89,6 +92,7 @@ Required response format:
     ]
 
 def validate_pandas_expression(code: str) -> tuple[bool, str]:
+    """Execute the validate_pandas_expression operation."""
     if not code or not code.strip():
         return True, ""
     try:
@@ -116,8 +120,9 @@ def validate_pandas_expression(code: str) -> tuple[bool, str]:
 def dry_run_mutation(
     df: pd.DataFrame,
     pandas_code: str,
-    affected_columns: list[str],
+    _affected_columns: list[str],
 ) -> tuple[list[dict], pd.DataFrame]:
+    """Execute the dry_run_mutation operation."""
     df_original = df.copy()
     df_modified = df.copy()
 
@@ -128,7 +133,7 @@ def dry_run_mutation(
     diff_rows = []
     # Check all columns in case new columns were added or existing ones were dropped
     all_cols = set(df_original.columns) | set(df_modified.columns)
-    
+
     for col in all_cols:
         old_col = df_original.get(col, pd.Series([None] * len(df_original)))
         new_col = df_modified.get(col, pd.Series([None] * len(df_modified)))
@@ -137,13 +142,13 @@ def dry_run_mutation(
         for idx in range(max_len):
             old_val = old_col.iloc[idx] if idx < len(old_col) else None
             new_val = new_col.iloc[idx] if idx < len(new_col) else None
-            
+
             is_formula = isinstance(new_val, str) and new_val.startswith('=')
 
             # Handle NaN equality
             old_is_na = pd.isna(old_val)
             new_is_na = pd.isna(new_val)
-            
+
             if (old_is_na != new_is_na) or (not old_is_na and old_val != new_val):
                 diff_rows.append({
                     "rowIndex": idx,

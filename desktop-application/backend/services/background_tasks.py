@@ -1,35 +1,38 @@
+"""Module containing background_tasks functionality."""
+
 import asyncio
-import re
+import os
 import uuid
-from datetime import datetime, timezone
 
 import pandas as pd
 
 from dependencies import current_username
-from models.settings_models import get_settings
 from services.duckdb_service import get_connection
+from services.excel_import_service import (
+    clean_columns,
+    import_df_to_duckdb,
+    now_utc as _now,
+    safe_table_name,
+)
+from services.storage_service import list_account_users
 
 # The queue stores tuples of (username, file_id, file_path)
 task_queue = asyncio.Queue()
 active_tasks = set()
 
 
-from services.excel_import_service import safe_table_name, clean_columns, import_df_to_duckdb, now_utc as _now
-
-# The queue stores tuples of (username, file_id, file_path)
-
-
 def process_excel_file_sync(username: str, file_id: str, file_path: str):
+    """Execute the process_excel_file_sync operation."""
     token = current_username.set(username)
     try:
         conn = get_connection()
         try:
             # Update status to processing
             conn.execute(
-                "UPDATE excel_files SET status = 'processing' WHERE id = ?", 
+                "UPDATE excel_files SET status = 'processing' WHERE id = ?",
                 [file_id]
             )
-            
+
             conn.execute("DELETE FROM excel_sheets WHERE excel_file_id = ?", [file_id])
 
             total_rows = 0
@@ -89,7 +92,7 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
                 """,
                 [total_rows, max_cols, num_sheets, now, file_id]
             )
-            
+
         except Exception as e:
             # Update status to error
             error_msg = str(e)
@@ -110,22 +113,23 @@ async def _process_wrapper(username: str, file_id: str, file_path: str):
 
 
 async def queue_worker():
-    import os
+    """Execute the queue_worker operation."""
     limit = min(5, max(1, os.cpu_count() or 1))
     sem = asyncio.Semaphore(limit)
 
     async def worker_task(username, file_id, file_path):
+        """Execute the worker_task operation."""
         async with sem:
             await _process_wrapper(username, file_id, file_path)
 
     while True:
         try:
             username, file_id, file_path = await task_queue.get()
-            
+
             task = asyncio.create_task(worker_task(username, file_id, file_path))
             active_tasks.add(task)
             task.add_done_callback(active_tasks.discard)
-            
+
             task_queue.task_done()
         except asyncio.CancelledError:
             break
@@ -134,7 +138,7 @@ async def queue_worker():
 
 
 async def resume_pending_tasks():
-    from services.storage_service import list_account_users
+    """Execute the resume_pending_tasks operation."""
     users = list_account_users()
     for user_info in users:
         username = user_info["username"]

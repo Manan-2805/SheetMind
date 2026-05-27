@@ -1,3 +1,5 @@
+"""Module containing artifact_schemas functionality."""
+
 from datetime import datetime
 from typing import Optional
 
@@ -5,6 +7,7 @@ from pydantic import BaseModel
 
 
 class ArtifactExportResponse(BaseModel):
+    """Schema or class representation for ArtifactExportResponse."""
     id: str
     filename: str
     file_path: str
@@ -16,6 +19,7 @@ class ArtifactExportResponse(BaseModel):
 
 
 class ArtifactChartResponse(BaseModel):
+    """Schema or class representation for ArtifactChartResponse."""
     id: str
     chart_type: str
     title: str
@@ -26,5 +30,6 @@ class ArtifactChartResponse(BaseModel):
 
 
 class ArtifactsResponse(BaseModel):
+    """Schema or class representation for ArtifactsResponse."""
     excel_exports: list[ArtifactExportResponse]
     charts: list[ArtifactChartResponse]

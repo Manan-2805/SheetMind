@@ -1,3 +1,5 @@
+"""Module containing saved_query_models functionality."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -6,10 +8,12 @@ from services.duckdb_service import get_connection
 
 
 def _now() -> datetime:
+    """Execute the _now operation."""
     return datetime.now(timezone.utc)
 
 
 def get_all() -> list[SavedQueryResponse]:
+    """Execute the get_all operation."""
     conn = get_connection()
     rows = conn.execute(
         """
@@ -34,6 +38,7 @@ def get_all() -> list[SavedQueryResponse]:
 
 
 def search(query: str | None, date_from: datetime | None, date_to: datetime | None) -> list[SavedQueryResponse]:
+    """Execute the search operation."""
     conn = get_connection()
     clauses = []
     params: list[object] = []
@@ -71,6 +76,7 @@ def search(query: str | None, date_from: datetime | None, date_to: datetime | No
 
 
 def create(label: str, nl_query: str, sql_query: str) -> SavedQueryResponse:
+    """Execute the create operation."""
     conn = get_connection()
     now = _now()
     query_id = str(uuid.uuid4().hex[:8])
@@ -95,11 +101,13 @@ def create(label: str, nl_query: str, sql_query: str) -> SavedQueryResponse:
 
 
 def delete(query_id: str) -> None:
+    """Execute the delete operation."""
     conn = get_connection()
     conn.execute("DELETE FROM saved_queries WHERE id = ?", [query_id])
 
 
 def get_by_id(query_id: str) -> SavedQueryResponse | None:
+    """Execute the get_by_id operation."""
     conn = get_connection()
     row = conn.execute(
         """
@@ -124,6 +132,7 @@ def get_by_id(query_id: str) -> SavedQueryResponse | None:
 
 
 def rename(query_id: str, new_label: str) -> SavedQueryResponse | None:
+    """Execute the rename operation."""
     conn = get_connection()
     conn.execute(
         "UPDATE saved_queries SET label = ? WHERE id = ?",
@@ -133,6 +142,7 @@ def rename(query_id: str, new_label: str) -> SavedQueryResponse | None:
 
 
 def toggle_favorite(query_id: str) -> SavedQueryResponse | None:
+    """Execute the toggle_favorite operation."""
     conn = get_connection()
     row = conn.execute(
         "SELECT is_favorite FROM saved_queries WHERE id = ?",
@@ -149,6 +159,7 @@ def toggle_favorite(query_id: str) -> SavedQueryResponse | None:
 
 
 def mark_used(query_id: str) -> None:
+    """Execute the mark_used operation."""
     conn = get_connection()
     conn.execute(
         "UPDATE saved_queries SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?",

@@ -1,21 +1,26 @@
+"""Module containing settings_schemas functionality."""
+
 from typing import Optional
 
 from pydantic import BaseModel
 
 
 class OpenAISettingsSchema(BaseModel):
+    """Schema or class representation for OpenAISettingsSchema."""
     api_key: str = ""
     model: str = "gpt-4o"
     max_input_tokens: int = 6000
 
 
 class OllamaSettingsSchema(BaseModel):
+    """Schema or class representation for OllamaSettingsSchema."""
     url: str = "http://localhost:11434"
     model: str = ""
     max_input_tokens: int = 3000
 
 
 class SettingsResponse(BaseModel):
+    """Schema or class representation for SettingsResponse."""
     theme: str = "dark"
     llm_provider: str = "openai"
     openai: OpenAISettingsSchema = OpenAISettingsSchema()
@@ -29,6 +34,7 @@ class SettingsResponse(BaseModel):
 
 
 class UpdateSettingsRequest(BaseModel):
+    """Schema or class representation for UpdateSettingsRequest."""
     theme: Optional[str] = None
     llm_provider: Optional[str] = None
     openai: Optional[OpenAISettingsSchema] = None
@@ -40,10 +46,12 @@ class UpdateSettingsRequest(BaseModel):
 
 
 class TestLLMRequest(BaseModel):
+    """Schema or class representation for TestLLMRequest."""
     provider: str
     api_key: Optional[str] = None
     url: Optional[str] = None
 
 
 class PullModelRequest(BaseModel):
+    """Schema or class representation for PullModelRequest."""
     model_name: str

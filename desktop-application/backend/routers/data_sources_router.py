@@ -1,3 +1,5 @@
+"""Module containing data_sources_router functionality."""
+
 from datetime import datetime, timezone
 from pathlib import Path
 import urllib.parse
@@ -16,11 +18,13 @@ from schemas.data_source_schemas import (
     DataSourceResponse,
     PreviewResponse,
 )
+from services.background_tasks import task_queue
 from services.duckdb_service import get_connection
 from services.storage_service import get_uploads_dir
 
 
 class UrlUploadRequest(BaseModel):
+    """Schema or class representation for UrlUploadRequest."""
     url: str
 
 
@@ -28,22 +32,26 @@ router = APIRouter(prefix="/data-sources", tags=["data-sources"])
 
 
 def _safe_storage_filename(filename: str, fallback: str = "upload.xlsx") -> str:
+    """Execute the _safe_storage_filename operation."""
     base_name = Path(filename).name or fallback
     return base_name.replace(" ", "_").replace("-", "_")
 
 
 @router.get("/list-for-autocomplete", response_model=AutocompleteResponse)
 async def list_for_autocomplete() -> AutocompleteResponse:
+    """Execute the list_for_autocomplete operation."""
     return ds_models.list_for_autocomplete()
 
 
 @router.get("", response_model=list[DataSourceResponse])
 async def get_data_sources() -> list[DataSourceResponse]:
+    """Execute the get_data_sources operation."""
     return ds_models.get_all()
 
 
 @router.post("/upload", response_model=DataSourceResponse)
 async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse:
+    """Execute the upload_data_source operation."""
     username = current_username.get("default")
     uploads_dir = get_uploads_dir(username)
 
@@ -66,7 +74,6 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
         [file_id, filename, stored_path, now, file_size, "pending"],
     )
 
-    from services.background_tasks import task_queue
     task_queue.put_nowait((username, file_id, stored_path))
 
     return DataSourceResponse(
@@ -83,6 +90,7 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
 
 @router.post("/upload-from-url", response_model=DataSourceResponse)
 async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
+    """Execute the upload_from_url operation."""
     url = body.url
     if not url:
         raise HTTPException(status_code=400, detail="URL is required")
@@ -91,7 +99,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
         parsed_url = urllib.parse.urlparse(url)
         filename = Path(parsed_url.path).name or "downloaded_file"
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid URL structure: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid URL structure: {e}") from e
 
     ext = Path(filename).suffix.lower()
     if ext not in (".csv", ".xls", ".xlsx", ".ods") and not any(filename.endswith(s) for s in (".csv", ".xls", ".xlsx", ".ods")):
@@ -104,7 +112,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
             resp.raise_for_status()
             content = resp.content
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download file from URL: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to download file from URL: {str(e)}") from e
 
     file_size = len(content)
 
@@ -139,7 +147,6 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
         [file_id, filename, stored_path, now, file_size, "pending"],
     )
 
-    from services.background_tasks import task_queue
     task_queue.put_nowait((username, file_id, stored_path))
 
     return DataSourceResponse(
@@ -156,6 +163,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
 
 @router.delete("/{source_id}", response_model=SuccessResponse)
 async def delete_data_source(source_id: str) -> SuccessResponse:
+    """Execute the delete_data_source operation."""
     ds_models.delete(source_id)
     return SuccessResponse(success=True)
 
@@ -165,4 +173,5 @@ async def preview_data_source(
     source_id: str,
     sheet: str | None = Query(default=None),
 ) -> PreviewResponse:
+    """Execute the preview_data_source operation."""
     return ds_models.get_preview(source_id, sheet)

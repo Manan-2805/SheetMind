@@ -1,17 +1,19 @@
+"""Module containing logging_service functionality."""
+
 import logging
 from logging.handlers import TimedRotatingFileHandler
-import os
 import sys
 
 from services.storage_service import get_app_root
 
 
-_logger = None
+_LOGGER = None
 
 def get_logger() -> logging.Logger:
-    global _logger
-    if _logger is not None:
-        return _logger
+    """Execute the get_logger operation."""
+    global _LOGGER
+    if _LOGGER is not None:
+        return _LOGGER
 
     # Create logger
     logger = logging.getLogger("sheetmind")
@@ -19,8 +21,8 @@ def get_logger() -> logging.Logger:
 
     # Prevent duplicate handlers if initialized multiple times
     if logger.handlers:
-        _logger = logger
-        return _logger
+        _LOGGER = logger
+        return _LOGGER
 
     # Format
     formatter = logging.Formatter(
@@ -50,5 +52,5 @@ def get_logger() -> logging.Logger:
     except Exception as e:
         print(f"Failed to initialize rotating file log handler: {e}")
 
-    _logger = logger
-    return _logger
+    _LOGGER = logger
+    return _LOGGER

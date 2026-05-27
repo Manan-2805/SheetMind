@@ -1,17 +1,15 @@
-import asyncio
+"""Module containing settings_router functionality."""
+
 import json
 import time
-from datetime import datetime, timezone
 
-import httpx
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+import httpx
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from schemas.settings_schemas import (
-    OllamaSettingsSchema,
-    OpenAISettingsSchema,
     PullModelRequest,
     SettingsResponse,
     TestLLMRequest,
@@ -29,6 +27,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class TestLLMResponse(BaseModel):
+    """Schema or class representation for TestLLMResponse."""
     success: bool
     provider: str
     latency_ms: int
@@ -37,27 +36,32 @@ class TestLLMResponse(BaseModel):
 
 
 class PullModelResponse(BaseModel):
+    """Schema or class representation for PullModelResponse."""
     success: bool
     model: str
 
 
 class ClearHistoryResponse(BaseModel):
+    """Schema or class representation for ClearHistoryResponse."""
     success: bool
     deleted_sessions: int
 
 
 class DeleteFilesResponse(BaseModel):
+    """Schema or class representation for DeleteFilesResponse."""
     success: bool
     deleted_files: int
 
 
 @router.get("", response_model=SettingsResponse)
 async def get_settings() -> SettingsResponse:
+    """Execute the get_settings operation."""
     return db_get_settings()
 
 
 @router.put("", response_model=SettingsResponse)
 async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
+    """Execute the update_settings operation."""
     current_settings = db_get_settings()
     if body.theme is not None:
         current_settings.theme = body.theme
@@ -82,6 +86,7 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
 
 @router.post("/test-llm", response_model=TestLLMResponse)
 async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
+    """Execute the test_llm operation."""
     t0 = time.time()
     settings = db_get_settings()
 
@@ -146,6 +151,7 @@ async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
 
 @router.get("/ollama-models")
 async def get_ollama_models():
+    """Execute the get_ollama_models operation."""
     settings = db_get_settings()
     ollama_url = settings.ollama.url.rstrip("/")
     async with httpx.AsyncClient() as client:
@@ -159,10 +165,12 @@ async def get_ollama_models():
 
 @router.post("/pull-ollama-model")
 async def pull_ollama_model(body: PullModelRequest):
+    """Execute the pull_ollama_model operation."""
     settings = db_get_settings()
     ollama_url = settings.ollama.url.rstrip("/")
 
     async def stream_pull():
+        """Execute the stream_pull operation."""
         async with httpx.AsyncClient() as client:
             try:
                 async with client.stream("POST", f"{ollama_url}/api/pull", json={"name": body.model_name}) as response:
@@ -176,18 +184,21 @@ async def pull_ollama_model(body: PullModelRequest):
 
 @router.post("/clear-chat-history", response_model=ClearHistoryResponse)
 async def clear_chat_history() -> ClearHistoryResponse:
+    """Execute the clear_chat_history operation."""
     deleted = clear_chat_history_db()
     return ClearHistoryResponse(success=True, deleted_sessions=deleted)
 
 
 @router.post("/delete-all-files", response_model=DeleteFilesResponse)
 async def delete_all_files() -> DeleteFilesResponse:
+    """Execute the delete_all_files operation."""
     deleted = delete_all_files_db()
     return DeleteFilesResponse(success=True, deleted_files=deleted)
 
 
 @router.get("/export")
 async def export_settings() -> Response:
+    """Execute the export_settings operation."""
     settings = db_get_settings()
     data = settings.model_dump()
     data["openai"]["api_key"] = ""
@@ -203,4 +214,5 @@ async def export_settings() -> Response:
 
 @router.post("/import")
 async def import_settings(file: UploadFile = File(...)) -> JSONResponse:
+    """Execute the import_settings operation."""
     return JSONResponse({"success": True})

@@ -1,10 +1,11 @@
+"""Module containing chart_service functionality."""
+
 import io
 from typing import Any, Dict, List, Optional
 
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -41,6 +42,7 @@ def generate_chart(
     output_format: str = "png",
     value_key: Optional[str] = None,
 ) -> io.BytesIO:
+    """Execute the generate_chart operation."""
     plt.clf()
     plt.figure(figsize=(10, 6))
 
@@ -140,7 +142,7 @@ def generate_chart(
                 margins_name="Total",
             ).fillna(0)
 
-            fig, ax = plt.subplots(figsize=(max(10, len(pivot.columns) * 1.5), max(6, len(pivot) * 0.5)))
+            _fig, ax = plt.subplots(figsize=(max(10, len(pivot.columns) * 1.5), max(6, len(pivot) * 0.5)))
             ax.axis("off")
             tbl = ax.table(
                 cellText=[[f"{v:.0f}" if isinstance(v, (int, float)) else str(v) for v in row]

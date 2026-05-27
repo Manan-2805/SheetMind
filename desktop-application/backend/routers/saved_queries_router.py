@@ -1,3 +1,5 @@
+"""Module containing saved_queries_router functionality."""
+
 from datetime import datetime, timezone
 import re
 
@@ -24,6 +26,7 @@ router = APIRouter(prefix="/saved-queries", tags=["saved-queries"])
 
 
 class RunSavedQueryResponse(BaseModel):
+    """Schema or class representation for RunSavedQueryResponse."""
     id: str
     label: str
     nl_query: str
@@ -32,16 +35,19 @@ class RunSavedQueryResponse(BaseModel):
 
 
 class GenerateLabelRequest(BaseModel):
+    """Schema or class representation for GenerateLabelRequest."""
     nl_query: str
     sql_query: str
 
 
 class GenerateLabelResponse(BaseModel):
+    """Schema or class representation for GenerateLabelResponse."""
     label: str
 
 
 @router.post("/generate-label", response_model=GenerateLabelResponse)
 async def generate_label(body: GenerateLabelRequest) -> GenerateLabelResponse:
+    """Execute the generate_label operation."""
     label = await chat_models.generate_query_label(body.nl_query, body.sql_query)
     return GenerateLabelResponse(label=label)
 
@@ -52,12 +58,14 @@ async def get_saved_queries(
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None, alias="to"),
 ) -> list[SavedQueryResponse]:
+    """Execute the get_saved_queries operation."""
     query = q.strip() if q else None
     return sq_models.search(query, from_, to)
 
 
 @router.post("", response_model=SavedQueryResponse)
 async def create_saved_query(body: CreateSavedQueryRequest) -> SavedQueryResponse:
+    """Execute the create_saved_query operation."""
     return sq_models.create(
         label=body.label,
         nl_query=body.nl_query,
@@ -67,6 +75,7 @@ async def create_saved_query(body: CreateSavedQueryRequest) -> SavedQueryRespons
 
 @router.put("/{query_id}/favorite", response_model=SavedQueryResponse)
 async def toggle_favorite(query_id: str) -> SavedQueryResponse:
+    """Execute the toggle_favorite operation."""
     updated = sq_models.toggle_favorite(query_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Saved query not found")
@@ -75,6 +84,7 @@ async def toggle_favorite(query_id: str) -> SavedQueryResponse:
 
 @router.put("/{query_id}", response_model=SavedQueryResponse)
 async def rename_saved_query(query_id: str, body: UpdateSavedQueryRequest) -> SavedQueryResponse:
+    """Execute the rename_saved_query operation."""
     updated = sq_models.rename(query_id, body.label)
     if not updated:
         raise HTTPException(status_code=404, detail="Saved query not found")
@@ -83,11 +93,13 @@ async def rename_saved_query(query_id: str, body: UpdateSavedQueryRequest) -> Sa
 
 @router.delete("/{query_id}", response_model=SuccessResponse)
 async def delete_saved_query(query_id: str) -> SuccessResponse:
+    """Execute the delete_saved_query operation."""
     sq_models.delete(query_id)
     return SuccessResponse(success=True)
 
 
 def _get_row_limit() -> int:
+    """Execute the _get_row_limit operation."""
     settings = get_settings()
     try:
         limit = int(settings.result_row_limit)
@@ -102,6 +114,7 @@ async def run_saved_query(
     page: int = Query(default=1),
     page_size: int = Query(default=10),
 ) -> RunSavedQueryResponse:
+    """Execute the run_saved_query operation."""
     saved_query = sq_models.get_by_id(query_id)
     if not saved_query:
         raise HTTPException(status_code=404, detail="Saved query not found")
@@ -110,7 +123,7 @@ async def run_saved_query(
     try:
         df = conn.execute(saved_query.sql_query).fetchdf()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}")
+        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}") from exc
 
     sq_models.mark_used(query_id)
 
@@ -126,6 +139,7 @@ async def run_saved_query(
 
 @router.post("/{query_id}/export", response_model=ArtifactExportResponse)
 async def export_saved_query(query_id: str) -> ArtifactExportResponse:
+    """Execute the export_saved_query operation."""
     saved_query = sq_models.get_by_id(query_id)
     if not saved_query:
         raise HTTPException(status_code=404, detail="Saved query not found")
@@ -134,7 +148,7 @@ async def export_saved_query(query_id: str) -> ArtifactExportResponse:
     try:
         df = conn.execute(saved_query.sql_query).fetchdf()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}")
+        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}") from exc
 
     sq_models.mark_used(query_id)
 

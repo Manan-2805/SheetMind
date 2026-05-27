@@ -32,14 +32,10 @@ disable =
     too-many-locals,
     too-many-instance-attributes,
 
-    # Standard in async FastAPI code
-    missing-module-docstring,
-    missing-class-docstring,
-    missing-function-docstring,
-
     # Pydantic uses validators & config classes with bare `pass`
     unnecessary-pass,
-
+    C0301,
+    W0718,
     # FastAPI uses typing.Annotated and complex dependency annotations
     fixme
 

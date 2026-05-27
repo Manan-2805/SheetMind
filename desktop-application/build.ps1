@@ -2,7 +2,8 @@
 # Usage: .\build.ps1 [-Version "1.0.0"]
 
 param(
-    [string]$Version = "1.0.0"
+    [string]$Version = "1.0.0",
+    [switch]$Clean = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,16 +46,40 @@ Start-Sleep -Seconds 1
 # Step 1: Clean and Prepare Build Directory
 Write-Host "`n[1/5] Cleaning and preparing build directories..." -ForegroundColor Yellow
 $BuildDir = "$ROOT\build"
-
 $BackendBuildDir = "$BuildDir\backend"
 $FrontendBuildDir = "$BuildDir\frontend"
 
-if (Test-Path $BuildDir) {
-    Remove-Item -Recurse -Force $BuildDir
+if ($Clean) {
+    Write-Host "Clean build requested. Purging build directories and Nuitka cache..." -ForegroundColor DarkGray
+    if (Test-Path $BuildDir) {
+        Remove-Item -Recurse -Force $BuildDir
+    }
+    $NuitkaCache = "$ROOT\backend\main.build"
+    if (Test-Path $NuitkaCache) {
+        Remove-Item -Recurse -Force $NuitkaCache
+    }
+    $NuitkaOnefileDir = "$ROOT\backend\main.onefile-build"
+    if (Test-Path $NuitkaOnefileDir) {
+        Remove-Item -Recurse -Force $NuitkaOnefileDir
+    }
+} else {
+    Write-Host "Incremental build. Keeping Nuitka build cache and existing build directories..." -ForegroundColor DarkGray
+    if (Test-Path $FrontendBuildDir) {
+        Remove-Item -Recurse -Force $FrontendBuildDir
+    }
 }
-New-Item -ItemType Directory -Force $BackendBuildDir | Out-Null
-New-Item -ItemType Directory -Force $FrontendBuildDir | Out-Null
+
+if (-not (Test-Path $BuildDir)) {
+    New-Item -ItemType Directory -Force $BuildDir | Out-Null
+}
+if (-not (Test-Path $BackendBuildDir)) {
+    New-Item -ItemType Directory -Force $BackendBuildDir | Out-Null
+}
+if (-not (Test-Path $FrontendBuildDir)) {
+    New-Item -ItemType Directory -Force $FrontendBuildDir | Out-Null
+}
 Write-Host "Build directories prepared successfully." -ForegroundColor Green
+
 
 # Step 2: Build Frontend (React + Vite)
 Write-Host "`n[2/5] Building Frontend (React + Vite)..." -ForegroundColor Yellow
@@ -89,36 +114,48 @@ uv pip install nuitka ordered-set zstandard
 # - '--lto=no': Disables Link Time Optimization, cutting build time by 50%+
 # - Bundles missing dynamic packages: aiofiles, seaborn, matplotlib, numpy, httpx, jinja2
 Write-Host "Compiling backend to native executable (using 8 parallel jobs)..." -ForegroundColor DarkGray
-python -B -m nuitka `
-    --standalone `
-    --onefile `
-    --jobs=8 `
-    --lto=no `
-    --output-dir=$BackendBuildDir `
-    --output-filename=sheetmind-backend `
-    --include-package=fastapi `
-    --include-package=uvicorn `
-    --include-package=duckdb `
-    --include-package=pandas `
-    --include-package=openpyxl `
-    --include-package=openai `
-    --include-package=websockets `
-    --include-package=starlette `
-    --include-package=anyio `
-    --include-package=aiofiles `
-    --include-package=seaborn `
-    --include-package=matplotlib `
-    --include-package=numpy `
-    --include-package=httpx `
-    --include-package=routers `
-    --include-package=services `
-    --include-package=models `
-    --include-package=schemas `
-    --include-package=dependencies `
-    --include-package-data=uvicorn `
-    --windows-console-mode=disable `
-    --remove-output `
-    main.py
+
+$nuitkaArgs = @(
+    "--standalone",
+    "--onefile",
+    "--jobs=8",
+    "--lto=no",
+    "--output-dir=$BackendBuildDir",
+    "--output-filename=sheetmind-backend",
+    "--include-package=fastapi",
+    "--include-package=uvicorn",
+    "--include-package=duckdb",
+    "--include-package=pandas",
+    "--include-package=openpyxl",
+    "--include-package=openai",
+    "--include-package=websockets",
+    "--include-package=starlette",
+    "--include-package=anyio",
+    "--include-package=aiofiles",
+    "--include-package=seaborn",
+    "--include-package=matplotlib",
+    "--include-package=numpy",
+    "--include-package=httpx",
+    "--include-package=routers",
+    "--include-package=services",
+    "--include-package=models",
+    "--include-package=schemas",
+    "--include-package=dependencies",
+    "--include-package-data=uvicorn",
+    "--windows-console-mode=disable"
+)
+
+if ($Clean) {
+    Write-Host "Clean build: Nuitka will remove intermediate output directory upon completion." -ForegroundColor DarkGray
+    $nuitkaArgs += "--remove-output"
+} else {
+    Write-Host "Incremental build: Nuitka will preserve intermediate output directory (main.build/) for caching." -ForegroundColor DarkGray
+}
+
+$nuitkaArgs += "main.py"
+
+python -B -m nuitka @nuitkaArgs
+
 
 # Deactivate Venv
 if (Get-Command deactivate -ErrorAction SilentlyContinue) {

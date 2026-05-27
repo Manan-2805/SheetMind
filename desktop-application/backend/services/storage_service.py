@@ -1,14 +1,16 @@
+"""Module containing storage_service functionality."""
+
+from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import sys
 
 from dependencies import current_username
 
 
 def get_app_root() -> Path:
     """Root app dir: ~/.sheetmind in production, or backend/.sheetmind in development"""
-    import os
-    import sys
-    
     is_dev = (
         os.environ.get("SHEETMIND_ENV") == "development"
         or os.environ.get("NODE_ENV") == "development"
@@ -18,7 +20,7 @@ def get_app_root() -> Path:
         base = Path(__file__).parent.parent / ".sheetmind"
     else:
         base = Path.home() / ".sheetmind"
-        
+
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -78,10 +80,12 @@ def get_debug_prompts_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 def _accounts_path() -> Path:
+    """Execute the _accounts_path operation."""
     return get_app_root() / "accounts.json"
 
 
 def _load_accounts() -> dict:
+    """Execute the _load_accounts operation."""
     p = _accounts_path()
     if p.exists():
         try:
@@ -92,6 +96,7 @@ def _load_accounts() -> dict:
 
 
 def _save_accounts(data: dict) -> None:
+    """Execute the _save_accounts operation."""
     _accounts_path().write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
 
 
@@ -111,7 +116,6 @@ def list_account_users() -> list[dict]:
 
 def register_login(username: str) -> None:
     """Update or create a user entry in accounts.json."""
-    from datetime import datetime, timezone
     accounts = _load_accounts()
     now = datetime.now(timezone.utc).isoformat()
     if username not in accounts:

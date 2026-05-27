@@ -1,3 +1,5 @@
+"""Module containing artifact_models functionality."""
+
 import os
 import uuid
 from datetime import datetime, timezone
@@ -11,10 +13,12 @@ from services.duckdb_service import get_connection
 
 
 def _now() -> datetime:
+    """Execute the _now operation."""
     return datetime.now(timezone.utc)
 
 
 def _get_source_session_name(conn, source_message_id: str | None) -> str | None:
+    """Execute the _get_source_session_name operation."""
     if not source_message_id:
         return None
     row = conn.execute(
@@ -30,6 +34,7 @@ def _get_source_session_name(conn, source_message_id: str | None) -> str | None:
 
 
 def get_all() -> ArtifactsResponse:
+    """Execute the get_all operation."""
     conn = get_connection()
     rows = conn.execute(
         """
@@ -81,6 +86,7 @@ def create_export(
     title: str,
     source_message_id: str | None,
 ) -> ArtifactExportResponse:
+    """Execute the create_export operation."""
     conn = get_connection()
     artifact_id = f"art-{uuid.uuid4().hex[:10]}"
     created_at = _now()
@@ -106,6 +112,7 @@ def create_export(
 
 
 def get_by_id(artifact_id: str):
+    """Execute the get_by_id operation."""
     conn = get_connection()
     return conn.execute(
         """
@@ -118,6 +125,7 @@ def get_by_id(artifact_id: str):
 
 
 def delete(artifact_id: str) -> bool:
+    """Execute the delete operation."""
     conn = get_connection()
     row = get_by_id(artifact_id)
     if not row:
@@ -133,6 +141,7 @@ def delete(artifact_id: str) -> bool:
 
 
 def rename(artifact_id: str, title: str) -> ArtifactExportResponse | None:
+    """Execute the rename operation."""
     conn = get_connection()
     conn.execute("UPDATE artifacts SET title = ? WHERE id = ?", [title, artifact_id])
     row = get_by_id(artifact_id)
