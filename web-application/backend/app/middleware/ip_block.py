@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -20,12 +20,10 @@ class IPBlockMiddleware(BaseHTTPMiddleware):
 
         session = SessionLocal()
         try:
-            blocked = session.query(BlockedIP).filter(
-                BlockedIP.ip_address == real_ip
-            ).first()
+            blocked = session.query(BlockedIP).filter(BlockedIP.ip_address == real_ip).first()
 
             if blocked:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 if blocked.blocked_until is None or blocked.blocked_until > now:
                     return JSONResponse(
                         status_code=403,
@@ -36,10 +34,14 @@ class IPBlockMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            expired_blocks = session.query(BlockedIP).filter(
-                BlockedIP.blocked_until.isnot(None),
-                BlockedIP.blocked_until <= datetime.now(timezone.utc),
-            ).all()
+            expired_blocks = (
+                session.query(BlockedIP)
+                .filter(
+                    BlockedIP.blocked_until.isnot(None),
+                    BlockedIP.blocked_until <= datetime.now(UTC),
+                )
+                .all()
+            )
             for expired in expired_blocks:
                 session.delete(expired)
             if expired_blocks:

@@ -1,14 +1,14 @@
 """Module containing main functionality."""
 
 import asyncio
-from contextlib import asynccontextmanager
 import sys
+from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketState
-import uvicorn
 
 from dependencies import current_username
 from models.chat_models import _ws_clients
@@ -39,7 +39,6 @@ async def lifespan(_app: FastAPI):
 
     logger.info("Application shutting down...")
     worker_task.cancel()
-
 
 
 app = FastAPI(title="SheetMind API", version="1.0.0", lifespan=lifespan)
@@ -114,15 +113,23 @@ async def websocket_datasources(websocket: WebSocket):
                     "SELECT id, status, error_message, row_count, column_count FROM excel_files"
                 ).fetchall()
                 updates = [
-                    {"id": r[0], "status": r[1], "error_message": r[2], "row_count": r[3], "column_count": r[4]}
+                    {
+                        "id": r[0],
+                        "status": r[1],
+                        "error_message": r[2],
+                        "row_count": r[3],
+                        "column_count": r[4],
+                    }
                     for r in rows
                 ]
-                logger.info("WebSocket Broadcast (status_update): username=%s, data=%s", username, updates)
+                logger.info(
+                    "WebSocket Broadcast (status_update): username=%s, data=%s", username, updates
+                )
                 await websocket.send_json({"type": "status_update", "data": updates})
             except WebSocketDisconnect:
                 break
             except RuntimeError as loop_err:
-                if "Cannot call \"send\"" in str(loop_err):
+                if 'Cannot call "send"' in str(loop_err):
                     break
                 logger.error("WebSocket loop query error: %s", loop_err)
             except Exception as loop_err:

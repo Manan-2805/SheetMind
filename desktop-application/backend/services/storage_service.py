@@ -1,10 +1,10 @@
 """Module containing storage_service functionality."""
 
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 from dependencies import current_username
 
@@ -14,7 +14,10 @@ def get_app_root() -> Path:
     is_dev = (
         os.environ.get("SHEETMIND_ENV") == "development"
         or os.environ.get("NODE_ENV") == "development"
-        or (not getattr(sys, "frozen", False) and (Path(__file__).parent.parent.parent / ".git").exists())
+        or (
+            not getattr(sys, "frozen", False)
+            and (Path(__file__).parent.parent.parent / ".git").exists()
+        )
     )
     if is_dev:
         base = Path(__file__).parent.parent / ".sheetmind"
@@ -79,6 +82,7 @@ def get_debug_prompts_dir() -> Path:
 # Global accounts registry
 # ---------------------------------------------------------------------------
 
+
 def _accounts_path() -> Path:
     """Execute the _accounts_path operation."""
     return get_app_root() / "accounts.json"
@@ -105,11 +109,13 @@ def list_account_users() -> list[dict]:
     accounts = _load_accounts()
     users = []
     for username, info in accounts.items():
-        users.append({
-            "username": username,
-            "last_login": info.get("last_login"),
-            "created_at": info.get("created_at"),
-        })
+        users.append(
+            {
+                "username": username,
+                "last_login": info.get("last_login"),
+                "created_at": info.get("created_at"),
+            }
+        )
     users.sort(key=lambda u: u.get("last_login") or "", reverse=True)
     return users
 
@@ -117,7 +123,7 @@ def list_account_users() -> list[dict]:
 def register_login(username: str) -> None:
     """Update or create a user entry in accounts.json."""
     accounts = _load_accounts()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     if username not in accounts:
         accounts[username] = {"created_at": now, "last_login": now}
     else:

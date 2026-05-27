@@ -1,7 +1,7 @@
 """Module containing chart_service functionality."""
 
 import io
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import matplotlib
 import matplotlib.colors as mcolors
@@ -16,7 +16,7 @@ plt.rcParams["figure.figsize"] = [10, 6]
 plt.rcParams["font.size"] = 12
 
 
-def _resolve_palette(colors: Optional[List[str]], n: int) -> List[str]:
+def _resolve_palette(colors: list[str] | None, n: int) -> list[str]:
     """Return a list of n valid matplotlib color strings."""
     if colors:
         resolved = []
@@ -33,14 +33,14 @@ def _resolve_palette(colors: Optional[List[str]], n: int) -> List[str]:
 
 
 def generate_chart(
-    data: List[Dict[str, Any]],
+    data: list[dict[str, Any]],
     chart_type: str,
     x_key: str,
     y_key: str,
     title: str = "Chart",
-    colors: Optional[List[str]] = None,
+    colors: list[str] | None = None,
     output_format: str = "png",
-    value_key: Optional[str] = None,
+    value_key: str | None = None,
 ) -> io.BytesIO:
     """Execute the generate_chart operation."""
     plt.clf()
@@ -142,11 +142,15 @@ def generate_chart(
                 margins_name="Total",
             ).fillna(0)
 
-            _fig, ax = plt.subplots(figsize=(max(10, len(pivot.columns) * 1.5), max(6, len(pivot) * 0.5)))
+            _fig, ax = plt.subplots(
+                figsize=(max(10, len(pivot.columns) * 1.5), max(6, len(pivot) * 0.5))
+            )
             ax.axis("off")
             tbl = ax.table(
-                cellText=[[f"{v:.0f}" if isinstance(v, (int, float)) else str(v) for v in row]
-                          for row in pivot.values],
+                cellText=[
+                    [f"{v:.0f}" if isinstance(v, (int, float)) else str(v) for v in row]
+                    for row in pivot.values
+                ],
                 colLabels=[str(c) for c in pivot.columns],
                 rowLabels=[str(i) for i in pivot.index],
                 cellLoc="center",
@@ -185,7 +189,7 @@ def generate_chart(
         plt.text(
             0.5,
             0.5,
-            f"Error generating chart:\n{str(e)}",
+            f"Error generating chart:\n{e!s}",
             ha="center",
             va="center",
             transform=plt.gca().transAxes,

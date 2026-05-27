@@ -1,30 +1,36 @@
 """Module containing dashboard_router functionality."""
 
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
 
-from schemas.dashboard import (
-    DashboardCreate, DashboardUpdate, DashboardRead,
-    AINameGenRequest, AINameGenResponse,
-    AIDashboardGenRequest, AIDashboardGenResponse
-)
 from schemas.common_schemas import SuccessResponse
-from services import dashboard_service
-from services import llm_service
+from schemas.dashboard import (
+    AIDashboardGenRequest,
+    AIDashboardGenResponse,
+    AINameGenRequest,
+    AINameGenResponse,
+    DashboardCreate,
+    DashboardRead,
+    DashboardUpdate,
+)
+from services import dashboard_service, llm_service
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
-@router.get("", response_model=List[DashboardRead])
+
+@router.get("", response_model=list[DashboardRead])
 async def list_dashboards(
-    q: Optional[str] = None,
+    q: str | None = None,
     filter: str = Query("all", description="all, favorites, recent"),
-    sort: str = Query("name", description="name, created, viewed")
+    sort: str = Query("name", description="name, created, viewed"),
 ):
     """Execute the list_dashboards operation."""
     try:
         return dashboard_service.list_dashboards(q, filter, sort)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.post("", response_model=DashboardRead)
 async def create_dashboard(data: DashboardCreate):
@@ -33,6 +39,7 @@ async def create_dashboard(data: DashboardCreate):
         return dashboard_service.create_dashboard(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.get("/{dashboard_id}", response_model=DashboardRead)
 async def get_dashboard(dashboard_id: str):
@@ -47,6 +54,7 @@ async def get_dashboard(dashboard_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+
 @router.put("/{dashboard_id}", response_model=DashboardRead)
 async def update_dashboard(dashboard_id: str, data: DashboardUpdate):
     """Execute the update_dashboard operation."""
@@ -59,6 +67,7 @@ async def update_dashboard(dashboard_id: str, data: DashboardUpdate):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.delete("/{dashboard_id}", response_model=SuccessResponse)
 async def delete_dashboard(dashboard_id: str):
@@ -73,7 +82,8 @@ async def delete_dashboard(dashboard_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-@router.get("/{dashboard_id}/refresh", response_model=Dict[str, Any])
+
+@router.get("/{dashboard_id}/refresh", response_model=dict[str, Any])
 async def refresh_dashboard(dashboard_id: str):
     """Execute the refresh_dashboard operation."""
     try:
@@ -81,6 +91,7 @@ async def refresh_dashboard(dashboard_id: str):
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.post("/generate-name", response_model=AINameGenResponse)
 async def generate_dashboard_name(data: AINameGenRequest):
@@ -90,6 +101,7 @@ async def generate_dashboard_name(data: AINameGenRequest):
         return AINameGenResponse(title=title)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.post("/generate-layout", response_model=AIDashboardGenResponse)
 async def generate_dashboard_layout(data: AIDashboardGenRequest):

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 
@@ -7,7 +7,7 @@ from app.config import settings
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
         to_encode,

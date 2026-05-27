@@ -1,12 +1,12 @@
 """Module containing chat_router functionality."""
 
 from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-import models.chat_models as chat_models
-import services.chart_service as chart_service
+from models import chat_models
 from schemas.artifact_schemas import ArtifactExportResponse
 from schemas.chat_schemas import (
     ChatMessageResponse,
@@ -16,11 +16,14 @@ from schemas.chat_schemas import (
     ResultTable,
     SendMessageRequest,
 )
+from services import chart_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
+
 class ChartGenerateRequest(BaseModel):
     """Schema or class representation for ChartGenerateRequest."""
+
     data: list[dict[str, Any]]
     chart_type: str
     x_key: str
@@ -111,6 +114,7 @@ async def delete_session(session_id: str):
 
 class FeedbackRequest(BaseModel):
     """Schema or class representation for FeedbackRequest."""
+
     feedback: str  # "like" | "dislike"
     reason: str | None = None
 
@@ -121,9 +125,7 @@ async def get_message_data(
 ) -> ResultTable:
     """Execute the get_message_data operation."""
     try:
-        return chat_models.get_message_data(
-            message_id, page=page, page_size=page_size
-        )
+        return chat_models.get_message_data(message_id, page=page, page_size=page_size)
     except ValueError as exc:
         message = str(exc)
         status = 404 if "not found" in message.lower() else 400
@@ -145,11 +147,17 @@ async def export_message(message_id: str) -> ArtifactExportResponse:
 async def set_message_feedback(message_id: str, body: FeedbackRequest):
     """Execute the set_message_feedback operation."""
     chat_models.set_message_feedback(message_id, body.feedback, body.reason)
-    return {"status": "success", "message_id": message_id, "feedback": body.feedback, "reason": body.reason}
+    return {
+        "status": "success",
+        "message_id": message_id,
+        "feedback": body.feedback,
+        "reason": body.reason,
+    }
 
 
 class RegenerateRequest(BaseModel):
     """Schema or class representation for RegenerateRequest."""
+
     content: str
     referenced_files: list[str] = []
     reason: str = ""
@@ -168,7 +176,9 @@ async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMe
     # Build a combined prompt from content, reason, and instruction
     combined_content = body.content
     if body.reason or body.instruction:
-        combined_content += f"\n\nRegeneration requested because: {body.reason}\nInstruction: {body.instruction}"
+        combined_content += (
+            f"\n\nRegeneration requested because: {body.reason}\nInstruction: {body.instruction}"
+        )
 
     return await chat_models.regenerate_response(
         session_id=session_id,
@@ -180,12 +190,15 @@ async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMe
 
 class EditMessageRequest(BaseModel):
     """Schema or class representation for EditMessageRequest."""
+
     content: str
     referenced_files: list[str] = []
 
 
 @router.put("/sessions/{session_id}/messages/{message_id}", response_model=ChatMessageResponse)
-async def edit_message(session_id: str, message_id: str, body: EditMessageRequest) -> ChatMessageResponse:
+async def edit_message(
+    session_id: str, message_id: str, body: EditMessageRequest
+) -> ChatMessageResponse:
     """Execute the edit_message operation."""
     if len(body.content) > 2000:
         raise HTTPException(
@@ -197,7 +210,7 @@ async def edit_message(session_id: str, message_id: str, body: EditMessageReques
             session_id=session_id,
             message_id=message_id,
             new_content=body.content,
-            referenced_files=body.referenced_files
+            referenced_files=body.referenced_files,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

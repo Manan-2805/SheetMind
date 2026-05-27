@@ -1,8 +1,8 @@
 """Module containing data_source_models functionality."""
 
-from datetime import datetime, timezone
 import logging
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _now() -> datetime:
     """Execute the _now operation."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_all() -> list[DataSourceResponse]:

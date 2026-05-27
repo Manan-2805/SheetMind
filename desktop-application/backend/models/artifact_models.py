@@ -2,7 +2,7 @@
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from schemas.artifact_schemas import (
     ArtifactChartResponse,
@@ -14,7 +14,7 @@ from services.duckdb_service import get_connection
 
 def _now() -> datetime:
     """Execute the _now operation."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _get_source_session_name(conn, source_message_id: str | None) -> str | None:
@@ -48,7 +48,16 @@ def get_all() -> ArtifactsResponse:
     charts: list[ArtifactChartResponse] = []
 
     for row in rows:
-        artifact_id, artifact_type, filename, file_path, file_size, created_at, source_message_id, title = row
+        (
+            artifact_id,
+            artifact_type,
+            filename,
+            file_path,
+            file_size,
+            created_at,
+            source_message_id,
+            title,
+        ) = row
         if artifact_type == "excel_export":
             source_session_name = _get_source_session_name(conn, source_message_id)
             excel_exports.append(
@@ -96,7 +105,16 @@ def create_export(
         (id, type, filename, file_path, file_size_bytes, created_at, source_message_id, title)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        [artifact_id, "excel_export", filename, file_path, file_size_bytes, created_at, source_message_id, title],
+        [
+            artifact_id,
+            "excel_export",
+            filename,
+            file_path,
+            file_size_bytes,
+            created_at,
+            source_message_id,
+            title,
+        ],
     )
     source_session_name = _get_source_session_name(conn, source_message_id)
     return ArtifactExportResponse(

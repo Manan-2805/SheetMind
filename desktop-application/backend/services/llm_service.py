@@ -1,14 +1,15 @@
 """Module containing llm_service functionality."""
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 import httpx
 from openai import AsyncOpenAI
 
 from models.settings_models import get_settings
 
-async def generate_dashboard_layout(description: str) -> Dict[str, Any]:
+
+async def generate_dashboard_layout(description: str) -> dict[str, Any]:
     """Generates a dashboard layout (title + widgets) based on user description."""
     settings = get_settings()
 
@@ -26,12 +27,13 @@ async def generate_dashboard_layout(description: str) -> Dict[str, Any]:
 
     prompt_msgs = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": description}
+        {"role": "user", "content": description},
     ]
 
     return await _call_llm_json(settings, prompt_msgs)
 
-async def generate_dashboard_name(widgets: List[Dict[str, str]]) -> str:
+
+async def generate_dashboard_name(widgets: list[dict[str, str]]) -> str:
     """Generates a dashboard name based on the widgets it contains."""
     settings = get_settings()
 
@@ -48,13 +50,14 @@ async def generate_dashboard_name(widgets: List[Dict[str, str]]) -> str:
 
     prompt_msgs = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Widgets: {widgets_text}"}
+        {"role": "user", "content": f"Widgets: {widgets_text}"},
     ]
 
     res = await _call_llm_json(settings, prompt_msgs)
     return res.get("title", "Untitled Dashboard")
 
-async def _call_llm_json(settings: Any, prompt_msgs: List[Dict[str, str]]) -> Dict[str, Any]:
+
+async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> dict[str, Any]:
     """Execute the _call_llm_json operation."""
     llm_response_text = ""
 
@@ -62,9 +65,9 @@ async def _call_llm_json(settings: Any, prompt_msgs: List[Dict[str, str]]) -> Di
         client = AsyncOpenAI(api_key=settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
-            messages=prompt_msgs, # type: ignore
+            messages=prompt_msgs,  # type: ignore
             temperature=0.7,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
         llm_response_text = response.choices[0].message.content or "{}"
     else:
@@ -76,9 +79,9 @@ async def _call_llm_json(settings: Any, prompt_msgs: List[Dict[str, str]]) -> Di
                     "model": settings.ollama.model,
                     "messages": prompt_msgs,
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
                 },
-                timeout=60.0
+                timeout=60.0,
             )
             resp.raise_for_status()
             llm_response_text = resp.json().get("message", {}).get("content", "{}")

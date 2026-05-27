@@ -4,26 +4,75 @@ import ast
 
 import pandas as pd
 
-ALLOWED_NODES = frozenset({
-    ast.Expression, ast.Assign, ast.AugAssign,
-    ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare,
-    ast.Constant, ast.Name, ast.Attribute, ast.Subscript,
-    ast.Index, ast.Slice, ast.Call, ast.keyword,
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow,
-    ast.FloorDiv, ast.USub, ast.UAdd,
-    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
-    ast.And, ast.Or, ast.Not,
-    ast.List, ast.Tuple,
-    ast.IfExp, ast.Lambda,
-    ast.Load, ast.Store,
-})
+ALLOWED_NODES = frozenset(
+    {
+        ast.Expression,
+        ast.Assign,
+        ast.AugAssign,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.BoolOp,
+        ast.Compare,
+        ast.Constant,
+        ast.Name,
+        ast.Attribute,
+        ast.Subscript,
+        ast.Index,
+        ast.Slice,
+        ast.Call,
+        ast.keyword,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.Mod,
+        ast.Pow,
+        ast.FloorDiv,
+        ast.USub,
+        ast.UAdd,
+        ast.Eq,
+        ast.NotEq,
+        ast.Lt,
+        ast.LtE,
+        ast.Gt,
+        ast.GtE,
+        ast.And,
+        ast.Or,
+        ast.Not,
+        ast.List,
+        ast.Tuple,
+        ast.IfExp,
+        ast.Lambda,
+        ast.Load,
+        ast.Store,
+    }
+)
 
-BLOCKED_NAMES = frozenset({
-    'eval', 'exec', 'open', 'import', '__import__',
-    'os', 'sys', 'subprocess', 'shutil', 'pathlib',
-    'globals', 'locals', 'vars', 'dir', 'getattr', 'setattr',
-    'delattr', 'hasattr', 'compile', 'breakpoint',
-})
+BLOCKED_NAMES = frozenset(
+    {
+        "eval",
+        "exec",
+        "open",
+        "import",
+        "__import__",
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "pathlib",
+        "globals",
+        "locals",
+        "vars",
+        "dir",
+        "getattr",
+        "setattr",
+        "delattr",
+        "hasattr",
+        "compile",
+        "breakpoint",
+    }
+)
+
 
 def build_mutation_prompt(
     user_instruction: str,
@@ -34,7 +83,7 @@ def build_mutation_prompt(
     row_count: int,
 ) -> list[dict]:
     """Execute the build_mutation_prompt operation."""
-    system = """You are an expert data transformation assistant embedded in
+    system = f"""You are an expert data transformation assistant embedded in
 SheetMind, an Excel editing application.
 
 Your job: analyze the user's instruction and generate a precise pandas
@@ -46,7 +95,7 @@ Columns: {columns}
 Column types: {col_types}
 Total rows: {row_count}
 Sample rows (first 5):
-{sample_rows}
+{sample_rows[:5]}
 
 STRICT RULES:
 1. Respond ONLY with a valid JSON object. No prose, no markdown fences.
@@ -78,25 +127,17 @@ Required response format:
   "operation_summary": "<plain english summary>",
   "confidence": <1-5>,
   "followup_suggestions": ["<suggestion 1>", "<suggestion 2>", "<suggestion 3>"]
-}}""".format(
-        sheet_name=sheet_name,
-        columns=columns,
-        col_types=col_types,
-        row_count=row_count,
-        sample_rows=sample_rows[:5]
-    )
+}}"""
 
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user_instruction}
-    ]
+    return [{"role": "system", "content": system}, {"role": "user", "content": user_instruction}]
+
 
 def validate_pandas_expression(code: str) -> tuple[bool, str]:
     """Execute the validate_pandas_expression operation."""
     if not code or not code.strip():
         return True, ""
     try:
-        tree = ast.parse(code, mode='exec')
+        tree = ast.parse(code, mode="exec")
     except SyntaxError as e:
         return False, f"Syntax error: {e}"
 
@@ -112,10 +153,11 @@ def validate_pandas_expression(code: str) -> tuple[bool, str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id != 'df':
+                if isinstance(target, ast.Name) and target.id != "df":
                     return False, f"Cannot assign to '{target.id}'. Only 'df' allowed."
 
     return True, ""
+
 
 def dry_run_mutation(
     df: pd.DataFrame,
@@ -143,19 +185,21 @@ def dry_run_mutation(
             old_val = old_col.iloc[idx] if idx < len(old_col) else None
             new_val = new_col.iloc[idx] if idx < len(new_col) else None
 
-            is_formula = isinstance(new_val, str) and new_val.startswith('=')
+            is_formula = isinstance(new_val, str) and new_val.startswith("=")
 
             # Handle NaN equality
             old_is_na = pd.isna(old_val)
             new_is_na = pd.isna(new_val)
 
             if (old_is_na != new_is_na) or (not old_is_na and old_val != new_val):
-                diff_rows.append({
-                    "rowIndex": idx,
-                    "columnName": col,
-                    "oldValue": None if old_is_na else old_val,
-                    "newValue": None if new_is_na else new_val,
-                    "isFormula": is_formula,
-                })
+                diff_rows.append(
+                    {
+                        "rowIndex": idx,
+                        "columnName": col,
+                        "oldValue": None if old_is_na else old_val,
+                        "newValue": None if new_is_na else new_val,
+                        "isFormula": is_formula,
+                    }
+                )
 
     return diff_rows, df_modified

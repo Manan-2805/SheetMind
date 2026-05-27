@@ -3,12 +3,20 @@
 import json
 import time
 
+import httpx
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-import httpx
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
+from models.settings_models import (
+    clear_chat_history_db,
+    delete_all_files_db,
+    update_settings_db,
+)
+from models.settings_models import (
+    get_settings as db_get_settings,
+)
 from schemas.settings_schemas import (
     PullModelRequest,
     SettingsResponse,
@@ -16,18 +24,12 @@ from schemas.settings_schemas import (
     UpdateSettingsRequest,
 )
 
-from models.settings_models import (
-    get_settings as db_get_settings,
-    update_settings_db,
-    clear_chat_history_db,
-    delete_all_files_db,
-)
-
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 class TestLLMResponse(BaseModel):
     """Schema or class representation for TestLLMResponse."""
+
     success: bool
     provider: str
     latency_ms: int
@@ -37,18 +39,21 @@ class TestLLMResponse(BaseModel):
 
 class PullModelResponse(BaseModel):
     """Schema or class representation for PullModelResponse."""
+
     success: bool
     model: str
 
 
 class ClearHistoryResponse(BaseModel):
     """Schema or class representation for ClearHistoryResponse."""
+
     success: bool
     deleted_sessions: int
 
 
 class DeleteFilesResponse(BaseModel):
     """Schema or class representation for DeleteFilesResponse."""
+
     success: bool
     deleted_files: int
 
@@ -173,7 +178,9 @@ async def pull_ollama_model(body: PullModelRequest):
         """Execute the stream_pull operation."""
         async with httpx.AsyncClient() as client:
             try:
-                async with client.stream("POST", f"{ollama_url}/api/pull", json={"name": body.model_name}) as response:
+                async with client.stream(
+                    "POST", f"{ollama_url}/api/pull", json={"name": body.model_name}
+                ) as response:
                     async for chunk in response.aiter_bytes():
                         yield chunk
             except Exception as e:
@@ -206,9 +213,7 @@ async def export_settings() -> Response:
     return Response(
         content=content,
         media_type="application/json",
-        headers={
-            "Content-Disposition": 'attachment; filename="sheetmind-settings.json"'
-        },
+        headers={"Content-Disposition": 'attachment; filename="sheetmind-settings.json"'},
     )
 
 

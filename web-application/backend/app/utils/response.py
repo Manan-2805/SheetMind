@@ -1,12 +1,12 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 def success_response(
     data: Any,
     message: str = "Success",
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
 ) -> dict:
     if request_id is None:
         request_id = str(uuid.uuid4())
@@ -17,7 +17,7 @@ def success_response(
         "message": message,
         "error": None,
         "meta": {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "request_id": request_id,
             "version": "1.0.0",
         },
@@ -27,8 +27,8 @@ def success_response(
 def error_response(
     code: str,
     message: str,
-    details: Optional[str] = None,
-    request_id: Optional[str] = None,
+    details: str | None = None,
+    request_id: str | None = None,
 ) -> dict:
     if request_id is None:
         request_id = str(uuid.uuid4())
@@ -42,7 +42,7 @@ def error_response(
             "details": details,
         },
         "meta": {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "request_id": request_id,
             "version": "1.0.0",
         },

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.orm import Session
@@ -50,7 +50,7 @@ def upsert_user(db: Session, google_user_info: dict) -> User:
     user = db.query(User).filter(User.google_id == google_id).first()
 
     if user:
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.now(UTC)
         user.name = name
         user.picture = picture
     else:
@@ -59,7 +59,7 @@ def upsert_user(db: Session, google_user_info: dict) -> User:
             email=email,
             name=name,
             picture=picture,
-            last_login_at=datetime.now(timezone.utc),
+            last_login_at=datetime.now(UTC),
         )
         db.add(user)
 

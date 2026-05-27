@@ -1,14 +1,14 @@
 """Module containing excel_editor_router functionality."""
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
 import httpx
-from openai import AsyncOpenAI
 import pandas as pd
+from fastapi import APIRouter, HTTPException
+from openai import AsyncOpenAI
 
 from models.settings_models import get_settings
 from schemas.common_schemas import SuccessResponse
@@ -38,21 +38,22 @@ from services.excel_mutation_service import (
 )
 from services.storage_service import get_debug_prompts_dir
 
+
 def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
     """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir."""
     debug_dir = get_debug_prompts_dir()
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
     safe_label = label.replace(" ", "_").replace("[", "").replace("]", "")[:60]
     filename = debug_dir / f"{timestamp}_{safe_label}.txt"
     try:
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
+            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
             f.write("=" * 80 + "\n\n")
             if isinstance(messages_or_prompt, list):
                 for i, msg in enumerate(messages_or_prompt):
                     role = msg.get("role", "unknown").upper()
                     content = msg.get("content", "")
-                    f.write(f"--- [{i+1}] {role} ---\n")
+                    f.write(f"--- [{i + 1}] {role} ---\n")
                     f.write(content)
                     f.write("\n\n")
             else:
@@ -64,14 +65,16 @@ def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -
         return None
 
 
-def _append_debug_response(filepath: Path | None, response_content: Any, label: str = "RESPONSE") -> None:
+def _append_debug_response(
+    filepath: Path | None, response_content: Any, label: str = "RESPONSE"
+) -> None:
     """Append the LLM response content to the existing debug prompt file."""
     if not filepath or not filepath.exists():
         return
     try:
         with open(filepath, "a", encoding="utf-8") as f:
             f.write("\n" + "=" * 80 + "\n")
-            f.write(f"[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
+            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
             f.write("=" * 80 + "\n\n")
             if isinstance(response_content, (dict, list)):
                 f.write(json.dumps(response_content, indent=2))
@@ -84,11 +87,13 @@ def _append_debug_response(filepath: Path | None, response_content: Any, label: 
 
 router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
 
+
 @router.get("/files", response_model=FileListResponse)
 async def list_files():
     """Execute the list_files operation."""
     files = get_available_files()
     return FileListResponse(files=files)
+
 
 @router.get("/open", response_model=OpenFileResponse)
 async def open_file(file_id: str):
@@ -102,6 +107,7 @@ async def open_file(file_id: str):
 
     return OpenFileResponse(**data)
 
+
 @router.get("/sheet-data", response_model=SheetData)
 async def get_sheet_data(file_id: str, sheet_name: str):
     """Execute the get_sheet_data operation."""
@@ -113,6 +119,7 @@ async def get_sheet_data(file_id: str, sheet_name: str):
         raise HTTPException(status_code=404, detail="Sheet not found")
 
     return data
+
 
 @router.post("/mutate", response_model=MutationResponse)
 async def mutate_file(body: MutationRequest):
@@ -128,10 +135,9 @@ async def mutate_file(body: MutationRequest):
         columns=body.columns,
         col_types=col_types,
         sample_rows=sample_rows,
-        row_count=len(df)
+        row_count=len(df),
     )
     debug_path = _write_debug_prompt(prompt_msgs, f"EXCEL_MUTATION [{body.fileId}]")
-
 
     # 2. Call LLM
     settings = get_settings()
@@ -143,7 +149,7 @@ async def mutate_file(body: MutationRequest):
             model=settings.openai.model,
             messages=prompt_msgs,
             temperature=0.0,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
         llm_response_text = response.choices[0].message.content
     else:
@@ -155,9 +161,9 @@ async def mutate_file(body: MutationRequest):
                     "model": settings.ollama.model,
                     "prompt": "\n".join([m["content"] for m in prompt_msgs]),
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
                 },
-                timeout=60.0
+                timeout=60.0,
             )
             resp.raise_for_status()
             llm_response_text = resp.json()["response"]
@@ -167,7 +173,11 @@ async def mutate_file(body: MutationRequest):
         data = json.loads(llm_response_text)
         _append_debug_response(debug_path, data, f"EXCEL_MUTATION RESPONSE [{body.fileId}]")
     except Exception as exc:
-        _append_debug_response(debug_path, llm_response_text, f"EXCEL_MUTATION RESPONSE RAW (FAILED PARSE) [{body.fileId}]")
+        _append_debug_response(
+            debug_path,
+            llm_response_text,
+            f"EXCEL_MUTATION RESPONSE RAW (FAILED PARSE) [{body.fileId}]",
+        )
         # Simple retry once if parsing fails (Ollama sometimes misses JSON wrapper)
         raise HTTPException(status_code=500, detail="LLM returned invalid JSON") from exc
 
@@ -180,7 +190,7 @@ async def mutate_file(body: MutationRequest):
             confidence=data.get("confidence", 1),
             diffRows=[],
             affectedRowCount=0,
-            followupSuggestions=data.get("followup_suggestions", [])
+            followupSuggestions=data.get("followup_suggestions", []),
         )
 
     is_safe, reason = validate_pandas_expression(pandas_code)
@@ -190,12 +200,10 @@ async def mutate_file(body: MutationRequest):
     # 4. Dry run
     try:
         diff_rows, _df_modified = dry_run_mutation(
-            df=df,
-            pandas_code=pandas_code,
-            affected_columns=data.get("affected_columns", [])
+            df=df, pandas_code=pandas_code, affected_columns=data.get("affected_columns", [])
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Mutation execution failed: {str(e)}") from e
+        raise HTTPException(status_code=500, detail=f"Mutation execution failed: {e!s}") from e
 
     return MutationResponse(
         operationType=data.get("operation_type"),
@@ -204,8 +212,9 @@ async def mutate_file(body: MutationRequest):
         confidence=data.get("confidence"),
         diffRows=diff_rows,
         affectedRowCount=len(diff_rows),
-        followupSuggestions=data.get("followup_suggestions", [])
+        followupSuggestions=data.get("followup_suggestions", []),
     )
+
 
 @router.post("/apply", response_model=SuccessResponse)
 async def apply_mutation(body: ApplyRequest):
@@ -221,30 +230,31 @@ async def apply_mutation(body: ApplyRequest):
             sheet_name=body.sheetName,
             pandas_code=body.pandasCode,
             current_rows=body.currentRows,
-            columns=body.columns
+            columns=body.columns,
         )
         return SuccessResponse(success=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.post("/save", response_model=SuccessResponse)
 async def save_edits(body: SaveRequest):
     """Execute the save_edits operation."""
     try:
         save_manual_edits(
-            file_id=body.fileId,
-            sheets=body.sheets,
-            formatting_map=body.formattingMap
+            file_id=body.fileId, sheets=body.sheets, formatting_map=body.formattingMap
         )
         return SuccessResponse(success=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @router.get("/history/{file_id}", response_model=HistoryResponse)
 async def get_history(file_id: str):
     """Execute the get_history operation."""
     history = get_edit_history(file_id)
     return HistoryResponse(history=history)
+
 
 @router.post("/restore", response_model=SuccessResponse)
 async def restore(body: dict):
