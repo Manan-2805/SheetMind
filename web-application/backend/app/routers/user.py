@@ -19,6 +19,8 @@ async def get_profile(
         name=current_user.name,
         picture=current_user.picture,
         created_at=current_user.created_at.isoformat() if current_user.created_at else None,
-        last_login_at=current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        last_login_at=current_user.last_login_at.isoformat()
+        if current_user.last_login_at
+        else None,
     )
     return success_response(data=user_data.model_dump(), message="Profile retrieved")

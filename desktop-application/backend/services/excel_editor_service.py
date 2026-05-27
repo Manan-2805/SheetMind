@@ -1,14 +1,13 @@
 """Module containing excel_editor_service functionality."""
 
-from datetime import datetime
 import os
 import shutil
-from typing import Optional
 import uuid
+from datetime import datetime
 
+import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-import pandas as pd
 
 from schemas.excel_editor_schemas import (
     CellFormatting,
@@ -19,6 +18,7 @@ from schemas.excel_editor_schemas import (
 from services.duckdb_service import get_connection
 from services.excel_import_service import import_df_to_duckdb, now_utc
 from services.storage_service import get_backups_dir
+
 
 def get_available_files() -> list[ExcelEditorFile]:
     """Execute the get_available_files operation."""
@@ -38,23 +38,25 @@ def get_available_files() -> list[ExcelEditorFile]:
             filename=row[1],
             sheetCount=row[2] or 0,
             fileSizeBytes=row[3] or 0,
-            uploadedAt=row[4]
+            uploadedAt=row[4],
         )
         for row in rows
     ]
 
-def get_hex_color(color_obj) -> Optional[str]:
+
+def get_hex_color(color_obj) -> str | None:
     """Execute the get_hex_color operation."""
     if color_obj is None:
         return None
     try:
-        if color_obj.type == 'rgb' and color_obj.rgb:
+        if color_obj.type == "rgb" and color_obj.rgb:
             rgb_str = str(color_obj.rgb)
             if len(rgb_str) >= 6:
                 return "#" + rgb_str[-6:]
         return None
     except Exception:
         return None
+
 
 def extract_formatting_map(path: str) -> dict[str, dict]:
     """Execute the extract_formatting_map operation."""
@@ -77,43 +79,81 @@ def extract_formatting_map(path: str) -> dict[str, dict]:
                     if cell.font and cell.font.color:
                         text_color = get_hex_color(cell.font.color)
                     bg_color = None
-                    if cell.fill and isinstance(cell.fill, PatternFill) and cell.fill.fill_type not in (None, 'none'):
+                    if (
+                        cell.fill
+                        and isinstance(cell.fill, PatternFill)
+                        and cell.fill.fill_type not in (None, "none")
+                    ):
                         bg_color = get_hex_color(cell.fill.fgColor)
-                    border_top = cell.border.top.style is not None if cell.border and cell.border.top else None
-                    border_bottom = cell.border.bottom.style is not None if cell.border and cell.border.bottom else None
-                    border_left = cell.border.left.style is not None if cell.border and cell.border.left else None
-                    border_right = cell.border.right.style is not None if cell.border and cell.border.right else None
+                    border_top = (
+                        cell.border.top.style is not None
+                        if cell.border and cell.border.top
+                        else None
+                    )
+                    border_bottom = (
+                        cell.border.bottom.style is not None
+                        if cell.border and cell.border.bottom
+                        else None
+                    )
+                    border_left = (
+                        cell.border.left.style is not None
+                        if cell.border and cell.border.left
+                        else None
+                    )
+                    border_right = (
+                        cell.border.right.style is not None
+                        if cell.border and cell.border.right
+                        else None
+                    )
                     align = None
                     if cell.alignment and cell.alignment.horizontal in ("left", "center", "right"):
                         align = cell.alignment.horizontal
                     has_format = (
-                        bold or italic or font_size or text_color or bg_color or align or
-                        border_top or border_bottom or border_left or border_right
+                        bold
+                        or italic
+                        or font_size
+                        or text_color
+                        or bg_color
+                        or align
+                        or border_top
+                        or border_bottom
+                        or border_left
+                        or border_right
                     )
                     if has_format:
                         key = f"{sheet_name}:{r_idx}:{c_idx}"
                         fmt_dict = {}
-                        if bold is not None: fmt_dict["bold"] = bold
-                        if italic is not None: fmt_dict["italic"] = italic
-                        if font_size is not None: fmt_dict["fontSize"] = font_size
-                        if text_color is not None: fmt_dict["textColor"] = text_color
-                        if bg_color is not None: fmt_dict["bgColor"] = bg_color
-                        if border_top is not None: fmt_dict["borderTop"] = border_top
-                        if border_bottom is not None: fmt_dict["borderBottom"] = border_bottom
-                        if border_left is not None: fmt_dict["borderLeft"] = border_left
-                        if border_right is not None: fmt_dict["borderRight"] = border_right
-                        if align is not None: fmt_dict["align"] = align
+                        if bold is not None:
+                            fmt_dict["bold"] = bold
+                        if italic is not None:
+                            fmt_dict["italic"] = italic
+                        if font_size is not None:
+                            fmt_dict["fontSize"] = font_size
+                        if text_color is not None:
+                            fmt_dict["textColor"] = text_color
+                        if bg_color is not None:
+                            fmt_dict["bgColor"] = bg_color
+                        if border_top is not None:
+                            fmt_dict["borderTop"] = border_top
+                        if border_bottom is not None:
+                            fmt_dict["borderBottom"] = border_bottom
+                        if border_left is not None:
+                            fmt_dict["borderLeft"] = border_left
+                        if border_right is not None:
+                            fmt_dict["borderRight"] = border_right
+                        if align is not None:
+                            fmt_dict["align"] = align
                         formatting_map[key] = fmt_dict
     except Exception as e:
         print(f"Error extracting formatting map: {e}")
     return formatting_map
 
-def open_excel_file(file_id: str) -> Optional[dict]:
+
+def open_excel_file(file_id: str) -> dict | None:
     """Execute the open_excel_file operation."""
     conn = get_connection()
     file_row = conn.execute(
-        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?",
-        [file_id]
+        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?", [file_id]
     ).fetchone()
 
     if not file_row:
@@ -133,38 +173,38 @@ def open_excel_file(file_id: str) -> Optional[dict]:
         if idx == 0:
             try:
                 df = xl.parse(sheet_name)
-                df_clean = df.replace({float('nan'): None, float('inf'): None, float('-inf'): None})
-                sheets.append(SheetData(
-                    sheetName=sheet_name,
-                    columns=df_clean.columns.tolist(),
-                    rows=df_clean.values.tolist(),
-                    rowCount=len(df_clean),
-                    colCount=len(df_clean.columns)
-                ))
+                df_clean = df.replace({float("nan"): None, float("inf"): None, float("-inf"): None})
+                sheets.append(
+                    SheetData(
+                        sheetName=sheet_name,
+                        columns=df_clean.columns.tolist(),
+                        rows=df_clean.values.tolist(),
+                        rowCount=len(df_clean),
+                        colCount=len(df_clean.columns),
+                    )
+                )
             except Exception as e:
                 print(f"Error parsing first sheet {sheet_name}: {e}")
-                sheets.append(SheetData(
-                    sheetName=sheet_name,
-                    columns=[],
-                    rows=[],
-                    rowCount=0,
-                    colCount=0
-                ))
+                sheets.append(
+                    SheetData(sheetName=sheet_name, columns=[], rows=[], rowCount=0, colCount=0)
+                )
         else:
             row_count, col_count = 0, 0
             sheet_row = conn.execute(
                 "SELECT row_count, col_count FROM excel_sheets WHERE excel_file_id = ? AND sheet_name = ?",
-                [file_id, sheet_name]
+                [file_id, sheet_name],
             ).fetchone()
             if sheet_row:
                 row_count, col_count = sheet_row[0], sheet_row[1]
-            sheets.append(SheetData(
-                sheetName=sheet_name,
-                columns=None,
-                rows=None,
-                rowCount=row_count,
-                colCount=col_count
-            ))
+            sheets.append(
+                SheetData(
+                    sheetName=sheet_name,
+                    columns=None,
+                    rows=None,
+                    rowCount=row_count,
+                    colCount=col_count,
+                )
+            )
 
     formatting_map = extract_formatting_map(path)
 
@@ -172,15 +212,15 @@ def open_excel_file(file_id: str) -> Optional[dict]:
         "fileId": file_id,
         "filename": filename,
         "sheets": sheets,
-        "formattingMap": formatting_map
+        "formattingMap": formatting_map,
     }
 
-def open_excel_sheet(file_id: str, sheet_name: str) -> Optional[SheetData]:
+
+def open_excel_sheet(file_id: str, sheet_name: str) -> SheetData | None:
     """Execute the open_excel_sheet operation."""
     conn = get_connection()
     file_row = conn.execute(
-        "SELECT stored_path FROM excel_files WHERE id = ?",
-        [file_id]
+        "SELECT stored_path FROM excel_files WHERE id = ?", [file_id]
     ).fetchone()
 
     if not file_row:
@@ -193,18 +233,19 @@ def open_excel_sheet(file_id: str, sheet_name: str) -> Optional[SheetData]:
             return None
 
         df = xl.parse(sheet_name)
-        df_clean = df.replace({float('nan'): None, float('inf'): None, float('-inf'): None})
+        df_clean = df.replace({float("nan"): None, float("inf"): None, float("-inf"): None})
 
         return SheetData(
             sheetName=sheet_name,
             columns=df_clean.columns.tolist(),
             rows=df_clean.values.tolist(),
             rowCount=len(df_clean),
-            colCount=len(df_clean.columns)
+            colCount=len(df_clean.columns),
         )
     except Exception as e:
         print(f"Error opening sheet {sheet_name}: {e}")
         return None
+
 
 def create_backup(stored_path: str, filename: str) -> str:
     """Execute the create_backup operation."""
@@ -217,6 +258,7 @@ def create_backup(stored_path: str, filename: str) -> str:
     os.makedirs(os.path.dirname(backup_path), exist_ok=True)
     shutil.copy2(stored_path, backup_path)
     return backup_path
+
 
 def record_edit_history(
     excel_file_id: str,
@@ -234,21 +276,25 @@ def record_edit_history(
         (id, excel_file_id, sheet_name, operation_type, rows_affected, applied_at, backup_path)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        [history_id, excel_file_id, sheet_name, operation_type, rows_affected, now_utc(), backup_path],
+        [
+            history_id,
+            excel_file_id,
+            sheet_name,
+            operation_type,
+            rows_affected,
+            now_utc(),
+            backup_path,
+        ],
     )
 
+
 def apply_mutation_to_disk(
-    file_id: str,
-    sheet_name: str,
-    pandas_code: str,
-    current_rows: list[list],
-    columns: list[str]
+    file_id: str, sheet_name: str, pandas_code: str, current_rows: list[list], columns: list[str]
 ):
     """Execute the apply_mutation_to_disk operation."""
     conn = get_connection()
     file_row = conn.execute(
-        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?",
-        [file_id]
+        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?", [file_id]
     ).fetchone()
 
     if not file_row:
@@ -285,7 +331,7 @@ def apply_mutation_to_disk(
     # Write data
     for r_idx, row in enumerate(df_modified.values, 2):
         for c_idx, value in enumerate(row, 1):
-            if isinstance(value, str) and value.startswith('='):
+            if isinstance(value, str) and value.startswith("="):
                 ws.cell(row=r_idx, column=c_idx, value=value)
             else:
                 # Handle NaN
@@ -300,42 +346,70 @@ def apply_mutation_to_disk(
     # 5. Refresh DuckDB
     refresh_duckdb_sheet(file_id, sheet_name, path)
 
+
 def apply_cell_formatting(cell, fmt: CellFormatting):
     """Execute the apply_cell_formatting operation."""
-    if fmt.bold is not None or fmt.italic is not None or fmt.fontSize is not None or fmt.textColor is not None:
+    if (
+        fmt.bold is not None
+        or fmt.italic is not None
+        or fmt.fontSize is not None
+        or fmt.textColor is not None
+    ):
         cell.font = Font(
             bold=fmt.bold if fmt.bold is not None else (cell.font.bold if cell.font else False),
-            italic=fmt.italic if fmt.italic is not None else (cell.font.italic if cell.font else False),
-            size=fmt.fontSize if fmt.fontSize is not None else (cell.font.size if cell.font else 11),
-            color=fmt.textColor.lstrip('#') if fmt.textColor else (cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.type == 'rgb' and cell.font.color.rgb else '000000'),
+            italic=fmt.italic
+            if fmt.italic is not None
+            else (cell.font.italic if cell.font else False),
+            size=fmt.fontSize
+            if fmt.fontSize is not None
+            else (cell.font.size if cell.font else 11),
+            color=fmt.textColor.lstrip("#")
+            if fmt.textColor
+            else (
+                cell.font.color.rgb
+                if cell.font
+                and cell.font.color
+                and cell.font.color.type == "rgb"
+                and cell.font.color.rgb
+                else "000000"
+            ),
         )
     if fmt.bgColor:
-        cell.fill = PatternFill(
-            fill_type='solid',
-            fgColor=fmt.bgColor.lstrip('#')
-        )
-    if any(x is not None for x in [fmt.borderTop, fmt.borderBottom, fmt.borderLeft, fmt.borderRight]):
-        side = Side(style='thin')
+        cell.fill = PatternFill(fill_type="solid", fgColor=fmt.bgColor.lstrip("#"))
+    if any(
+        x is not None for x in [fmt.borderTop, fmt.borderBottom, fmt.borderLeft, fmt.borderRight]
+    ):
+        side = Side(style="thin")
         current_border = cell.border
         cell.border = Border(
-            top=side if fmt.borderTop else (current_border.top if current_border and not fmt.borderTop is False else None),
-            bottom=side if fmt.borderBottom else (current_border.bottom if current_border and not fmt.borderBottom is False else None),
-            left=side if fmt.borderLeft else (current_border.left if current_border and not fmt.borderLeft is False else None),
-            right=side if fmt.borderRight else (current_border.right if current_border and not fmt.borderRight is False else None),
+            top=side
+            if fmt.borderTop
+            else (current_border.top if current_border and fmt.borderTop is not False else None),
+            bottom=side
+            if fmt.borderBottom
+            else (
+                current_border.bottom if current_border and fmt.borderBottom is not False else None
+            ),
+            left=side
+            if fmt.borderLeft
+            else (current_border.left if current_border and fmt.borderLeft is not False else None),
+            right=side
+            if fmt.borderRight
+            else (
+                current_border.right if current_border and fmt.borderRight is not False else None
+            ),
         )
     if fmt.align:
         cell.alignment = Alignment(horizontal=fmt.align)
 
+
 def save_manual_edits(
-    file_id: str,
-    sheets: list[SheetData],
-    formatting_map: dict[str, CellFormatting]
+    file_id: str, sheets: list[SheetData], formatting_map: dict[str, CellFormatting]
 ):
     """Execute the save_manual_edits operation."""
     conn = get_connection()
     file_row = conn.execute(
-        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?",
-        [file_id]
+        "SELECT original_filename, stored_path FROM excel_files WHERE id = ?", [file_id]
     ).fetchone()
 
     if not file_row:
@@ -371,7 +445,7 @@ def save_manual_edits(
             top=Side(style="thin", color="D1D5DB"),
             bottom=Side(style="thin", color="D1D5DB"),
             left=Side(style="thin", color="D1D5DB"),
-            right=Side(style="thin", color="D1D5DB")
+            right=Side(style="thin", color="D1D5DB"),
         )
         for c_idx, col_name in enumerate(sheet_data.columns, 1):
             cell = ws.cell(row=1, column=c_idx, value=col_name)
@@ -383,7 +457,7 @@ def save_manual_edits(
         # Rows
         for r_idx, row in enumerate(sheet_data.rows, 2):
             for c_idx, value in enumerate(row, 1):
-                if isinstance(value, str) and value.startswith('='):
+                if isinstance(value, str) and value.startswith("="):
                     ws.cell(row=r_idx, column=c_idx, value=value)
                 else:
                     cell_val = None if pd.isna(value) else value
@@ -409,13 +483,14 @@ def save_manual_edits(
     for s_name in modified_sheet_names:
         refresh_duckdb_sheet(file_id, s_name, path)
 
+
 def refresh_duckdb_sheet(file_id: str, sheet_name: str, file_path: str):
     """Execute the refresh_duckdb_sheet operation."""
     conn = get_connection()
     # Get table name
     row = conn.execute(
         "SELECT table_name FROM excel_sheets WHERE excel_file_id = ? AND sheet_name = ?",
-        [file_id, sheet_name]
+        [file_id, sheet_name],
     ).fetchone()
 
     if not row:
@@ -424,14 +499,17 @@ def refresh_duckdb_sheet(file_id: str, sheet_name: str, file_path: str):
     table_name = row[0]
 
     # Import evaluated values (data_only=True)
-    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl', engine_kwargs={'data_only': True})
+    df = pd.read_excel(
+        file_path, sheet_name=sheet_name, engine="openpyxl", engine_kwargs={"data_only": True}
+    )
     import_df_to_duckdb(conn, df, table_name)
 
     # Update row/col count in excel_sheets
     conn.execute(
         "UPDATE excel_sheets SET row_count = ?, col_count = ?, imported_at = ? WHERE excel_file_id = ? AND sheet_name = ?",
-        [len(df), len(df.columns), now_utc(), file_id, sheet_name]
+        [len(df), len(df.columns), now_utc(), file_id, sheet_name],
     )
+
 
 def get_edit_history(file_id: str) -> list[HistoryRecord]:
     """Execute the get_edit_history operation."""
@@ -458,12 +536,12 @@ def get_edit_history(file_id: str) -> list[HistoryRecord]:
         for r in rows
     ]
 
+
 def restore_backup(file_id: str, backup_path: str):
     """Execute the restore_backup operation."""
     conn = get_connection()
     file_row = conn.execute(
-        "SELECT stored_path FROM excel_files WHERE id = ?",
-        [file_id]
+        "SELECT stored_path FROM excel_files WHERE id = ?", [file_id]
     ).fetchone()
 
     if not file_row:
@@ -479,8 +557,7 @@ def restore_backup(file_id: str, backup_path: str):
 
     # Re-import all sheets
     sheets = conn.execute(
-        "SELECT sheet_name FROM excel_sheets WHERE excel_file_id = ?",
-        [file_id]
+        "SELECT sheet_name FROM excel_sheets WHERE excel_file_id = ?", [file_id]
     ).fetchall()
 
     for s_row in sheets:

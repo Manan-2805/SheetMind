@@ -1,5 +1,5 @@
 import logging
-from typing import Generator
+from collections.abc import Generator
 
 import sqlalchemy
 from sqlalchemy import create_engine, text
@@ -43,11 +43,7 @@ def create_database_if_not_exists() -> None:
                 {"dbname": settings.postgres_db},
             )
             if not result.fetchone():
-                conn.execute(
-                    text(
-                        f'CREATE DATABASE "{settings.postgres_db}"'
-                    )
-                )
+                conn.execute(text(f'CREATE DATABASE "{settings.postgres_db}"'))
                 logger.info("Database '%s' created successfully.", settings.postgres_db)
             else:
                 logger.info("Database '%s' already exists.", settings.postgres_db)

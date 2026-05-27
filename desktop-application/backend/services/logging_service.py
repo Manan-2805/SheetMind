@@ -1,13 +1,13 @@
 """Module containing logging_service functionality."""
 
 import logging
-from logging.handlers import TimedRotatingFileHandler
 import sys
+from logging.handlers import TimedRotatingFileHandler
 
 from services.storage_service import get_app_root
 
-
 _LOGGER = None
+
 
 def get_logger() -> logging.Logger:
     """Execute the get_logger operation."""
@@ -41,11 +41,7 @@ def get_logger() -> logging.Logger:
 
     try:
         file_handler = TimedRotatingFileHandler(
-            str(log_file),
-            when="D",
-            interval=1,
-            backupCount=3,
-            encoding="utf-8"
+            str(log_file), when="D", interval=1, backupCount=3, encoding="utf-8"
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

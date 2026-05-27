@@ -17,13 +17,12 @@ export function TypingIndicator({ status }: TypingIndicatorProps) {
 
   return (
     <div className="flex gap-3 py-4 animate-in fade-in duration-300">
-      <div
-        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-        style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
+      <img
+        src="/favicon.png"
+        alt="SheetMind"
+        className="mt-0.5 flex h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"
-      >
-        S
-      </div>
+      />
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-1" aria-label="Generating response">
           {[0, 1, 2].map((i) => (

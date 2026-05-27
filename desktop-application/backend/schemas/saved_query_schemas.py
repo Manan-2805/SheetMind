@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 class SavedQueryResponse(BaseModel):
     """Schema or class representation for SavedQueryResponse."""
+
     id: str
     label: str
     nl_query: str
@@ -19,6 +20,7 @@ class SavedQueryResponse(BaseModel):
 
 class CreateSavedQueryRequest(BaseModel):
     """Schema or class representation for CreateSavedQueryRequest."""
+
     label: str
     nl_query: str
     sql_query: str
@@ -26,4 +28,5 @@ class CreateSavedQueryRequest(BaseModel):
 
 class UpdateSavedQueryRequest(BaseModel):
     """Schema or class representation for UpdateSavedQueryRequest."""
+
     label: str

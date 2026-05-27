@@ -11,8 +11,10 @@ from services.duckdb_service import get_connection
 from services.excel_import_service import (
     clean_columns,
     import_df_to_duckdb,
-    now_utc as _now,
     safe_table_name,
+)
+from services.excel_import_service import (
+    now_utc as _now,
 )
 from services.storage_service import list_account_users
 
@@ -28,10 +30,7 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
         conn = get_connection()
         try:
             # Update status to processing
-            conn.execute(
-                "UPDATE excel_files SET status = 'processing' WHERE id = ?",
-                [file_id]
-            )
+            conn.execute("UPDATE excel_files SET status = 'processing' WHERE id = ?", [file_id])
 
             conn.execute("DELETE FROM excel_sheets WHERE excel_file_id = ?", [file_id])
 
@@ -56,7 +55,15 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
                     (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    [f"sh-{uuid.uuid4().hex[:8]}", file_id, "Sheet1", table_name, row_count, col_count, _now()]
+                    [
+                        f"sh-{uuid.uuid4().hex[:8]}",
+                        file_id,
+                        "Sheet1",
+                        table_name,
+                        row_count,
+                        col_count,
+                        _now(),
+                    ],
                 )
             else:
                 workbook = pd.read_excel(file_path, sheet_name=None)
@@ -77,7 +84,15 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
                         (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
-                        [f"sh-{uuid.uuid4().hex[:8]}", file_id, sheet_name, table_name, row_count, col_count, _now()]
+                        [
+                            f"sh-{uuid.uuid4().hex[:8]}",
+                            file_id,
+                            sheet_name,
+                            table_name,
+                            row_count,
+                            col_count,
+                            _now(),
+                        ],
                     )
 
             if num_sheets == 0:
@@ -90,7 +105,7 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
                 SET status = 'completed', row_count = ?, column_count = ?, num_sheets = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                [total_rows, max_cols, num_sheets, now, file_id]
+                [total_rows, max_cols, num_sheets, now, file_id],
             )
 
         except Exception as e:
@@ -99,12 +114,10 @@ def process_excel_file_sync(username: str, file_id: str, file_path: str):
             now = _now()
             conn.execute(
                 "UPDATE excel_files SET status = 'error', error_message = ?, updated_at = ? WHERE id = ?",
-                [error_msg, now, file_id]
+                [error_msg, now, file_id],
             )
     finally:
         current_username.reset(token)
-
-
 
 
 async def _process_wrapper(username: str, file_id: str, file_path: str):

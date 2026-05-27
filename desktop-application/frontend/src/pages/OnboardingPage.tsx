@@ -110,12 +110,12 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         }}
       >
         <div className="mb-6 flex flex-col items-center">
-          <div
-            className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold"
-            style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
-          >
-            S
-          </div>
+          <img
+            src="/favicon.png"
+            alt="SheetMind"
+            className="mb-3 flex h-12 w-12 shrink-0 rounded-sm object-contain shadow-sm"
+            aria-hidden="true"
+          />
           <h1
             className="text-page-heading text-center"
             style={{ color: "var(--color-text-primary)" }}

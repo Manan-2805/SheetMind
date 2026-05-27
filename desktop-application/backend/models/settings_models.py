@@ -1,8 +1,10 @@
 """Module containing settings_models functionality."""
 
 import json
+
 from schemas.settings_schemas import SettingsResponse
 from services.duckdb_service import get_connection
+
 
 def get_settings() -> SettingsResponse:
     """Execute the get_settings operation."""
@@ -15,14 +17,13 @@ def get_settings() -> SettingsResponse:
     # Return defaults if none exist
     return SettingsResponse()
 
+
 def update_settings_db(settings: SettingsResponse):
     """Execute the update_settings_db operation."""
     conn = get_connection()
     data_json = settings.model_dump_json()
-    conn.execute(
-        "INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)",
-        [data_json]
-    )
+    conn.execute("INSERT OR REPLACE INTO settings (id, settings_json) VALUES (1, ?)", [data_json])
+
 
 def clear_chat_history_db() -> int:
     """Execute the clear_chat_history_db operation."""
@@ -32,6 +33,7 @@ def clear_chat_history_db() -> int:
     conn.execute("DELETE FROM chat_messages")
     conn.execute("DELETE FROM chat_sessions")
     return count
+
 
 def delete_all_files_db() -> int:
     """Execute the delete_all_files_db operation."""

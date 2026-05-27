@@ -1,23 +1,22 @@
 """Module containing saved_queries_router functionality."""
 
-from datetime import datetime, timezone
 import re
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 import models.saved_query_models as sq_models
-import models.chat_models as chat_models
-import models.artifact_models as artifact_models
+from models import artifact_models, chat_models
 from models.settings_models import get_settings
+from schemas.artifact_schemas import ArtifactExportResponse
+from schemas.chat_schemas import ResultTable
 from schemas.common_schemas import SuccessResponse
 from schemas.saved_query_schemas import (
     CreateSavedQueryRequest,
     SavedQueryResponse,
     UpdateSavedQueryRequest,
 )
-from schemas.artifact_schemas import ArtifactExportResponse
-from schemas.chat_schemas import ResultTable
 from services.duckdb_service import get_connection
 from services.query_service import dataframe_to_result_table
 from services.storage_service import get_exports_dir
@@ -27,6 +26,7 @@ router = APIRouter(prefix="/saved-queries", tags=["saved-queries"])
 
 class RunSavedQueryResponse(BaseModel):
     """Schema or class representation for RunSavedQueryResponse."""
+
     id: str
     label: str
     nl_query: str
@@ -36,12 +36,14 @@ class RunSavedQueryResponse(BaseModel):
 
 class GenerateLabelRequest(BaseModel):
     """Schema or class representation for GenerateLabelRequest."""
+
     nl_query: str
     sql_query: str
 
 
 class GenerateLabelResponse(BaseModel):
     """Schema or class representation for GenerateLabelResponse."""
+
     label: str
 
 
@@ -123,7 +125,7 @@ async def run_saved_query(
     try:
         df = conn.execute(saved_query.sql_query).fetchdf()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}") from exc
+        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {exc!s}") from exc
 
     sq_models.mark_used(query_id)
 
@@ -148,13 +150,13 @@ async def export_saved_query(query_id: str) -> ArtifactExportResponse:
     try:
         df = conn.execute(saved_query.sql_query).fetchdf()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {str(exc)}") from exc
+        raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {exc!s}") from exc
 
     sq_models.mark_used(query_id)
 
     exports_dir = get_exports_dir()
     safe_label = re.sub(r"[^0-9A-Za-z_]+", "_", saved_query.label).strip("_") or "saved_query"
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_label}_{timestamp}.xlsx"
     file_path = exports_dir / filename
     df.to_excel(file_path, index=False)

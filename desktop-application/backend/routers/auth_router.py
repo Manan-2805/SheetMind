@@ -1,7 +1,7 @@
 """Module containing auth_router functionality."""
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -20,11 +20,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class SetupRequest(BaseModel):
     """Schema or class representation for SetupRequest."""
+
     username: str
 
 
 class SetupResponse(BaseModel):
     """Schema or class representation for SetupResponse."""
+
     username: str
     created_at: str
     last_login: str
@@ -33,11 +35,13 @@ class SetupResponse(BaseModel):
 
 class UsersListResponse(BaseModel):
     """Schema or class representation for UsersListResponse."""
+
     users: list[dict]
 
 
 class DeleteUserResponse(BaseModel):
     """Schema or class representation for DeleteUserResponse."""
+
     success: bool
     username: str
 
@@ -70,8 +74,8 @@ async def setup_user(body: SetupRequest) -> SetupResponse:
 
     return SetupResponse(
         username=safe,
-        created_at=user_info.get("created_at") or datetime.now(timezone.utc).isoformat(),
-        last_login=user_info.get("last_login") or datetime.now(timezone.utc).isoformat(),
+        created_at=user_info.get("created_at") or datetime.now(UTC).isoformat(),
+        last_login=user_info.get("last_login") or datetime.now(UTC).isoformat(),
         is_new=is_new,
     )
 
@@ -90,7 +94,9 @@ async def delete_user(username: str) -> DeleteUserResponse:
         try:
             shutil.rmtree(str(user_dir))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to delete user directory: {e}") from e
+            raise HTTPException(
+                status_code=500, detail=f"Failed to delete user directory: {e}"
+            ) from e
 
     remove_account(safe)
 

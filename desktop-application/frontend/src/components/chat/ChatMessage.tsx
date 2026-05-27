@@ -312,13 +312,12 @@ export function ChatMessage({
 
   return (
     <div className="group flex gap-3 py-4">
-      <div
-        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-        style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
+      <img
+        src="/favicon.png"
+        alt="SheetMind"
+        className="mt-0.5 h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"
-      >
-        S
-      </div>
+      />
 
       <div className="flex flex-1 flex-col gap-2 min-w-0">
         <div className="flex items-center gap-3">

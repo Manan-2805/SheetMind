@@ -1,11 +1,11 @@
 """Module containing artifacts_router functionality."""
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import pandas as pd
 
-import models.artifact_models as artifact_models
+from models import artifact_models
 from models.settings_models import get_settings
 from schemas.artifact_schemas import ArtifactExportResponse, ArtifactsResponse
 from schemas.chat_schemas import ResultTable
@@ -23,6 +23,7 @@ async def get_artifacts() -> ArtifactsResponse:
 
 class RenameArtifactRequest(BaseModel):
     """Schema or class representation for RenameArtifactRequest."""
+
     title: str
 
 
@@ -56,7 +57,7 @@ async def get_artifact_data(artifact_id: str) -> ResultTable:
     try:
         df = pd.read_excel(file_path)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to read artifact: {str(exc)}") from exc
+        raise HTTPException(status_code=400, detail=f"Failed to read artifact: {exc!s}") from exc
     return dataframe_to_result_table(df, _get_row_limit())
 
 

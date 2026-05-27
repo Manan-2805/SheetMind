@@ -1,4 +1,4 @@
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -7,7 +7,7 @@ T = TypeVar("T")
 
 class ErrorDetail(BaseModel):
     code: str
-    details: Optional[str] = None
+    details: str | None = None
 
 
 class Meta(BaseModel):
@@ -18,7 +18,7 @@ class Meta(BaseModel):
 
 class ApiResponse(BaseModel, Generic[T]):
     success: bool
-    data: Optional[T] = None
+    data: T | None = None
     message: str
-    error: Optional[ErrorDetail] = None
+    error: ErrorDetail | None = None
     meta: Meta

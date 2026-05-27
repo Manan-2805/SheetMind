@@ -1,17 +1,17 @@
 """Module containing data_sources_router functionality."""
 
-from datetime import datetime, timezone
-from pathlib import Path
 import urllib.parse
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 import httpx
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from dependencies import current_username
 import models.data_source_models as ds_models
+from dependencies import current_username
 from schemas.common_schemas import SuccessResponse
 from schemas.data_source_schemas import (
     AutocompleteResponse,
@@ -25,6 +25,7 @@ from services.storage_service import get_uploads_dir
 
 class UrlUploadRequest(BaseModel):
     """Schema or class representation for UrlUploadRequest."""
+
     url: str
 
 
@@ -56,7 +57,7 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
     uploads_dir = get_uploads_dir(username)
 
     filename = file.filename or "upload.xlsx"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     file_id = f"ds-{uuid.uuid4().hex[:8]}"
 
     safe_filename = _safe_storage_filename(filename)
@@ -102,7 +103,9 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
         raise HTTPException(status_code=400, detail=f"Invalid URL structure: {e}") from e
 
     ext = Path(filename).suffix.lower()
-    if ext not in (".csv", ".xls", ".xlsx", ".ods") and not any(filename.endswith(s) for s in (".csv", ".xls", ".xlsx", ".ods")):
+    if ext not in (".csv", ".xls", ".xlsx", ".ods") and not any(
+        filename.endswith(s) for s in (".csv", ".xls", ".xlsx", ".ods")
+    ):
         # Will append extension based on content-type later
         pass
 
@@ -112,7 +115,9 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
             resp.raise_for_status()
             content = resp.content
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to download file from URL: {str(e)}") from e
+        raise HTTPException(
+            status_code=400, detail=f"Failed to download file from URL: {e!s}"
+        ) from e
 
     file_size = len(content)
 
@@ -139,7 +144,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
     async with aiofiles.open(stored_path, "wb") as out_file:
         await out_file.write(content)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     conn = get_connection()
     conn.execute(

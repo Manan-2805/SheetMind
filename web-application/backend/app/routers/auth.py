@@ -2,7 +2,7 @@ import logging
 import os
 import secrets
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -19,7 +19,7 @@ from app.services.auth_service import (
     upsert_user,
 )
 from app.utils.jwt import create_access_token
-from app.utils.response import error_response, success_response
+from app.utils.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -143,15 +143,15 @@ async def get_me(
         name=current_user.name,
         picture=current_user.picture,
         created_at=current_user.created_at.isoformat() if current_user.created_at else None,
-        last_login_at=current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        last_login_at=current_user.last_login_at.isoformat()
+        if current_user.last_login_at
+        else None,
     )
     return success_response(data=user_data.model_dump(), message="User retrieved")
 
 
 @router.post("/logout")
 async def logout(request: Request):
-    response = JSONResponse(
-        content=success_response(data=None, message="Logged out successfully")
-    )
+    response = JSONResponse(content=success_response(data=None, message="Logged out successfully"))
     response.delete_cookie(key="access_token", path="/")
     return response
