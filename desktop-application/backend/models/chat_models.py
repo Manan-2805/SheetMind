@@ -1073,10 +1073,11 @@ async def _generate_combined_second_call(
     columns: list,
     user_question: str,
 ) -> dict:
-    """Single second LLM call returning summary + followups JSON."""
+    """Single second LLM call returning summary, chart config, and followups JSON."""
     prompt = f"""You are a data analysis assistant. Based on the query result below, provide:
 1. A 1-2 sentence plain English summary of what the data shows. Be specific about numbers.
-2. Exactly 3 short follow-up questions (max 12 words each) a user might ask next.
+2. An optimal plottable chart configuration ONLY if the data can be plotted visually in a useful way (e.g. trends, category distributions, comparisons). Choose the chart type from: "bar", "horizontal-bar", "line", "area", "pie", "donut", "scatter", "histogram", "heatmap".
+3. Exactly 3 short follow-up questions (max 12 words each) a user might ask next.
 
 User asked: {user_question}
 Columns: {columns}
@@ -1086,6 +1087,13 @@ Total rows: {len(result_rows)}
 Respond ONLY with this JSON (no markdown, no prose):
 {{
   "summary": "<1-2 sentence summary>",
+  "chart_config": {{
+    "should_generate": true_or_false,
+    "chart_type": "bar_or_line_or_pie_etc",
+    "x_key": "<column name for x axis>",
+    "y_key": "<column name for y axis>",
+    "title": "<short chart title>"
+  }},
   "followups": ["<q1>", "<q2>", "<q3>"]
 }}"""
 
@@ -1098,7 +1106,7 @@ Respond ONLY with this JSON (no markdown, no prose):
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
-                max_tokens=250,
+                max_tokens=300,
                 response_format={"type": "json_object"},
             )
             text = response.choices[0].message.content or "{}"
@@ -1114,7 +1122,7 @@ Respond ONLY with this JSON (no markdown, no prose):
                         "prompt": prompt,
                         "stream": False,
                         "format": "json",
-                        "options": {"temperature": 0, "num_predict": 250},
+                        "options": {"temperature": 0, "num_predict": 300},
                     },
                     timeout=60.0,
                 )
@@ -1130,11 +1138,12 @@ Respond ONLY with this JSON (no markdown, no prose):
         return {
             "summary": parsed.get("summary", ""),
             "followups": parsed.get("followups", [])[:3],
+            "chart_config": parsed.get("chart_config", {}),
             "input_tokens": in_tok,
             "output_tokens": out_tok,
         }
     except Exception as e:
-        return {"summary": "", "followups": [], "input_tokens": 0, "output_tokens": 0}
+        return {"summary": "", "followups": [], "chart_config": {}, "input_tokens": 0, "output_tokens": 0}
 
 
 async def _auto_generate_chart(
@@ -1142,6 +1151,7 @@ async def _auto_generate_chart(
     columns: list,
     user_question: str,
     session_id: str,
+    chart_config: dict | None = None,
 ) -> str | None:
     """Auto-generate a chart and return the URL path."""
     import uuid as _uuid
@@ -1151,22 +1161,49 @@ async def _auto_generate_chart(
     if len(columns) < 1 or len(result_rows) < 2:
         return None
 
+    # Default fallback chart configuration
+    should_gen = True
+    chart_type = "bar"
     x_key = columns[0]
     y_key = columns[1] if len(columns) > 1 else columns[0]
+    title = user_question[:60]
+
+    if chart_config:
+        should_gen = bool(chart_config.get("should_generate", True))
+        if not should_gen:
+            return None
+
+        cfg_x = chart_config.get("x_key")
+        cfg_y = chart_config.get("y_key")
+        cfg_type = chart_config.get("chart_type")
+        cfg_title = chart_config.get("title")
+
+        if cfg_type:
+            chart_type = str(cfg_type).lower()
+        if cfg_x in columns:
+            x_key = str(cfg_x)
+        if cfg_y in columns:
+            y_key = str(cfg_y)
+        if cfg_title:
+            title = str(cfg_title)
 
     charts_dir = get_charts_dir()
     chart_filename = f"auto_{_uuid.uuid4().hex[:8]}.png"
     chart_path = charts_dir / chart_filename
 
-    buf = generate_chart(
-        data=result_rows,
-        chart_type="bar",
-        x_key=x_key,
-        y_key=y_key,
-        title=user_question[:60],
-    )
-    chart_path.write_bytes(buf.read())
-    return f"/api/chat/charts/static/{chart_filename}"
+    try:
+        buf = generate_chart(
+            data=result_rows,
+            chart_type=chart_type,
+            x_key=x_key,
+            y_key=y_key,
+            title=title,
+        )
+        chart_path.write_bytes(buf.read())
+        return f"/api/chat/charts/static/{chart_filename}"
+    except Exception as e:
+        print(f"Failed inside generate_chart during auto plot: {e}")
+        return None
 
 
 async def create_message(
@@ -1306,6 +1343,7 @@ async def create_message(
         if sql_exec_succeeded:
             await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_summary"})
             t3 = time.time()
+            chart_config_from_combined = None
             try:
                 combined_res = await _generate_combined_second_call(
                     result_rows=result_rows,
@@ -1314,6 +1352,7 @@ async def create_message(
                 )
                 nl_summary = combined_res.get("summary") or llm_message or "Query completed."
                 followups_from_combined = combined_res.get("followups") or []
+                chart_config_from_combined = combined_res.get("chart_config")
                 total_input_tokens += combined_res.get("input_tokens", 0)
                 total_output_tokens += combined_res.get("output_tokens", 0)
             except Exception as e:
@@ -1341,7 +1380,13 @@ async def create_message(
     if result_rows and settings.auto_chart_display:
         await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_charts"})
         try:
-            chart_url = await _auto_generate_chart(result_rows, [c.key for c in columns], content, session_id)
+            chart_url = await _auto_generate_chart(
+                result_rows=result_rows,
+                columns=[c.key for c in columns],
+                user_question=content,
+                session_id=session_id,
+                chart_config=chart_config_from_combined
+            )
         except Exception as e:
             print(f"Auto chart generation failed: {e}")
 
@@ -1492,11 +1537,18 @@ async def regenerate_response(
             
             await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_summary"})
             t3 = time.time()
+            chart_config_from_combined = None
             try:
-                summary_res = await generate_nl_summary(result_rows, [c.key for c in columns], effective_content)
-                nl_summary = summary_res["summary"]
-                total_input_tokens += summary_res.get("input_tokens", 0)
-                total_output_tokens += summary_res.get("output_tokens", 0)
+                combined_res = await _generate_combined_second_call(
+                    result_rows=result_rows,
+                    columns=[c.key for c in columns],
+                    user_question=effective_content,
+                )
+                nl_summary = combined_res.get("summary") or "Query completed."
+                followups = combined_res.get("followups") or []
+                chart_config_from_combined = combined_res.get("chart_config")
+                total_input_tokens += combined_res.get("input_tokens", 0)
+                total_output_tokens += combined_res.get("output_tokens", 0)
             except Exception as e:
                 nl_summary = f"Results found, but summary failed: {e}"
             summary_gen_ms = int((time.time() - t3) * 1000)
@@ -1508,7 +1560,13 @@ async def regenerate_response(
     if result_rows and settings.auto_chart_display:
         await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_charts"})
         try:
-            chart_url = await _auto_generate_chart(result_rows, [c.key for c in columns], effective_content, session_id)
+            chart_url = await _auto_generate_chart(
+                result_rows=result_rows,
+                columns=[c.key for c in columns],
+                user_question=effective_content,
+                session_id=session_id,
+                chart_config=chart_config_from_combined
+            )
         except Exception as e:
             print(f"Auto chart generation failed: {e}")
 
@@ -1532,14 +1590,8 @@ async def regenerate_response(
     )
     conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
 
-    followups = []
-    if result_rows:
-        try:
-            followups = await generate_followups(result_rows, [c.key for c in columns], effective_content)
-            if followups:
-                conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
-        except Exception as e:
-            print(f"Follow-up generation failed: {e}")
+    if result_rows and followups:
+        conn.execute("UPDATE chat_messages SET followups_json = ? WHERE id = ?", [json.dumps(followups), assistant_msg_id])
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "complete"})
 

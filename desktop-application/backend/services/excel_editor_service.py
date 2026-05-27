@@ -35,6 +35,69 @@ def get_available_files() -> list[ExcelEditorFile]:
         for row in rows
     ]
 
+def get_hex_color(color_obj) -> Optional[str]:
+    if color_obj is None:
+        return None
+    try:
+        if color_obj.type == 'rgb' and color_obj.rgb:
+            rgb_str = str(color_obj.rgb)
+            if len(rgb_str) >= 6:
+                return "#" + rgb_str[-6:]
+        return None
+    except Exception:
+        return None
+
+def extract_formatting_map(path: str) -> dict[str, dict]:
+    formatting_map = {}
+    try:
+        wb = load_workbook(path, read_only=False, data_only=True)
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            max_r = min(ws.max_row, 1000)
+            max_c = min(ws.max_column, 100)
+            for r in range(2, max_r + 1):
+                r_idx = r - 2
+                for c in range(1, max_c + 1):
+                    c_idx = c - 1
+                    cell = ws.cell(row=r, column=c)
+                    bold = cell.font.bold if cell.font else None
+                    italic = cell.font.italic if cell.font else None
+                    fontSize = int(cell.font.size) if cell.font and cell.font.size else None
+                    textColor = None
+                    if cell.font and cell.font.color:
+                        textColor = get_hex_color(cell.font.color)
+                    bgColor = None
+                    if cell.fill and isinstance(cell.fill, PatternFill) and cell.fill.fill_type not in (None, 'none'):
+                        bgColor = get_hex_color(cell.fill.fgColor)
+                    borderTop = cell.border.top.style is not None if cell.border and cell.border.top else None
+                    borderBottom = cell.border.bottom.style is not None if cell.border and cell.border.bottom else None
+                    borderLeft = cell.border.left.style is not None if cell.border and cell.border.left else None
+                    borderRight = cell.border.right.style is not None if cell.border and cell.border.right else None
+                    align = None
+                    if cell.alignment and cell.alignment.horizontal in ("left", "center", "right"):
+                        align = cell.alignment.horizontal
+                    has_format = (
+                        bold or italic or fontSize or textColor or bgColor or align or
+                        borderTop or borderBottom or borderLeft or borderRight
+                    )
+                    if has_format:
+                        key = f"{sheet_name}:{r_idx}:{c_idx}"
+                        fmt_dict = {}
+                        if bold is not None: fmt_dict["bold"] = bold
+                        if italic is not None: fmt_dict["italic"] = italic
+                        if fontSize is not None: fmt_dict["fontSize"] = fontSize
+                        if textColor is not None: fmt_dict["textColor"] = textColor
+                        if bgColor is not None: fmt_dict["bgColor"] = bgColor
+                        if borderTop is not None: fmt_dict["borderTop"] = borderTop
+                        if borderBottom is not None: fmt_dict["borderBottom"] = borderBottom
+                        if borderLeft is not None: fmt_dict["borderLeft"] = borderLeft
+                        if borderRight is not None: fmt_dict["borderRight"] = borderRight
+                        if align is not None: fmt_dict["align"] = align
+                        formatting_map[key] = fmt_dict
+    except Exception as e:
+        print(f"Error extracting formatting map: {e}")
+    return formatting_map
+
 def open_excel_file(file_id: str) -> Optional[dict]:
     conn = get_connection()
     file_row = conn.execute(
@@ -92,10 +155,13 @@ def open_excel_file(file_id: str) -> Optional[dict]:
                 colCount=col_count
             ))
             
+    formatting_map = extract_formatting_map(path)
+            
     return {
         "fileId": file_id,
         "filename": filename,
-        "sheets": sheets
+        "sheets": sheets,
+        "formattingMap": formatting_map
     }
 
 def open_excel_sheet(file_id: str, sheet_name: str) -> Optional[SheetData]:
@@ -225,7 +291,7 @@ def apply_cell_formatting(cell, fmt: CellFormatting):
             bold=fmt.bold if fmt.bold is not None else (cell.font.bold if cell.font else False),
             italic=fmt.italic if fmt.italic is not None else (cell.font.italic if cell.font else False),
             size=fmt.fontSize if fmt.fontSize is not None else (cell.font.size if cell.font else 11),
-            color=fmt.textColor.lstrip('#') if fmt.textColor else (cell.font.color.rgb if cell.font and cell.font.color else '000000'),
+            color=fmt.textColor.lstrip('#') if fmt.textColor else (cell.font.color.rgb if cell.font and cell.font.color and cell.font.color.type == 'rgb' and cell.font.color.rgb else '000000'),
         )
     if fmt.bgColor:
         cell.fill = PatternFill(
@@ -281,8 +347,21 @@ def save_manual_edits(
         ws.delete_rows(1, ws.max_row)
         
         # Headers
+        header_font = Font(bold=True, size=11, color="000000")
+        header_fill = PatternFill(fill_type="solid", fgColor="F3F4F6")
+        header_align = Alignment(horizontal="center", vertical="center")
+        header_border = Border(
+            top=Side(style="thin", color="D1D5DB"),
+            bottom=Side(style="thin", color="D1D5DB"),
+            left=Side(style="thin", color="D1D5DB"),
+            right=Side(style="thin", color="D1D5DB")
+        )
         for c_idx, col_name in enumerate(sheet_data.columns, 1):
-            ws.cell(row=1, column=c_idx, value=col_name)
+            cell = ws.cell(row=1, column=c_idx, value=col_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = header_border
             
         # Rows
         for r_idx, row in enumerate(sheet_data.rows, 2):

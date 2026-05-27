@@ -56,7 +56,11 @@ export async function deleteSavedQuery(id: string): Promise<void> {
   }
 }
 
-export async function runSavedQuery(id: string): Promise<{
+export async function runSavedQuery(
+  id: string,
+  page: number = 1,
+  pageSize: number = 10
+): Promise<{
   id: string;
   label: string;
   nl_query: string;
@@ -71,7 +75,7 @@ export async function runSavedQuery(id: string): Promise<{
       sql_query: string;
       result: ResultTable;
     }> = await client.post(
-      `/saved-queries/${id}/run`
+      `/saved-queries/${id}/run?page=${page}&page_size=${pageSize}`
     );
     return res.data;
   } catch (error) {
