@@ -1,8 +1,7 @@
 import axios, { type AxiosResponse } from "axios";
-
-import type { CreateSavedQueryRequest, SavedQuery } from "@/types/SavedQuery";
-import type { ResultTable } from "@/types/ChatMessage";
 import type { ArtifactExport } from "@/types/Artifact";
+import type { ResultTable } from "@/types/ChatMessage";
+import type { CreateSavedQueryRequest, SavedQuery } from "@/types/SavedQuery";
 
 import { apiClient as client } from "./apiClient";
 
@@ -26,22 +25,16 @@ function handleError(error: unknown): never {
 
 export async function getSavedQueries(): Promise<SavedQuery[]> {
   try {
-    const res: AxiosResponse<SavedQuery[]> =
-      await client.get("/saved-queries");
+    const res: AxiosResponse<SavedQuery[]> = await client.get("/saved-queries");
     return res.data;
   } catch (error) {
     handleError(error);
   }
 }
 
-export async function createSavedQuery(
-  data: CreateSavedQueryRequest
-): Promise<SavedQuery> {
+export async function createSavedQuery(data: CreateSavedQueryRequest): Promise<SavedQuery> {
   try {
-    const res: AxiosResponse<SavedQuery> = await client.post(
-      "/saved-queries",
-      data
-    );
+    const res: AxiosResponse<SavedQuery> = await client.post("/saved-queries", data);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -74,9 +67,7 @@ export async function runSavedQuery(
       nl_query: string;
       sql_query: string;
       result: ResultTable;
-    }> = await client.post(
-      `/saved-queries/${id}/run?page=${page}&page_size=${pageSize}`
-    );
+    }> = await client.post(`/saved-queries/${id}/run?page=${page}&page_size=${pageSize}`);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -85,9 +76,7 @@ export async function runSavedQuery(
 
 export async function exportSavedQuery(id: string): Promise<ArtifactExport> {
   try {
-    const res: AxiosResponse<ArtifactExport> = await client.post(
-      `/saved-queries/${id}/export`
-    );
+    const res: AxiosResponse<ArtifactExport> = await client.post(`/saved-queries/${id}/export`);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -96,9 +85,7 @@ export async function exportSavedQuery(id: string): Promise<ArtifactExport> {
 
 export async function toggleFavorite(id: string): Promise<SavedQuery> {
   try {
-    const res: AxiosResponse<SavedQuery> = await client.put(
-      `/saved-queries/${id}/favorite`
-    );
+    const res: AxiosResponse<SavedQuery> = await client.put(`/saved-queries/${id}/favorite`);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -107,10 +94,7 @@ export async function toggleFavorite(id: string): Promise<SavedQuery> {
 
 export async function renameSavedQuery(id: string, label: string): Promise<SavedQuery> {
   try {
-    const res: AxiosResponse<SavedQuery> = await client.put(
-      `/saved-queries/${id}`,
-      { label }
-    );
+    const res: AxiosResponse<SavedQuery> = await client.put(`/saved-queries/${id}`, { label });
     return res.data;
   } catch (error) {
     handleError(error);
@@ -136,10 +120,7 @@ export async function searchSavedQueries(
   }
 }
 
-export async function generateLabel(
-  nl_query: string,
-  sql_query: string
-): Promise<string> {
+export async function generateLabel(nl_query: string, sql_query: string): Promise<string> {
   try {
     const res: AxiosResponse<{ label: string }> = await client.post(
       "/saved-queries/generate-label",

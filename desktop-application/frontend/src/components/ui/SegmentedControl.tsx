@@ -40,15 +40,9 @@ export function SegmentedControl<T extends string>({
               "active:scale-[0.97]"
             )}
             style={{
-              backgroundColor: isActive
-                ? "var(--color-bg-active)"
-                : "transparent",
-              color: isActive
-                ? "var(--color-text-primary)"
-                : "var(--color-text-secondary)",
-              border: isActive
-                ? "1px solid var(--color-border-default)"
-                : "1px solid transparent",
+              backgroundColor: isActive ? "var(--color-bg-active)" : "transparent",
+              color: isActive ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+              border: isActive ? "1px solid var(--color-border-default)" : "1px solid transparent",
             }}
           >
             {opt.label}

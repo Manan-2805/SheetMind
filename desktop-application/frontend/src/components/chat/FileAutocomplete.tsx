@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AutocompleteFile } from "@/types/DataSource";
 
@@ -62,9 +62,9 @@ export function FileAutocomplete({
         }));
         return [fileItem, ...sheetItems];
       })
-      .filter((item) =>
-        activeQuery.length === 0 ||
-        item.label.toLowerCase().includes(activeQuery.toLowerCase())
+      .filter(
+        (item) =>
+          activeQuery.length === 0 || item.label.toLowerCase().includes(activeQuery.toLowerCase())
       );
   }, [files, activeQuery]);
 
@@ -101,10 +101,7 @@ export function FileAutocomplete({
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onDismiss();
       }
     }
@@ -160,10 +157,7 @@ export function FileAutocomplete({
               key={item.insertValue}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-body transition-colors duration-[120ms]"
               style={{
-                backgroundColor:
-                  i === selectedIndex
-                    ? "var(--color-bg-hover)"
-                    : "transparent",
+                backgroundColor: i === selectedIndex ? "var(--color-bg-hover)" : "transparent",
                 color: "var(--color-text-primary)",
               }}
               onMouseEnter={() => setSelectedIndex(i)}
@@ -187,8 +181,11 @@ export function FileAutocomplete({
               <span
                 className="truncate"
                 style={{
-                  color: item.type === "file" ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                  fontWeight: item.type === "file" ? 500 : 400
+                  color:
+                    item.type === "file"
+                      ? "var(--color-text-primary)"
+                      : "var(--color-text-secondary)",
+                  fontWeight: item.type === "file" ? 500 : 400,
                 }}
               >
                 {item.label}

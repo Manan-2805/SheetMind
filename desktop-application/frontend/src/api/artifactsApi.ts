@@ -25,8 +25,7 @@ function handleError(error: unknown): never {
 
 export async function getArtifacts(): Promise<ArtifactsResponse> {
   try {
-    const res: AxiosResponse<ArtifactsResponse> =
-      await client.get("/artifacts");
+    const res: AxiosResponse<ArtifactsResponse> = await client.get("/artifacts");
     return res.data;
   } catch (error) {
     handleError(error);
@@ -43,10 +42,7 @@ export async function deleteArtifact(id: string): Promise<void> {
 
 export async function renameArtifact(id: string, title: string): Promise<ArtifactExport> {
   try {
-    const res: AxiosResponse<ArtifactExport> = await client.put(
-      `/artifacts/${id}`,
-      { title }
-    );
+    const res: AxiosResponse<ArtifactExport> = await client.put(`/artifacts/${id}`, { title });
     return res.data;
   } catch (error) {
     handleError(error);
@@ -55,9 +51,7 @@ export async function renameArtifact(id: string, title: string): Promise<Artifac
 
 export async function getArtifactData(id: string): Promise<ResultTable> {
   try {
-    const res: AxiosResponse<ResultTable> = await client.get(
-      `/artifacts/${id}/data`
-    );
+    const res: AxiosResponse<ResultTable> = await client.get(`/artifacts/${id}/data`);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -74,7 +68,7 @@ export async function downloadArtifact(id: string, filename: string): Promise<vo
     const res = await client.get(`/artifacts/${id}/download`, {
       responseType: "blob",
     });
-    
+
     // Create blob link to download
     const url = window.URL.createObjectURL(new Blob([res.data]));
     const link = document.createElement("a");
@@ -82,7 +76,7 @@ export async function downloadArtifact(id: string, filename: string): Promise<vo
     link.setAttribute("download", filename);
     document.body.appendChild(link);
     link.click();
-    
+
     // Clean up
     link.parentNode?.removeChild(link);
     window.URL.revokeObjectURL(url);

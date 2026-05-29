@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
 import { Hash, Send } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import { extractReferencedFiles } from "@/utils/chatReferences";
@@ -37,11 +37,7 @@ export function ChatInput({
   const MIN_HEIGHT = 44;
   const MAX_HEIGHT = 160;
 
-  const referencedFiles = useMemo(
-    () => extractReferencedFiles(value, files),
-    [value, files]
-  );
-
+  const referencedFiles = useMemo(() => extractReferencedFiles(value, files), [value, files]);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -128,7 +124,8 @@ export function ChatInput({
                 (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border-default)";
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "var(--color-border-default)";
                 (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
               }}
             >
@@ -156,14 +153,11 @@ export function ChatInput({
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                 "var(--color-bg-hover)";
-              (e.currentTarget as HTMLButtonElement).style.color =
-                "var(--color-text-secondary)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                "transparent";
-              (e.currentTarget as HTMLButtonElement).style.color =
-                "var(--color-text-tertiary)";
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)";
             }}
             title="Reference a file"
             aria-label="Insert file reference"
@@ -196,9 +190,10 @@ export function ChatInput({
             disabled={isLoading || value.length > 2000}
             className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-[120ms] active:scale-[0.97]"
             style={{
-              backgroundColor: value.trim() && value.length <= 2000
-                ? "var(--color-accent)"
-                : "var(--color-bg-hover)",
+              backgroundColor:
+                value.trim() && value.length <= 2000
+                  ? "var(--color-accent)"
+                  : "var(--color-bg-hover)",
               color: value.trim() && value.length <= 2000 ? "#fff" : "var(--color-text-tertiary)",
               cursor: value.trim() && value.length <= 2000 ? "pointer" : "not-allowed",
               opacity: value.length > 2000 ? 0.5 : 1,
@@ -216,7 +211,12 @@ export function ChatInput({
           <span>Type # to reference a file. Shift+Enter for new line.</span>
           <span
             style={{
-              color: value.length > 2000 ? "rgb(239, 68, 68)" : value.length > 1800 ? "rgb(251, 146, 60)" : "var(--color-text-tertiary)",
+              color:
+                value.length > 2000
+                  ? "rgb(239, 68, 68)"
+                  : value.length > 1800
+                    ? "rgb(251, 146, 60)"
+                    : "var(--color-text-tertiary)",
               fontWeight: value.length > 1800 ? "bold" : "normal",
             }}
           >

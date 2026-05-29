@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
-
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { exportMessage, getMessageData, setMessageFeedback } from "@/api/chatApi";
+import { getDataSources } from "@/api/dataSourcesApi";
+import { createSavedQuery, generateLabel } from "@/api/savedQueriesApi";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
@@ -8,11 +10,8 @@ import { FeedbackModal } from "@/components/chat/FeedbackModal";
 import { RegenerateModal } from "@/components/chat/RegenerateModal";
 import { QueryResultPanel } from "@/components/QueryResultPanel";
 import { SkeletonChatMessage } from "@/components/skeletons/SkeletonChatMessage";
-import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
-import { getDataSources } from "@/api/dataSourcesApi";
-import { exportMessage, getMessageData, setMessageFeedback } from "@/api/chatApi";
-import { createSavedQuery, generateLabel } from "@/api/savedQueriesApi";
 import { useToast } from "@/hooks/useToast";
+import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 
 interface ChatPageProps {
   messages: ChatMessageType[];
@@ -62,21 +61,31 @@ export function ChatPage({
   const [saveLabel, setSaveLabel] = useState("");
   const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
   const [isSavingQuery, setIsSavingQuery] = useState(false);
-  const [activeResult, setActiveResult] = useState<{ message: ChatMessageType; result: ResultTable } | null>(null);
+  const [activeResult, setActiveResult] = useState<{
+    message: ChatMessageType;
+    result: ResultTable;
+  } | null>(null);
   const [isLoadingResult, setIsLoadingResult] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [feedbackModal, setFeedbackModal] = useState<{ msg: ChatMessageType, type: "like" | "dislike" } | null>(null);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    msg: ChatMessageType;
+    type: "like" | "dislike";
+  } | null>(null);
   const [regenerateModal, setRegenerateModal] = useState<ChatMessageType | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
     let isMounted = true;
-    getDataSources().then((sources) => {
-      if (isMounted) setHasFiles(sources && sources.length > 0);
-    }).catch(() => {
-      if (isMounted) setHasFiles(false);
-    });
-    return () => { isMounted = false; };
+    getDataSources()
+      .then((sources) => {
+        if (isMounted) setHasFiles(sources && sources.length > 0);
+      })
+      .catch(() => {
+        if (isMounted) setHasFiles(false);
+      });
+    return () => {
+      isMounted = false;
+    };
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -121,86 +130,130 @@ export function ChatPage({
     setFeedbackModal({ msg, type: "dislike" });
   }, []);
 
-  const handleFeedbackSubmit = useCallback(async (type: "like" | "dislike", reason: string) => {
-    if (!feedbackModal || !onUpdateMessage) return;
-    try {
-      await setMessageFeedback(feedbackModal.msg.id, type, reason);
-      onUpdateMessage({ ...feedbackModal.msg, feedback: type, feedback_reason: reason });
-      addToast({ type: "success", title: "Feedback saved", description: "Thank you for your feedback!" });
-    } catch {
-      addToast({ type: "error", title: "Error", description: "Could not save feedback" });
-    }
-  }, [feedbackModal, addToast, onUpdateMessage]);
-
-  const handleRegenerate = useCallback((msg: ChatMessageType) => {
-    if (!activeSessionId) return;
-    setRegenerateModal(msg);
-  }, [activeSessionId]);
-
-  const handleRegenerateModalSubmit = useCallback(async (reason: string, instruction: string) => {
-    if (!activeSessionId || !regenerateModal || !onRegenerateSubmit) return;
-    onRegenerateSubmit(regenerateModal, reason, instruction);
-    setRegenerateModal(null);
-  }, [activeSessionId, regenerateModal, onRegenerateSubmit]);
-
-  const handleCopyMessage = useCallback((msg: ChatMessageType) => {
-    navigator.clipboard.writeText(msg.content);
-    addToast({ type: "success", title: "Copied", description: "Message copied to clipboard" });
-  }, [addToast]);
-
-  const handleDeleteMessage = useCallback((msg: ChatMessageType) => {
-    if (onDeleteMessage) {
-      onDeleteMessage(msg.id);
-    }
-  }, [onDeleteMessage]);
-
-  const handleEditMessage = useCallback((msg: ChatMessageType, newContent?: string, newFiles?: string[]) => {
-    if (onEditMessage) {
-      if (newContent !== undefined) {
-        // This is called when saving from the inline editor
-        onEditMessage(msg.id, newContent, newFiles ?? msg.referenced_files ?? []);
+  const handleFeedbackSubmit = useCallback(
+    async (type: "like" | "dislike", reason: string) => {
+      if (!feedbackModal || !onUpdateMessage) return;
+      try {
+        await setMessageFeedback(feedbackModal.msg.id, type, reason);
+        onUpdateMessage({ ...feedbackModal.msg, feedback: type, feedback_reason: reason });
+        addToast({
+          type: "success",
+          title: "Feedback saved",
+          description: "Thank you for your feedback!",
+        });
+      } catch {
+        addToast({ type: "error", title: "Error", description: "Could not save feedback" });
       }
-    }
-  }, [onEditMessage]);
+    },
+    [feedbackModal, addToast, onUpdateMessage]
+  );
 
-  const handleViewChart = useCallback(async (msg: ChatMessageType) => {
-    if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
-      addToast({ type: "error", title: "No data", description: "This message has no results to chart." });
-      return;
-    }
-    if (msg.result_data) {
-      setActiveResult({ message: msg, result: msg.result_data });
-      return;
-    }
-    if (isLoadingResult) return;
+  const handleRegenerate = useCallback(
+    (msg: ChatMessageType) => {
+      if (!activeSessionId) return;
+      setRegenerateModal(msg);
+    },
+    [activeSessionId]
+  );
 
-    setIsLoadingResult(true);
-    try {
-      const result = await getMessageData(msg.id);
-      setActiveResult({ message: msg, result });
-    } catch {
-      addToast({ type: "error", title: "Error", description: "Could not load results for charting" });
-    } finally {
-      setIsLoadingResult(false);
-    }
-  }, [addToast, isLoadingResult]);
+  const handleRegenerateModalSubmit = useCallback(
+    async (reason: string, instruction: string) => {
+      if (!activeSessionId || !regenerateModal || !onRegenerateSubmit) return;
+      onRegenerateSubmit(regenerateModal, reason, instruction);
+      setRegenerateModal(null);
+    },
+    [activeSessionId, regenerateModal, onRegenerateSubmit]
+  );
 
-  const handleExport = useCallback(async (msg: ChatMessageType) => {
-    if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
-      addToast({ type: "error", title: "No data", description: "This message has no results to export." });
-      return;
-    }
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      await exportMessage(msg.id);
-      addToast({ type: "success", title: "Exported", description: "Excel file saved to artifacts" });
-    } catch {
-      addToast({ type: "error", title: "Error", description: "Could not export to Excel" });
-    } finally {
-      setIsExporting(false);
-    }
-  }, [addToast, isExporting]);
+  const handleCopyMessage = useCallback(
+    (msg: ChatMessageType) => {
+      navigator.clipboard.writeText(msg.content);
+      addToast({ type: "success", title: "Copied", description: "Message copied to clipboard" });
+    },
+    [addToast]
+  );
+
+  const handleDeleteMessage = useCallback(
+    (msg: ChatMessageType) => {
+      if (onDeleteMessage) {
+        onDeleteMessage(msg.id);
+      }
+    },
+    [onDeleteMessage]
+  );
+
+  const handleEditMessage = useCallback(
+    (msg: ChatMessageType, newContent?: string, newFiles?: string[]) => {
+      if (onEditMessage) {
+        if (newContent !== undefined) {
+          // This is called when saving from the inline editor
+          onEditMessage(msg.id, newContent, newFiles ?? msg.referenced_files ?? []);
+        }
+      }
+    },
+    [onEditMessage]
+  );
+
+  const handleViewChart = useCallback(
+    async (msg: ChatMessageType) => {
+      if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
+        addToast({
+          type: "error",
+          title: "No data",
+          description: "This message has no results to chart.",
+        });
+        return;
+      }
+      if (msg.result_data) {
+        setActiveResult({ message: msg, result: msg.result_data });
+        return;
+      }
+      if (isLoadingResult) return;
+
+      setIsLoadingResult(true);
+      try {
+        const result = await getMessageData(msg.id);
+        setActiveResult({ message: msg, result });
+      } catch {
+        addToast({
+          type: "error",
+          title: "Error",
+          description: "Could not load results for charting",
+        });
+      } finally {
+        setIsLoadingResult(false);
+      }
+    },
+    [addToast, isLoadingResult]
+  );
+
+  const handleExport = useCallback(
+    async (msg: ChatMessageType) => {
+      if (!msg.sql_generated || msg.sql_generated.startsWith("ERROR")) {
+        addToast({
+          type: "error",
+          title: "No data",
+          description: "This message has no results to export.",
+        });
+        return;
+      }
+      if (isExporting) return;
+      setIsExporting(true);
+      try {
+        await exportMessage(msg.id);
+        addToast({
+          type: "success",
+          title: "Exported",
+          description: "Excel file saved to artifacts",
+        });
+      } catch {
+        addToast({ type: "error", title: "Error", description: "Could not export to Excel" });
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [addToast, isExporting]
+  );
 
   const handleViewSQL = useCallback((msg: ChatMessageType) => {
     if (msg.sql_generated) {
@@ -208,16 +261,23 @@ export function ChatPage({
     }
   }, []);
 
-  const handleOpenSaveModal = useCallback((msg: ChatMessageType) => {
-    if (!msg.sql_generated) {
-      addToast({ type: "error", title: "No SQL", description: "This message has no SQL to save" });
-      return;
-    }
-    const userMessages = messages.filter((m) => m.role === "user");
-    const userMsg = userMessages[userMessages.length - 1];
-    setSaveModal({ msg, nlQuery: userMsg?.content ?? "" });
-    setSaveLabel(userMsg?.content?.slice(0, 60) ?? "");
-  }, [messages, addToast]);
+  const handleOpenSaveModal = useCallback(
+    (msg: ChatMessageType) => {
+      if (!msg.sql_generated) {
+        addToast({
+          type: "error",
+          title: "No SQL",
+          description: "This message has no SQL to save",
+        });
+        return;
+      }
+      const userMessages = messages.filter((m) => m.role === "user");
+      const userMsg = userMessages[userMessages.length - 1];
+      setSaveModal({ msg, nlQuery: userMsg?.content ?? "" });
+      setSaveLabel(userMsg?.content?.slice(0, 60) ?? "");
+    },
+    [messages, addToast]
+  );
 
   const handleAIGenerateLabel = async () => {
     if (!saveModal) return;
@@ -241,7 +301,11 @@ export function ChatPage({
         nl_query: saveModal.nlQuery,
         sql_query: saveModal.msg.sql_generated ?? "",
       });
-      addToast({ type: "success", title: "Query saved", description: `"${saveLabel.trim()}" added to Saved Queries` });
+      addToast({
+        type: "success",
+        title: "Query saved",
+        description: `"${saveLabel.trim()}" added to Saved Queries`,
+      });
       setSaveModal(null);
       setSaveLabel("");
     } catch {
@@ -258,7 +322,7 @@ export function ChatPage({
   useEffect(() => {
     const assistantGroups: Record<string, ChatMessageType[]> = {};
     messages.forEach((msg) => {
-      if (msg.role === 'assistant' && msg.parent_user_message_id) {
+      if (msg.role === "assistant" && msg.parent_user_message_id) {
         if (!assistantGroups[msg.parent_user_message_id]) {
           assistantGroups[msg.parent_user_message_id] = [];
         }
@@ -303,7 +367,7 @@ export function ChatPage({
         if (versions && versions.length > 0) {
           // Sort versions by created_at or version number
           const sortedVersions = [...versions].sort((a, b) => (a.version || 0) - (b.version || 0));
-          const typingVersion = sortedVersions.find(v => v.is_typing);
+          const typingVersion = sortedVersions.find((v) => v.is_typing);
           const activeIdx = activeVersions[msg.id] ?? sortedVersions.length - 1;
           const clampedIdx = Math.max(0, Math.min(activeIdx, sortedVersions.length - 1));
 
@@ -321,7 +385,10 @@ export function ChatPage({
   }, [messages, activeVersions]);
 
   const handleVersionChange = (parentMsgId: string, delta: number) => {
-    const versions = groupedMessages.find((m: ChatMessageType & { versions?: ChatMessageType[] }) => m.parent_user_message_id === parentMsgId)?.versions;
+    const versions = groupedMessages.find(
+      (m: ChatMessageType & { versions?: ChatMessageType[] }) =>
+        m.parent_user_message_id === parentMsgId
+    )?.versions;
     if (!versions) return;
 
     setActiveVersions((prev: Record<string, number>) => {
@@ -334,7 +401,10 @@ export function ChatPage({
   const isEmpty = messages.length === 0 && !isLoadingMessages;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: "var(--color-bg-base)" }}>
+    <div
+      className="flex h-full flex-col overflow-hidden"
+      style={{ backgroundColor: "var(--color-bg-base)" }}
+    >
       <div className="flex flex-1 flex-col overflow-hidden">
         {isLoadingMessages ? (
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
@@ -352,7 +422,12 @@ export function ChatPage({
                   key={msg.id}
                   message={msg}
                   onRegenerate={() => {
-                    const userMsg = msg.role === "user" ? msg : groupedMessages.find((m: ChatMessageType) => m.id === msg.parent_user_message_id);
+                    const userMsg =
+                      msg.role === "user"
+                        ? msg
+                        : groupedMessages.find(
+                            (m: ChatMessageType) => m.id === msg.parent_user_message_id
+                          );
                     if (userMsg) handleRegenerate(userMsg);
                   }}
                   onThumbUp={() => handleThumbUp(msg)}
@@ -364,7 +439,10 @@ export function ChatPage({
                   onCopy={() => handleCopyMessage(msg)}
                   onEdit={(_id, content, files) => handleEditMessage(msg, content, files)}
                   onDelete={() => handleDeleteMessage(msg)}
-                  onVersionChange={(delta: number) => msg.parent_user_message_id && handleVersionChange(msg.parent_user_message_id, delta)}
+                  onVersionChange={(delta: number) =>
+                    msg.parent_user_message_id &&
+                    handleVersionChange(msg.parent_user_message_id, delta)
+                  }
                 />
               ))}
               {sqlRetryStatus && (
@@ -447,7 +525,8 @@ export function ChatPage({
                 className="rounded-md p-1 transition-colors"
                 style={{ color: "var(--color-text-tertiary)" }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-bg-hover)";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    "var(--color-bg-hover)";
                   (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
                 }}
                 onMouseLeave={(e) => {
@@ -481,7 +560,11 @@ export function ChatPage({
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(sqlModal.sql);
-                  addToast({ type: "success", title: "Copied", description: "SQL copied to clipboard" });
+                  addToast({
+                    type: "success",
+                    title: "Copied",
+                    description: "SQL copied to clipboard",
+                  });
                 }}
                 className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms]"
                 style={{ backgroundColor: "var(--color-accent)", color: "#fff" }}
@@ -532,7 +615,8 @@ export function ChatPage({
                 className="rounded-md p-1 transition-colors"
                 style={{ color: "var(--color-text-tertiary)" }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-bg-hover)";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                    "var(--color-bg-hover)";
                   (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
                 }}
                 onMouseLeave={(e) => {
@@ -569,7 +653,8 @@ export function ChatPage({
                       (e.target as HTMLInputElement).style.borderColor = "var(--color-accent)";
                     }}
                     onBlur={(e) => {
-                      (e.target as HTMLInputElement).style.borderColor = "var(--color-border-default)";
+                      (e.target as HTMLInputElement).style.borderColor =
+                        "var(--color-border-default)";
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") void handleConfirmSave();
@@ -630,7 +715,10 @@ export function ChatPage({
                 disabled={!saveLabel.trim() || isSavingQuery}
                 className="rounded-lg px-4 py-2 text-body-em transition-all duration-[120ms] active:scale-[0.97]"
                 style={{
-                  backgroundColor: saveLabel.trim() && !isSavingQuery ? "var(--color-accent)" : "var(--color-bg-hover)",
+                  backgroundColor:
+                    saveLabel.trim() && !isSavingQuery
+                      ? "var(--color-accent)"
+                      : "var(--color-bg-hover)",
                   color: saveLabel.trim() && !isSavingQuery ? "#fff" : "var(--color-text-tertiary)",
                   cursor: saveLabel.trim() && !isSavingQuery ? "pointer" : "not-allowed",
                 }}

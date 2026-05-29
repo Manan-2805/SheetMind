@@ -1,10 +1,10 @@
 export type WidgetType =
-  | 'KpiWidget'
-  | 'ChartWidget'
-  | 'TableWidget'
-  | 'TextWidget'
-  | 'PlaceholderWidget'
-  | 'GaugeWidget';
+  | "KpiWidget"
+  | "ChartWidget"
+  | "TableWidget"
+  | "TextWidget"
+  | "PlaceholderWidget"
+  | "GaugeWidget";
 
 export interface DashboardWidget {
   id: string;
@@ -39,7 +39,7 @@ export interface WidgetStyles {
   width?: string;
   height?: string;
 
-  borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none';
+  borderStyle?: "solid" | "dashed" | "dotted" | "none";
   borderWidth?: number;
   borderRadius?: number;
   borderColor?: string;
@@ -52,9 +52,9 @@ export interface WidgetStyles {
 
   textColor?: string;
   fontSize?: number;
-  fontFamily?: 'sans-serif' | 'serif' | 'monospace' | 'Inter' | 'Outfit';
+  fontFamily?: "sans-serif" | "serif" | "monospace" | "Inter" | "Outfit";
 
-  loopAnimation?: 'none' | 'fade-in' | 'zoom-in' | 'slide-in' | 'pulse' | 'float' | 'bounce';
+  loopAnimation?: "none" | "fade-in" | "zoom-in" | "slide-in" | "pulse" | "float" | "bounce";
 }
 
 export interface ColumnConfig {
@@ -64,7 +64,7 @@ export interface ColumnConfig {
   comparisonColumn?: string;
   xAxisColumn?: string;
   yAxisColumn?: string;
-  chartType?: 'Bar' | 'Line' | 'Pie';
+  chartType?: "Bar" | "Line" | "Pie";
   selectedColumns?: string[];
   rowLimit?: number;
   textContext?: string;
@@ -81,4 +81,3 @@ export interface WidgetPosition {
   w: number;
   h: number;
 }
-

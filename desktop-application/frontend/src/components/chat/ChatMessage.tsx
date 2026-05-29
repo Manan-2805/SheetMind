@@ -1,17 +1,15 @@
 import { ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-import { ChatMessageActions } from "./ChatMessageActions";
-import { ExcelPreviewGrid } from "../ExcelPreviewGrid";
-import { TypingIndicator } from "./TypingIndicator";
-
 import { getMessageData } from "@/api/chatApi";
-import { FileAutocomplete } from "./FileAutocomplete";
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
+import { useToast } from "@/hooks/useToast";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 import { extractReferencedFiles } from "@/utils/chatReferences";
 import { formatMessageTime } from "@/utils/formatDate";
-import { useToast } from "@/hooks/useToast";
+import { ExcelPreviewGrid } from "../ExcelPreviewGrid";
+import { ChatMessageActions } from "./ChatMessageActions";
+import { FileAutocomplete } from "./FileAutocomplete";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatMessageProps {
   message: ChatMessageType & { versions?: ChatMessageType[] };
@@ -47,7 +45,11 @@ export function ChatMessage({
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const { addToast } = useToast();
 
-  const chartUrl = message.chart_url || (message.result_data as unknown as Record<string, unknown> | null)?.chart_url as string | undefined;
+  const chartUrl =
+    message.chart_url ||
+    ((message.result_data as unknown as Record<string, unknown> | null)?.chart_url as
+      | string
+      | undefined);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -88,7 +90,16 @@ export function ChatMessage({
   } = useFileAutocomplete();
 
   useEffect(() => {
-    if (message.role === "assistant" && message.sql_generated && !message.sql_generated.startsWith("ERROR") && !message.result_data && !localData && !isLoadingData && !message.is_typing && !fetchAttempted) {
+    if (
+      message.role === "assistant" &&
+      message.sql_generated &&
+      !message.sql_generated.startsWith("ERROR") &&
+      !message.result_data &&
+      !localData &&
+      !isLoadingData &&
+      !message.is_typing &&
+      !fetchAttempted
+    ) {
       /* eslint-disable react-hooks/set-state-in-effect */
       setFetchAttempted(true);
       setIsLoadingData(true);
@@ -139,13 +150,17 @@ export function ChatMessage({
     const data = message.result_data || localData;
     if (!data) return;
 
-    const headers = data.columns.map(c => c.label).join(",");
-    const rows = data.rows.map(row =>
-      data.columns.map(col => {
-        const val = row[col.key];
-        return typeof val === "string" && val.includes(",") ? `"${val}"` : String(val ?? "");
-      }).join(",")
-    ).join("\n");
+    const headers = data.columns.map((c) => c.label).join(",");
+    const rows = data.rows
+      .map((row) =>
+        data.columns
+          .map((col) => {
+            const val = row[col.key];
+            return typeof val === "string" && val.includes(",") ? `"${val}"` : String(val ?? "");
+          })
+          .join(",")
+      )
+      .join("\n");
 
     const csv = `${headers}\n${rows}`;
     navigator.clipboard.writeText(csv);
@@ -156,8 +171,11 @@ export function ChatMessage({
     // 1. Handle Bold
     let html = content.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     // 2. Handle Inline Code
-    html = html.replace(/`(.*?)`/g, '<code style="font-family: var(--font-mono); font-size: 12px; background: var(--color-bg-hover); padding: 1px 4px; border-radius: 3px;">$1</code>');
-    
+    html = html.replace(
+      /`(.*?)`/g,
+      '<code style="font-family: var(--font-mono); font-size: 12px; background: var(--color-bg-hover); padding: 1px 4px; border-radius: 3px;">$1</code>'
+    );
+
     // 3. Simple Markdown Table Parser
     if (html.includes("|") && html.includes("---")) {
       const lines = html.split("\n");
@@ -168,15 +186,21 @@ export function ChatMessage({
       for (const line of lines) {
         if (line.trim().startsWith("|")) {
           if (!inTable) inTable = true;
-          const cells = line.split("|").filter(c => c.trim().length >= 0).slice(1, -1);
+          const cells = line
+            .split("|")
+            .filter((c) => c.trim().length >= 0)
+            .slice(1, -1);
           if (line.includes("---")) continue; // separator row
           tableRows.push(cells);
         } else {
           if (inTable) {
             // Render the table
             const tableHtml = `<table>
-              <thead><tr>${tableRows[0] ? tableRows[0].map(c => `<th>${c.trim()}</th>`).join("") : ""}</tr></thead>
-              <tbody>${tableRows.slice(1).map(r => `<tr>${r.map(c => `<td>${c.trim()}</td>`).join("")}</tr>`).join("")}</tbody>
+              <thead><tr>${tableRows[0] ? tableRows[0].map((c) => `<th>${c.trim()}</th>`).join("") : ""}</tr></thead>
+              <tbody>${tableRows
+                .slice(1)
+                .map((r) => `<tr>${r.map((c) => `<td>${c.trim()}</td>`).join("")}</tr>`)
+                .join("")}</tbody>
             </table>`;
             resultLines.push(tableHtml);
             tableRows = [];
@@ -187,8 +211,11 @@ export function ChatMessage({
       }
       if (inTable && tableRows.length > 0) {
         const tableHtml = `<table>
-          <thead><tr>${tableRows[0] ? tableRows[0].map(c => `<th>${c.trim()}</th>`).join("") : ""}</tr></thead>
-          <tbody>${tableRows.slice(1).map(r => `<tr>${r.map(c => `<td>${c.trim()}</td>`).join("")}</tr>`).join("")}</tbody>
+          <thead><tr>${tableRows[0] ? tableRows[0].map((c) => `<th>${c.trim()}</th>`).join("") : ""}</tr></thead>
+          <tbody>${tableRows
+            .slice(1)
+            .map((r) => `<tr>${r.map((c) => `<td>${c.trim()}</td>`).join("")}</tr>`)
+            .join("")}</tbody>
         </table>`;
         resultLines.push(tableHtml);
       }
@@ -234,7 +261,10 @@ export function ChatMessage({
                   minHeight: "120px",
                 }}
                 onKeyDown={(e) => {
-                  if (showAutocomplete && ["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(e.key)) {
+                  if (
+                    showAutocomplete &&
+                    ["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(e.key)
+                  ) {
                     return;
                   }
                   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSaveEdit();
@@ -327,7 +357,10 @@ export function ChatMessage({
       <div className="flex flex-1 flex-col gap-2 min-w-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-ui-label font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            <span
+              className="text-ui-label font-semibold"
+              style={{ color: "var(--color-text-primary)" }}
+            >
               SheetMind
             </span>
             <span className="text-ui-label" style={{ color: "var(--color-text-tertiary)" }}>
@@ -339,18 +372,25 @@ export function ChatMessage({
             <div className="flex items-center gap-1 ml-auto">
               <button
                 onClick={() => onVersionChange?.(-1)}
-                disabled={(message.versions.findIndex(v => v.id === message.id)) === 0}
+                disabled={message.versions.findIndex((v) => v.id === message.id) === 0}
                 className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30"
                 style={{ color: "var(--color-text-tertiary)" }}
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-[10px] font-medium" style={{ color: "var(--color-text-tertiary)" }}>
-                {(message.versions.findIndex(v => v.id === message.id)) + 1} / {message.versions.length}
+              <span
+                className="text-[10px] font-medium"
+                style={{ color: "var(--color-text-tertiary)" }}
+              >
+                {message.versions.findIndex((v) => v.id === message.id) + 1} /{" "}
+                {message.versions.length}
               </span>
               <button
                 onClick={() => onVersionChange?.(1)}
-                disabled={(message.versions.findIndex(v => v.id === message.id)) === message.versions.length - 1}
+                disabled={
+                  message.versions.findIndex((v) => v.id === message.id) ===
+                  message.versions.length - 1
+                }
                 className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30"
                 style={{ color: "var(--color-text-tertiary)" }}
               >
@@ -392,8 +432,13 @@ export function ChatMessage({
         )}
 
         {isLoadingData && !localData ? (
-          <p className="text-body italic mt-4 animate-pulse" style={{ color: "var(--color-text-tertiary)" }}>Loading table data...</p>
-        ) : (localData || message.result_data) ? (
+          <p
+            className="text-body italic mt-4 animate-pulse"
+            style={{ color: "var(--color-text-tertiary)" }}
+          >
+            Loading table data...
+          </p>
+        ) : localData || message.result_data ? (
           <div className="mt-4 flex flex-col gap-2">
             <div
               className="border rounded-xl overflow-hidden relative"
@@ -414,23 +459,38 @@ export function ChatMessage({
                   className="text-body text-[12px]"
                   style={{ color: "var(--color-text-tertiary)" }}
                 >
-                  Showing page {(localData || message.result_data)?.page ?? 1} of {(localData || message.result_data)?.total_pages ?? 1} ({(localData || message.result_data)?.total_rows ?? 0} rows total)
+                  Showing page {(localData || message.result_data)?.page ?? 1} of{" "}
+                  {(localData || message.result_data)?.total_pages ?? 1} (
+                  {(localData || message.result_data)?.total_rows ?? 0} rows total)
                 </span>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handlePageChange(((localData || message.result_data)?.page ?? 1) - 1)}
+                    onClick={() =>
+                      handlePageChange(((localData || message.result_data)?.page ?? 1) - 1)
+                    }
                     disabled={((localData || message.result_data)?.page ?? 1) <= 1 || isLoadingData}
                     className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30 border transition-all text-xs flex items-center gap-1 px-2.5 py-1"
-                    style={{ borderColor: "var(--color-border-default)", color: "var(--color-text-secondary)" }}
+                    style={{
+                      borderColor: "var(--color-border-default)",
+                      color: "var(--color-text-secondary)",
+                    }}
                   >
                     <ChevronLeft size={14} />
                     Prev
                   </button>
                   <button
-                    onClick={() => handlePageChange(((localData || message.result_data)?.page ?? 1) + 1)}
-                    disabled={((localData || message.result_data)?.page ?? 1) >= ((localData || message.result_data)?.total_pages ?? 1) || isLoadingData}
+                    onClick={() =>
+                      handlePageChange(((localData || message.result_data)?.page ?? 1) + 1)
+                    }
+                    disabled={
+                      ((localData || message.result_data)?.page ?? 1) >=
+                        ((localData || message.result_data)?.total_pages ?? 1) || isLoadingData
+                    }
                     className="p-1 rounded-md hover:bg-[var(--color-bg-hover)] disabled:opacity-30 border transition-all text-xs flex items-center gap-1 px-2.5 py-1"
-                    style={{ borderColor: "var(--color-border-default)", color: "var(--color-text-secondary)" }}
+                    style={{
+                      borderColor: "var(--color-border-default)",
+                      color: "var(--color-text-secondary)",
+                    }}
                   >
                     Next
                     <ChevronRight size={14} />
@@ -442,10 +502,7 @@ export function ChatMessage({
         ) : null}
 
         {message.nl_summary && (
-          <p
-            className="text-body italic"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
+          <p className="text-body italic" style={{ color: "var(--color-text-secondary)" }}>
             {message.nl_summary}
           </p>
         )}

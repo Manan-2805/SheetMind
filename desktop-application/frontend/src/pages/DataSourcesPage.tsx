@@ -1,23 +1,27 @@
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Eye,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, Eye, Plus, Search, Trash2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import {
   deleteDataSource,
-  getDataSources,
   getDataSourcePreview,
+  getDataSources,
   uploadFile,
   uploadFromUrl,
 } from "@/api/dataSourcesApi";
 import { ExcelPreviewGrid } from "@/components/ExcelPreviewGrid";
 import { SkeletonTable } from "@/components/skeletons/SkeletonTable";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/useToast";
 import { websocketService } from "@/services/websocketService";
 import type { DataSource, DataSourcePreview, ExcelSheet } from "@/types/DataSource";
@@ -44,7 +48,10 @@ export function DataSourcesPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof DataSource | 'total_rows'; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof DataSource | "total_rows";
+    direction: "asc" | "desc";
+  } | null>(null);
 
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +84,9 @@ export function DataSourcesPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete the ${selectedIds.length} selected files?`)) {
+    if (
+      !window.confirm(`Are you sure you want to delete the ${selectedIds.length} selected files?`)
+    ) {
       return;
     }
 
@@ -118,20 +127,24 @@ export function DataSourcesPage() {
     const removeListener = websocketService.addListener((payload) => {
       if (payload.type === "status_update") {
         let shouldRefresh = false;
-        setSources(prev => prev.map(s => {
-          const update = payload.data.find((u: { id: string, status: string, error_message: string | null }) => u.id === s.id);
-          if (update) {
-            if (update.status === "completed" && s.sheets.length === 0) {
-              shouldRefresh = true;
+        setSources((prev) =>
+          prev.map((s) => {
+            const update = payload.data.find(
+              (u: { id: string; status: string; error_message: string | null }) => u.id === s.id
+            );
+            if (update) {
+              if (update.status === "completed" && s.sheets.length === 0) {
+                shouldRefresh = true;
+              }
+              return {
+                ...s,
+                status: update.status,
+                error_message: update.error_message,
+              };
             }
-            return {
-              ...s,
-              status: update.status,
-              error_message: update.error_message,
-            };
-          }
-          return s;
-        }));
+            return s;
+          })
+        );
         if (shouldRefresh) {
           void load();
         }
@@ -147,9 +160,9 @@ export function DataSourcesPage() {
 
   const handleUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
-    
+
     // Filter to supported extensions
-    const filteredFiles = fileArr.filter(file => {
+    const filteredFiles = fileArr.filter((file) => {
       const ext = "." + file.name.split(".").pop()?.toLowerCase();
       return supportedExtensions.includes(ext);
     });
@@ -159,7 +172,7 @@ export function DataSourcesPage() {
       addToast({
         type: "warning",
         title: "Unsupported files ignored",
-        description: `Ignored ${ignoredCount} file(s) that are not Excel or CSV.`
+        description: `Ignored ${ignoredCount} file(s) that are not Excel or CSV.`,
       });
     }
 
@@ -167,7 +180,7 @@ export function DataSourcesPage() {
 
     const ids = filteredFiles.map(() => crypto.randomUUID());
     setUploading(filteredFiles.map((f, i) => ({ name: f.name, id: ids[i] })));
-    
+
     await Promise.all(
       filteredFiles.map(async (file) => {
         try {
@@ -246,7 +259,7 @@ export function DataSourcesPage() {
   };
 
   const filteredSources = useMemo<DataSource[]>(() => {
-    const result = sources.filter(s => {
+    const result = sources.filter((s) => {
       const matchesSearch =
         s.original_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.status?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -269,26 +282,28 @@ export function DataSourcesPage() {
         let aVal: unknown = a[sortConfig.key as keyof DataSource];
         let bVal: unknown = b[sortConfig.key as keyof DataSource];
 
-        if (sortConfig.key === 'total_rows') {
+        if (sortConfig.key === "total_rows") {
           aVal = a.sheets.reduce((acc: number, s: ExcelSheet) => acc + s.row_count, 0);
           bVal = b.sheets.reduce((acc: number, s: ExcelSheet) => acc + s.row_count, 0);
         }
 
-        if (aVal != null && bVal != null && aVal < (bVal as string | number)) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal != null && bVal != null && aVal > (bVal as string | number)) return sortConfig.direction === 'asc' ? 1 : -1;
+        if (aVal != null && bVal != null && aVal < (bVal as string | number))
+          return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal != null && bVal != null && aVal > (bVal as string | number))
+          return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
       });
     }
     return result;
   }, [sources, searchQuery, dateFrom, dateTo, sortConfig]);
 
-  const handleSort = (key: keyof DataSource | 'total_rows') => {
-    setSortConfig(prev => {
+  const handleSort = (key: keyof DataSource | "total_rows") => {
+    setSortConfig((prev) => {
       if (prev?.key === key) {
-        if (prev.direction === 'asc') return { key, direction: 'desc' };
+        if (prev.direction === "asc") return { key, direction: "desc" };
         return null;
       }
-      return { key, direction: 'asc' };
+      return { key, direction: "asc" };
     });
   };
 
@@ -296,12 +311,12 @@ export function DataSourcesPage() {
 
   const previewResultTable = previewData
     ? {
-      columns: previewData.columns.map((c) => ({ key: c, label: c })),
-      rows: previewData.rows.map((row) =>
-        Object.fromEntries(previewData.columns.map((c, i) => [c, row[i]]))
-      ),
-      total_rows: previewData.rows.length,
-    }
+        columns: previewData.columns.map((c) => ({ key: c, label: c })),
+        rows: previewData.rows.map((row) =>
+          Object.fromEntries(previewData.columns.map((c, i) => [c, row[i]]))
+        ),
+        total_rows: previewData.rows.length,
+      }
     : null;
 
   return (
@@ -312,20 +327,32 @@ export function DataSourcesPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden px-6 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>Data Sources</h1>
-            <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>Manage and explore your uploaded data assets.</p>
+            <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
+              Data Sources
+            </h1>
+            <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+              Manage and explore your uploaded data assets.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={15} style={{ color: "var(--color-text-tertiary)" }} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2"
+                size={15}
+                style={{ color: "var(--color-text-tertiary)" }}
+              />
               <input
                 type="text"
                 placeholder="Search files..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-10 w-64 rounded-lg pl-9 pr-4 text-body outline-none border transition-all"
-                style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+                style={{
+                  backgroundColor: "var(--color-bg-elevated)",
+                  borderColor: "var(--color-border-default)",
+                  color: "var(--color-text-primary)",
+                }}
               />
             </div>
 
@@ -334,7 +361,11 @@ export function DataSourcesPage() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
-              style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                borderColor: "var(--color-border-default)",
+                color: "var(--color-text-primary)",
+              }}
               title="From date"
             />
             <input
@@ -342,14 +373,25 @@ export function DataSourcesPage() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="h-10 rounded-lg px-3 text-body outline-none border transition-all"
-              style={{ backgroundColor: "var(--color-bg-elevated)", borderColor: "var(--color-border-default)", color: "var(--color-text-primary)" }}
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                borderColor: "var(--color-border-default)",
+                color: "var(--color-text-primary)",
+              }}
               title="To date"
             />
             {(dateFrom || dateTo) && (
               <button
-                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                onClick={() => {
+                  setDateFrom("");
+                  setDateTo("");
+                }}
                 className="h-10 rounded-lg px-3 text-body-em transition-all"
-                style={{ border: "1px solid var(--color-border-default)", color: "var(--color-text-secondary)", backgroundColor: "transparent" }}
+                style={{
+                  border: "1px solid var(--color-border-default)",
+                  color: "var(--color-text-secondary)",
+                  backgroundColor: "transparent",
+                }}
               >
                 Reset
               </button>
@@ -373,7 +415,6 @@ export function DataSourcesPage() {
             </button>
           </div>
         </div>
-
 
         {uploading.length > 0 && (
           <div className="mb-4 flex flex-col gap-2">
@@ -404,7 +445,8 @@ export function DataSourcesPage() {
                       backgroundColor: "var(--color-accent)",
                       width: "60%",
                       animation: "shimmer 1.5s infinite",
-                      backgroundImage: "linear-gradient(90deg, var(--color-accent) 25%, var(--color-accent-hover) 50%, var(--color-accent) 75%)",
+                      backgroundImage:
+                        "linear-gradient(90deg, var(--color-accent) 25%, var(--color-accent-hover) 50%, var(--color-accent) 75%)",
                       backgroundSize: "200% 100%",
                     }}
                   />
@@ -419,30 +461,44 @@ export function DataSourcesPage() {
         ) : filteredSources.length === 0 ? (
           <div
             className="rounded-xl py-16 text-center"
-            style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}
+            style={{
+              backgroundColor: "var(--color-bg-elevated)",
+              border: "1px solid var(--color-border-default)",
+            }}
           >
             <p className="text-body" style={{ color: "var(--color-text-tertiary)" }}>
-              {searchQuery ? "No matching data sources found." : "No data sources yet. Upload an Excel file to get started."}
+              {searchQuery
+                ? "No matching data sources found."
+                : "No data sources yet. Upload an Excel file to get started."}
             </p>
           </div>
         ) : (
           <div
             className="flex-1 min-h-0 overflow-y-auto scrollbar-thin rounded-xl"
-            style={{ border: "1px solid var(--color-border-default)", backgroundColor: "var(--color-bg-elevated)" }}
+            style={{
+              border: "1px solid var(--color-border-default)",
+              backgroundColor: "var(--color-bg-elevated)",
+            }}
           >
             <table className="w-full border-collapse sticky-header">
               <thead>
-                <tr className="sticky top-0 z-10" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+                <tr
+                  className="sticky top-0 z-10"
+                  style={{ backgroundColor: "var(--color-bg-hover)" }}
+                >
                   <th
                     className="px-4 py-3 text-left w-12"
                     style={{ borderBottom: "1px solid var(--color-border-default)" }}
                   >
                     <input
                       type="checkbox"
-                      checked={filteredSources.length > 0 && selectedIds.length === filteredSources.length}
+                      checked={
+                        filteredSources.length > 0 && selectedIds.length === filteredSources.length
+                      }
                       ref={(input) => {
                         if (input) {
-                          input.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredSources.length;
+                          input.indeterminate =
+                            selectedIds.length > 0 && selectedIds.length < filteredSources.length;
                         }
                       }}
                       onChange={(e) => {
@@ -462,18 +518,23 @@ export function DataSourcesPage() {
                     { label: "Rows", key: "total_rows" },
                     { label: "Size", key: "file_size_bytes" },
                     { label: "Uploaded", key: "uploaded_at" },
-                    { label: "Actions", key: null }
+                    { label: "Actions", key: null },
                   ].map((h) => (
                     <th
                       key={h.label}
-                      onClick={() => h.key && handleSort(h.key as keyof DataSource | 'total_rows')}
-                      className={`px-4 py-3 text-left text-ui-label uppercase ${h.key ? 'cursor-pointer select-none' : ''}`}
-                      style={{ color: "var(--color-text-tertiary)", borderBottom: "1px solid var(--color-border-default)" }}
+                      onClick={() => h.key && handleSort(h.key as keyof DataSource | "total_rows")}
+                      className={`px-4 py-3 text-left text-ui-label uppercase ${h.key ? "cursor-pointer select-none" : ""}`}
+                      style={{
+                        color: "var(--color-text-tertiary)",
+                        borderBottom: "1px solid var(--color-border-default)",
+                      }}
                     >
                       <div className="flex items-center gap-1">
                         {h.label}
                         {sortConfig?.key === h.key && (
-                          <span className="text-accent">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                          <span className="text-accent">
+                            {sortConfig.direction === "asc" ? "↑" : "↓"}
+                          </span>
                         )}
                       </div>
                     </th>
@@ -483,7 +544,10 @@ export function DataSourcesPage() {
               <tbody>
                 {filteredSources.map((src: DataSource) => {
                   const isExpanded = expandedId === src.id;
-                  const totalRows = src.sheets.reduce((a: number, s: ExcelSheet) => a + s.row_count, 0);
+                  const totalRows = src.sheets.reduce(
+                    (a: number, s: ExcelSheet) => a + s.row_count,
+                    0
+                  );
                   return (
                     <Fragment key={src.id}>
                       <tr
@@ -494,10 +558,12 @@ export function DataSourcesPage() {
                           borderBottom: "1px solid var(--color-border-subtle)",
                         }}
                         onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "var(--color-bg-hover)";
+                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
+                            "var(--color-bg-hover)";
                         }}
                         onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "transparent";
+                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
+                            "transparent";
                         }}
                       >
                         <td className="px-4 py-2 w-12" onClick={(e) => e.stopPropagation()}>
@@ -517,7 +583,10 @@ export function DataSourcesPage() {
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={(e) => { e.stopPropagation(); toggleExpand(src.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpand(src.id);
+                              }}
                               className="shrink-0 rounded p-0.5 transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
                               aria-label={isExpanded ? "Collapse" : "Expand"}
@@ -536,55 +605,104 @@ export function DataSourcesPage() {
                           <span
                             className="rounded-full px-2 py-0.5 text-xs"
                             style={{
-                              backgroundColor: src.status === 'completed' ? 'var(--color-success-subtle)' : src.status === 'error' ? 'var(--color-destructive-subtle)' : 'var(--color-accent-subtle)',
-                              color: src.status === 'completed' ? 'var(--color-success)' : src.status === 'error' ? 'var(--color-destructive)' : 'var(--color-accent)'
+                              backgroundColor:
+                                src.status === "completed"
+                                  ? "var(--color-success-subtle)"
+                                  : src.status === "error"
+                                    ? "var(--color-destructive-subtle)"
+                                    : "var(--color-accent-subtle)",
+                              color:
+                                src.status === "completed"
+                                  ? "var(--color-success)"
+                                  : src.status === "error"
+                                    ? "var(--color-destructive)"
+                                    : "var(--color-accent)",
                             }}
                           >
-                            {src.status || 'completed'}
+                            {src.status || "completed"}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
+                        <td
+                          className="px-4 py-2 text-body"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
                           {src.num_sheets}
                         </td>
-                        <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
+                        <td
+                          className="px-4 py-2 text-body"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
                           {totalRows.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
+                        <td
+                          className="px-4 py-2 text-body"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
                           {formatFileSize(src.file_size_bytes)}
                         </td>
-                        <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
+                        <td
+                          className="px-4 py-2 text-body"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
                           {formatAbsoluteDate(src.uploaded_at)}
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
-                            {src.status === 'completed' && (
+                            {src.status === "completed" && (
                               <>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); openPreview(src.id); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPreview(src.id);
+                                  }}
                                   className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
                                   style={{ color: "var(--color-text-tertiary)" }}
-                                  onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
-                                  onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                                  onMouseEnter={(e) =>
+                                    ((e.currentTarget as HTMLButtonElement).style.color =
+                                      "var(--color-text-primary)")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    ((e.currentTarget as HTMLButtonElement).style.color =
+                                      "var(--color-text-tertiary)")
+                                  }
                                 >
                                   <Eye size={13} /> Preview
                                 </button>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/excel-editor?fileId=${src.id}`); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/excel-editor?fileId=${src.id}`);
+                                  }}
                                   className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
                                   style={{ color: "var(--color-text-tertiary)" }}
-                                  onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-accent)"}
-                                  onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                                  onMouseEnter={(e) =>
+                                    ((e.currentTarget as HTMLButtonElement).style.color =
+                                      "var(--color-accent)")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    ((e.currentTarget as HTMLButtonElement).style.color =
+                                      "var(--color-text-tertiary)")
+                                  }
                                 >
                                   <ExternalLink size={13} /> Edit
                                 </button>
                               </>
                             )}
                             <button
-                              onClick={(e) => { e.stopPropagation(); setDeleteId(src.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteId(src.id);
+                              }}
                               className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
                               style={{ color: "var(--color-text-tertiary)" }}
-                              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-destructive)"}
-                              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                              onMouseEnter={(e) =>
+                                ((e.currentTarget as HTMLButtonElement).style.color =
+                                  "var(--color-destructive)")
+                              }
+                              onMouseLeave={(e) =>
+                                ((e.currentTarget as HTMLButtonElement).style.color =
+                                  "var(--color-text-tertiary)")
+                              }
                             >
                               <Trash2 size={13} /> Delete
                             </button>
@@ -613,10 +731,16 @@ export function DataSourcesPage() {
                             </td>
                             <td className="px-4 py-2" />
                             <td className="px-4 py-2" />
-                            <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                            <td
+                              className="px-4 py-2 text-body"
+                              style={{ color: "var(--color-text-tertiary)" }}
+                            >
                               {sheet.row_count.toLocaleString()} rows
                             </td>
-                            <td className="px-4 py-2 text-body" style={{ color: "var(--color-text-tertiary)" }}>
+                            <td
+                              className="px-4 py-2 text-body"
+                              style={{ color: "var(--color-text-tertiary)" }}
+                            >
                               {sheet.col_count} cols
                             </td>
                             <td className="px-4 py-2" />
@@ -625,8 +749,14 @@ export function DataSourcesPage() {
                                 onClick={() => openPreview(src.id, sheet.sheet_name)}
                                 className="flex items-center gap-1 text-ui-label transition-colors duration-[120ms]"
                                 style={{ color: "var(--color-text-tertiary)" }}
-                                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)"}
-                                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)"}
+                                onMouseEnter={(e) =>
+                                  ((e.currentTarget as HTMLButtonElement).style.color =
+                                    "var(--color-text-primary)")
+                                }
+                                onMouseLeave={(e) =>
+                                  ((e.currentTarget as HTMLButtonElement).style.color =
+                                    "var(--color-text-tertiary)")
+                                }
                               >
                                 <Eye size={13} /> Preview
                               </button>
@@ -642,14 +772,33 @@ export function DataSourcesPage() {
         )}
       </div>
 
-      <Dialog open={isUploadModalOpen} onOpenChange={(o) => { setIsUploadModalOpen(o); if (!o) { setUrlInput(""); } }}>
-        <DialogContent className="sm:max-w-[500px]" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+      <Dialog
+        open={isUploadModalOpen}
+        onOpenChange={(o) => {
+          setIsUploadModalOpen(o);
+          if (!o) {
+            setUrlInput("");
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-[500px]"
+          style={{
+            backgroundColor: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border-default)",
+          }}
+        >
           <DialogHeader>
-            <DialogTitle style={{ color: "var(--color-text-primary)" }}>Upload Data Sources</DialogTitle>
+            <DialogTitle style={{ color: "var(--color-text-primary)" }}>
+              Upload Data Sources
+            </DialogTitle>
           </DialogHeader>
 
           {/* Premium Tab Selector */}
-          <div className="flex gap-1 rounded-xl p-1 mb-4" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+          <div
+            className="flex gap-1 rounded-xl p-1 mb-4"
+            style={{ backgroundColor: "var(--color-bg-hover)" }}
+          >
             {(["files", "folder", "url"] as const).map((tab) => (
               <button
                 key={tab}
@@ -657,7 +806,8 @@ export function DataSourcesPage() {
                 className="flex-1 rounded-lg py-2 text-xs font-semibold capitalize transition-all"
                 style={{
                   backgroundColor: uploadTab === tab ? "var(--color-bg-elevated)" : "transparent",
-                  color: uploadTab === tab ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                  color:
+                    uploadTab === tab ? "var(--color-text-primary)" : "var(--color-text-secondary)",
                   boxShadow: uploadTab === tab ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
                 }}
               >
@@ -668,21 +818,42 @@ export function DataSourcesPage() {
 
           {uploadTab === "files" && (
             <div
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
               onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
+              onDrop={(e) => {
+                handleDrop(e);
+                setIsUploadModalOpen(false);
+              }}
               onClick={() => fileInputRef.current?.click()}
               className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
               style={{
                 border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
-                backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+                backgroundColor: isDragging
+                  ? "var(--color-accent-subtle)"
+                  : "var(--color-bg-hover)",
               }}
             >
-              <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
-              <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
-                Drop Excel files here<br />or click to browse
+              <Upload
+                size={32}
+                style={{
+                  color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)",
+                  marginBottom: 12,
+                }}
+              />
+              <p
+                className="text-body-em text-center"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                Drop Excel files here
+                <br />
+                or click to browse
               </p>
-              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>.xlsx, .xls, .csv, .ods supported</p>
+              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>
+                .xlsx, .xls, .csv, .ods supported
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -701,28 +872,49 @@ export function DataSourcesPage() {
 
           {uploadTab === "folder" && (
             <div
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
               onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => { handleDrop(e); setIsUploadModalOpen(false); }}
+              onDrop={(e) => {
+                handleDrop(e);
+                setIsUploadModalOpen(false);
+              }}
               onClick={() => folderInputRef.current?.click()}
               className="flex cursor-pointer flex-col items-center justify-center rounded-xl py-12 transition-all duration-[120ms]"
               style={{
                 border: `2px dashed ${isDragging ? "var(--color-accent)" : "var(--color-border-default)"}`,
-                backgroundColor: isDragging ? "var(--color-accent-subtle)" : "var(--color-bg-hover)",
+                backgroundColor: isDragging
+                  ? "var(--color-accent-subtle)"
+                  : "var(--color-bg-hover)",
               }}
             >
-              <Upload size={32} style={{ color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)", marginBottom: 12 }} />
-              <p className="text-body-em text-center" style={{ color: "var(--color-text-primary)" }}>
-                Drop folder here<br />or click to browse folder
+              <Upload
+                size={32}
+                style={{
+                  color: isDragging ? "var(--color-accent)" : "var(--color-text-tertiary)",
+                  marginBottom: 12,
+                }}
+              />
+              <p
+                className="text-body-em text-center"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                Drop folder here
+                <br />
+                or click to browse folder
               </p>
-              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>Supported files will be filtered and imported</p>
+              <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>
+                Supported files will be filtered and imported
+              </p>
               <input
                 ref={folderInputRef}
                 type="file"
-                {...{
+                {...({
                   webkitdirectory: "",
                   directory: "",
-                } as React.InputHTMLAttributes<HTMLInputElement>}
+                } as React.InputHTMLAttributes<HTMLInputElement>)}
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -738,14 +930,20 @@ export function DataSourcesPage() {
           {uploadTab === "url" && (
             <div className="flex flex-col gap-4 py-4">
               <div className="flex flex-col gap-2">
-                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>FILE URL</label>
+                <label className="text-ui-label" style={{ color: "var(--color-text-secondary)" }}>
+                  FILE URL
+                </label>
                 <input
                   type="text"
                   placeholder="https://example.com/dataset.xlsx"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   className="w-full rounded-xl px-4 py-2.5 text-body outline-none animate-in fade-in"
-                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
                 />
               </div>
               <button
@@ -753,7 +951,9 @@ export function DataSourcesPage() {
                 disabled={isUrlUploading || !urlInput.trim()}
                 className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-all active:scale-[0.99]"
                 style={{
-                  backgroundColor: urlInput.trim() ? "var(--color-accent)" : "var(--color-bg-hover)",
+                  backgroundColor: urlInput.trim()
+                    ? "var(--color-accent)"
+                    : "var(--color-bg-hover)",
                   color: urlInput.trim() ? "#fff" : "var(--color-text-tertiary)",
                   cursor: urlInput.trim() ? "pointer" : "default",
                 }}
@@ -784,10 +984,12 @@ export function DataSourcesPage() {
                   <button
                     key={s.sheet_name}
                     onClick={() => openPreview(previewSource.id, s.sheet_name)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${(previewSheet === s.sheet_name || (!previewSheet && s === previewSource.sheets[0]))
-                      ? "bg-accent text-white"
-                      : "bg-bg-hover text-tertiary border border-border-default hover:text-secondary"
-                      }`}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                      previewSheet === s.sheet_name ||
+                      (!previewSheet && s === previewSource.sheets[0])
+                        ? "bg-accent text-white"
+                        : "bg-bg-hover text-tertiary border border-border-default hover:text-secondary"
+                    }`}
                   >
                     {s.sheet_name}
                   </button>
@@ -803,13 +1005,20 @@ export function DataSourcesPage() {
             </button>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 mt-4 border rounded-xl overflow-hidden" style={{ borderColor: "var(--color-border-default)" }}>
+          <div
+            className="flex-1 min-h-0 mt-4 border rounded-xl overflow-hidden"
+            style={{ borderColor: "var(--color-border-default)" }}
+          >
             {isLoadingPreview ? (
-              <div className="w-full h-full flex items-center justify-center"><SkeletonTable /></div>
+              <div className="w-full h-full flex items-center justify-center">
+                <SkeletonTable />
+              </div>
             ) : previewResultTable ? (
               <ExcelPreviewGrid result={previewResultTable} />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-tertiary">Select a sheet to preview</div>
+              <div className="w-full h-full flex items-center justify-center text-tertiary">
+                Select a sheet to preview
+              </div>
             )}
           </div>
         </DialogContent>

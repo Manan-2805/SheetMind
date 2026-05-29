@@ -1,40 +1,44 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Star, Plus, Trash2, Layout, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Layout, Plus, Search, Star, Trash2 } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { dashboardsApi } from '../api/dashboardsApi';
-import { DashboardView } from '../components/dashboard/DashboardView';
-import { DashboardWizard } from '../components/dashboard/DashboardWizard';
-import { formatDistanceToNow } from '../utils/formatters';
-import type { Dashboard } from '../types/dashboard';
+import { dashboardsApi } from "../api/dashboardsApi";
+import { DashboardView } from "../components/dashboard/DashboardView";
+import { DashboardWizard } from "../components/dashboard/DashboardWizard";
+import type { Dashboard } from "../types/dashboard";
+import { formatDistanceToNow } from "../utils/formatters";
 
-type ViewMode = 'view' | 'create' | 'redesign';
+type ViewMode = "view" | "create" | "redesign";
 
 export const DashboardsPage: React.FC = () => {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [sort, setSort] = useState('name');
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("name");
 
-  const [viewMode, setViewMode] = useState<ViewMode>('view');
+  const [viewMode, setViewMode] = useState<ViewMode>("view");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dashboardToRedesign, setDashboardToRedesign] = useState<Dashboard | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const loadDashboards = useCallback(async (q = search) => {
-    setLoading(true);
-    try {
-      const data = await dashboardsApi.listDashboards(q, filter, sort);
-      setDashboards(data);
-      if (data.length > 0 && !selectedId && viewMode === 'view') {
-        setSelectedId(data[0].id);
+  const loadDashboards = useCallback(
+    async (q = search) => {
+      setLoading(true);
+      try {
+        const data = await dashboardsApi.listDashboards(q, filter, sort);
+        setDashboards(data);
+        if (data.length > 0 && !selectedId && viewMode === "view") {
+          setSelectedId(data[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to load dashboards", e);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error('Failed to load dashboards', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [filter, sort, selectedId, viewMode, search]);
+    },
+    [filter, sort, selectedId, viewMode, search]
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -66,7 +70,7 @@ export const DashboardsPage: React.FC = () => {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this dashboard?')) {
+    if (confirm("Are you sure you want to delete this dashboard?")) {
       try {
         await dashboardsApi.deleteDashboard(id);
         if (selectedId === id) {
@@ -81,32 +85,32 @@ export const DashboardsPage: React.FC = () => {
 
   const handleCreate = () => {
     setDashboardToRedesign(null);
-    setViewMode('create');
+    setViewMode("create");
   };
 
   const handleRedesign = async (id: string) => {
     try {
       const db = await dashboardsApi.getDashboard(id);
       setDashboardToRedesign(db);
-      setViewMode('redesign');
+      setViewMode("redesign");
     } catch (e) {
-      console.error('Failed to fetch dashboard for redesign', e);
+      console.error("Failed to fetch dashboard for redesign", e);
     }
   };
 
   const handleCancelWizard = () => {
-    setViewMode('view');
+    setViewMode("view");
     setDashboardToRedesign(null);
     loadDashboards();
   };
 
   const handleSaveSuccess = () => {
-    setViewMode('view');
+    setViewMode("view");
     setDashboardToRedesign(null);
     loadDashboards();
   };
 
-  if (viewMode === 'create' || viewMode === 'redesign') {
+  if (viewMode === "create" || viewMode === "redesign") {
     return (
       <div className="w-full h-full overflow-hidden bg-background">
         <DashboardWizard
@@ -122,8 +126,9 @@ export const DashboardsPage: React.FC = () => {
     <div className="w-full h-full flex bg-background text-foreground overflow-hidden">
       {/* Left Collapsible Sidebar */}
       <div
-        className={`border-r border-border bg-card flex flex-col transition-all duration-300 relative shrink-0 ${sidebarOpen ? 'w-80' : 'w-0 border-r-0'
-          }`}
+        className={`border-r border-border bg-card flex flex-col transition-all duration-300 relative shrink-0 ${
+          sidebarOpen ? "w-80" : "w-0 border-r-0"
+        }`}
       >
         {sidebarOpen && (
           <div className="flex flex-col h-full overflow-hidden">
@@ -155,7 +160,7 @@ export const DashboardsPage: React.FC = () => {
               <div className="flex space-x-2">
                 <select
                   value={filter}
-                  onChange={e => setFilter(e.target.value)}
+                  onChange={(e) => setFilter(e.target.value)}
                   className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer font-medium"
                 >
                   <option value="all">All</option>
@@ -164,7 +169,7 @@ export const DashboardsPage: React.FC = () => {
                 </select>
                 <select
                   value={sort}
-                  onChange={e => setSort(e.target.value)}
+                  onChange={(e) => setSort(e.target.value)}
                   className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer font-medium"
                 >
                   <option value="name">A-Z Name</option>
@@ -179,20 +184,26 @@ export const DashboardsPage: React.FC = () => {
               {loading && dashboards.length === 0 ? (
                 <div className="p-4 text-center text-xs text-muted-foreground">Loading...</div>
               ) : dashboards.length === 0 ? (
-                <div className="p-4 text-center text-xs text-muted-foreground">No dashboards found.</div>
+                <div className="p-4 text-center text-xs text-muted-foreground">
+                  No dashboards found.
+                </div>
               ) : (
-                dashboards.map(db => (
+                dashboards.map((db) => (
                   <div
                     key={db.id}
                     onClick={() => setSelectedId(db.id)}
-                    className={`flex flex-col p-3 rounded-lg cursor-pointer transition-all border group relative ${selectedId === db.id
-                        ? 'bg-accent/15 border-accent text-foreground'
-                        : 'border-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground'
-                      }`}
+                    className={`flex flex-col p-3 rounded-lg cursor-pointer transition-all border group relative ${
+                      selectedId === db.id
+                        ? "bg-accent/15 border-accent text-foreground"
+                        : "border-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2 truncate">
-                        <Layout size={14} className={selectedId === db.id ? 'text-accent' : 'text-muted-foreground'} />
+                        <Layout
+                          size={14}
+                          className={selectedId === db.id ? "text-accent" : "text-muted-foreground"}
+                        />
                         <span className="font-medium text-sm truncate">{db.title}</span>
                       </div>
                       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -200,7 +211,10 @@ export const DashboardsPage: React.FC = () => {
                           onClick={(e) => toggleFavorite(db.id, db.is_favorite, e)}
                           className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-yellow-400"
                         >
-                          <Star size={12} className={db.is_favorite ? 'text-yellow-400 fill-yellow-400' : ''} />
+                          <Star
+                            size={12}
+                            className={db.is_favorite ? "text-yellow-400 fill-yellow-400" : ""}
+                          />
                         </button>
                         <button
                           onClick={(e) => handleDelete(db.id, e)}
@@ -243,7 +257,8 @@ export const DashboardsPage: React.FC = () => {
             <Layout size={48} className="text-muted-foreground/30 mb-4 animate-bounce-slow" />
             <h2 className="text-xl font-semibold tracking-tight">No Dashboard Selected</h2>
             <p className="text-sm text-muted-foreground max-w-sm mt-1">
-              Select an existing dashboard from the sidebar, or create a brand new interactive dashboard layout.
+              Select an existing dashboard from the sidebar, or create a brand new interactive
+              dashboard layout.
             </p>
             <button
               onClick={handleCreate}
@@ -258,4 +273,3 @@ export const DashboardsPage: React.FC = () => {
     </div>
   );
 };
-

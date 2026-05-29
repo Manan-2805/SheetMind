@@ -38,12 +38,8 @@ export function ConfirmDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle style={{ color: "var(--color-text-primary)" }}>
-            {title}
-          </DialogTitle>
-          <DialogDescription
-            style={{ color: "var(--color-text-secondary)" }}
-          >
+          <DialogTitle style={{ color: "var(--color-text-primary)" }}>{title}</DialogTitle>
+          <DialogDescription style={{ color: "var(--color-text-secondary)" }}>
             {description}
           </DialogDescription>
         </DialogHeader>
@@ -66,9 +62,7 @@ export function ConfirmDialog({
             className="rounded-md px-3 py-1.5 text-body font-medium transition-colors duration-[120ms]"
             style={{
               backgroundColor:
-                variant === "destructive"
-                  ? "var(--color-destructive)"
-                  : "var(--color-accent)",
+                variant === "destructive" ? "var(--color-destructive)" : "var(--color-accent)",
               color: "#fff",
             }}
           >

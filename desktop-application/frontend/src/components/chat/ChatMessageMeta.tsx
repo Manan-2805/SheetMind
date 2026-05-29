@@ -17,41 +17,65 @@ function getConfidenceColor(score: number): string {
 }
 
 export function ChatMessageMeta({ message }: ChatMessageMetaProps) {
-  const totalTokens = message.total_tokens ?? (message.token_count_input || 0) + (message.token_count_output || 0);
+  const totalTokens =
+    message.total_tokens ?? (message.token_count_input || 0) + (message.token_count_output || 0);
 
   return (
     <div
       className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md p-2 text-ui-label"
       style={{
         backgroundColor: "transparent",
-        minWidth: "220px"
+        minWidth: "220px",
       }}
     >
       <span style={{ color: "var(--color-text-tertiary)" }}>Model</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.model_name || "N/A"}</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.model_name || "N/A"}
+      </span>
 
       <span style={{ color: "var(--color-text-tertiary)" }}>SQL Gen</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.sql_gen_ms ?? "N/A"}ms</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.sql_gen_ms ?? "N/A"}ms
+      </span>
 
       <span style={{ color: "var(--color-text-tertiary)" }}>SQL Exec</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.sql_execution_ms ?? "N/A"}ms</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.sql_execution_ms ?? "N/A"}ms
+      </span>
 
       <span style={{ color: "var(--color-text-tertiary)" }}>Summary</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.summary_gen_ms ?? "N/A"}ms</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.summary_gen_ms ?? "N/A"}ms
+      </span>
 
-      <div className="col-span-2 h-[1px] my-1" style={{ backgroundColor: "var(--color-border-default)" }} />
+      <div
+        className="col-span-2 h-[1px] my-1"
+        style={{ backgroundColor: "var(--color-border-default)" }}
+      />
 
-      <span className="font-medium" style={{ color: "var(--color-text-tertiary)" }}>Total Time</span>
-      <span className="text-right font-medium" style={{ color: "var(--color-text-primary)" }}>{message.total_ms ?? "N/A"}ms</span>
+      <span className="font-medium" style={{ color: "var(--color-text-tertiary)" }}>
+        Total Time
+      </span>
+      <span className="text-right font-medium" style={{ color: "var(--color-text-primary)" }}>
+        {message.total_ms ?? "N/A"}ms
+      </span>
 
       <span style={{ color: "var(--color-text-tertiary)" }}>Input Tokens</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.token_count_input ?? "N/A"}</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.token_count_input ?? "N/A"}
+      </span>
 
       <span style={{ color: "var(--color-text-tertiary)" }}>Output Tokens</span>
-      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>{message.token_count_output ?? "N/A"}</span>
+      <span className="text-right" style={{ color: "var(--color-text-secondary)" }}>
+        {message.token_count_output ?? "N/A"}
+      </span>
 
-      <span className="font-medium" style={{ color: "var(--color-text-tertiary)" }}>Total Tokens</span>
-      <span className="text-right font-medium" style={{ color: "var(--color-text-primary)" }}>{totalTokens || "N/A"}</span>
+      <span className="font-medium" style={{ color: "var(--color-text-tertiary)" }}>
+        Total Tokens
+      </span>
+      <span className="text-right font-medium" style={{ color: "var(--color-text-primary)" }}>
+        {totalTokens || "N/A"}
+      </span>
 
       {message.confidence_score != null && (
         <>

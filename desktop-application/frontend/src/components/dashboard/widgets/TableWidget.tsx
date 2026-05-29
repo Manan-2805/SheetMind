@@ -1,5 +1,5 @@
-import React from 'react';
-import type { DashboardWidget, WidgetResult, ColumnConfig } from '../../../types/dashboard';
+import type React from "react";
+import type { ColumnConfig, DashboardWidget, WidgetResult } from "../../../types/dashboard";
 
 interface TableWidgetProps {
   widget: DashboardWidget;
@@ -7,22 +7,33 @@ interface TableWidgetProps {
 }
 
 export const TableWidget: React.FC<TableWidgetProps> = ({ widget, result }) => {
-  const config: ColumnConfig = JSON.parse(widget.column_config_json || '{}');
-  
+  const config: ColumnConfig = JSON.parse(widget.column_config_json || "{}");
+
   if (result?.error) {
-    return <div className="p-4 text-red-500 h-full flex items-center justify-center text-sm">{result.error}</div>;
+    return (
+      <div className="p-4 text-red-500 h-full flex items-center justify-center text-sm">
+        {result.error}
+      </div>
+    );
   }
 
   if (!result?.data || !result.data.rows) {
-    return <div className="p-4 text-muted-foreground h-full flex items-center justify-center text-sm">Loading...</div>;
+    return (
+      <div className="p-4 text-muted-foreground h-full flex items-center justify-center text-sm">
+        Loading...
+      </div>
+    );
   }
 
   const allColumns = result.data.columns || [];
   const rows = result.data.rows || [];
-  
-  const displayColumns = config.selectedColumns && config.selectedColumns.length > 0
-    ? allColumns.filter((c: Record<string, unknown>) => config.selectedColumns?.includes(String(c.key)))
-    : allColumns;
+
+  const displayColumns =
+    config.selectedColumns && config.selectedColumns.length > 0
+      ? allColumns.filter((c: Record<string, unknown>) =>
+          config.selectedColumns?.includes(String(c.key))
+        )
+      : allColumns;
 
   const displayRows = rows.slice(0, config.rowLimit || 50);
 
@@ -47,7 +58,7 @@ export const TableWidget: React.FC<TableWidgetProps> = ({ widget, result }) => {
               <tr key={i} className="border-b border-border hover:bg-muted/50 transition-colors">
                 {displayColumns.map((col: Record<string, unknown>) => (
                   <td key={String(col.key)} className="px-4 py-2 truncate max-w-[200px]">
-                    {String(row[String(col.key)] ?? '')}
+                    {String(row[String(col.key)] ?? "")}
                   </td>
                 ))}
               </tr>

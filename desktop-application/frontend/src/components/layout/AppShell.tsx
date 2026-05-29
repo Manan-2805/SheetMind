@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-
-import { TooltipProvider } from "@/components/ui/tooltip";
-
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Toast } from "@/components/ui/Toast";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { HistoryDrawer } from "@/drawers/HistoryDrawer";
 import { useChat } from "@/hooks/useChat";
 import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { ChatPage } from "@/pages/ChatPage";
+import { DashboardsPage } from "@/pages/DashboardsPage";
 import { DataSourcesPage } from "@/pages/DataSourcesPage";
 import { ExcelEditorPage } from "@/pages/ExcelEditorPage";
 import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { DashboardsPage } from "@/pages/DashboardsPage";
 import { websocketService } from "@/services/websocketService";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor" | "dashboards";
+type ActiveView =
+  | "chat"
+  | "data-sources"
+  | "settings"
+  | "saved-queries"
+  | "artifacts"
+  | "excel-editor"
+  | "dashboards";
 type ActiveDrawer = "history" | null;
 
 export function AppShell() {
@@ -54,7 +59,12 @@ export function AppShell() {
     const match = location.pathname.match(/^\/([^/]+)$/);
     // Ignore routes that are named paths
     const isNamedPath = [
-      "data-sources", "settings", "saved-queries", "artifacts", "excel-editor", "dashboards"
+      "data-sources",
+      "settings",
+      "saved-queries",
+      "artifacts",
+      "excel-editor",
+      "dashboards",
     ].includes(match?.[1] ?? "");
 
     if (match && match[1] !== "" && !isNamedPath) {
@@ -77,23 +87,23 @@ export function AppShell() {
     return "chat";
   };
 
-  const handleViewChange = useCallback((view: ActiveView) => {
-    if (view === "chat") navigate("/");
-    if (view === "data-sources") navigate("/data-sources");
-    if (view === "saved-queries") navigate("/saved-queries");
-    if (view === "artifacts") navigate("/artifacts");
-    if (view === "settings") navigate("/settings");
-    if (view === "excel-editor") navigate("/excel-editor");
-    if (view === "dashboards") navigate("/dashboards");
-    setActiveDrawer(null);
-  }, [navigate]);
-
-  const handleDrawerToggle = useCallback(
-    (drawer: "history") => {
-      setActiveDrawer((prev) => (prev === drawer ? null : drawer));
+  const handleViewChange = useCallback(
+    (view: ActiveView) => {
+      if (view === "chat") navigate("/");
+      if (view === "data-sources") navigate("/data-sources");
+      if (view === "saved-queries") navigate("/saved-queries");
+      if (view === "artifacts") navigate("/artifacts");
+      if (view === "settings") navigate("/settings");
+      if (view === "excel-editor") navigate("/excel-editor");
+      if (view === "dashboards") navigate("/dashboards");
+      setActiveDrawer(null);
     },
-    []
+    [navigate]
   );
+
+  const handleDrawerToggle = useCallback((drawer: "history") => {
+    setActiveDrawer((prev) => (prev === drawer ? null : drawer));
+  }, []);
 
   const handleNewChat = useCallback(() => {
     startNewChat();
@@ -108,13 +118,19 @@ export function AppShell() {
     [navigate]
   );
 
-  const handleChatSent = useCallback(async (content: string, files?: string[]) => {
-    await sendChatMessage(content, files);
-  }, [sendChatMessage]);
+  const handleChatSent = useCallback(
+    async (content: string, files?: string[]) => {
+      await sendChatMessage(content, files);
+    },
+    [sendChatMessage]
+  );
 
-  const handleUpdateMessage = useCallback((msg: import("@/types/ChatMessage").ChatMessage) => {
-    setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
-  }, [setMessages]);
+  const handleUpdateMessage = useCallback(
+    (msg: import("@/types/ChatMessage").ChatMessage) => {
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+    },
+    [setMessages]
+  );
 
   return (
     <TooltipProvider delay={300}>
@@ -143,49 +159,58 @@ export function AppShell() {
             <Route path="/saved-queries" element={<SavedQueriesPage />} />
             <Route path="/artifacts" element={<ArtifactsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/excel-editor" element={<ExcelEditorPage onViewChange={handleViewChange} />} />
+            <Route
+              path="/excel-editor"
+              element={<ExcelEditorPage onViewChange={handleViewChange} />}
+            />
             <Route path="/dashboards" element={<DashboardsPage />} />
 
-            <Route path="/:sessionId" element={
-              <ChatPage
-                key={activeSessionId ?? 'new'}
-                onNewChat={handleNewChat}
-                messages={messages}
-                isLoadingMessages={isLoadingMessages}
-                isSending={isSending}
-                sendChatMessage={handleChatSent}
-                loadSessions={loadSessions}
-                activeSessionId={activeSessionId}
-                startNewChat={startNewChat}
-                onUpdateMessage={handleUpdateMessage}
-                onDeleteMessage={deleteMessageBranch}
-                onEditMessage={editMessage}
-                onRegenerateSubmit={regenerateResponse}
-                followups={followups}
-                onFollowupClick={(text) => sendChatMessage(text)}
-                sqlRetryStatus={sqlRetryStatus}
-              />
-            } />
-            <Route path="/" element={
-              <ChatPage
-                key="new"
-                onNewChat={handleNewChat}
-                messages={[]}
-                isLoadingMessages={false}
-                isSending={isSending}
-                sendChatMessage={handleChatSent}
-                loadSessions={loadSessions}
-                activeSessionId={null}
-                startNewChat={startNewChat}
-                onUpdateMessage={handleUpdateMessage}
-                onDeleteMessage={deleteMessageBranch}
-                onEditMessage={editMessage}
-                onRegenerateSubmit={regenerateResponse}
-                followups={[]}
-                onFollowupClick={(text) => sendChatMessage(text)}
-                sqlRetryStatus={null}
-              />
-            } />
+            <Route
+              path="/:sessionId"
+              element={
+                <ChatPage
+                  key={activeSessionId ?? "new"}
+                  onNewChat={handleNewChat}
+                  messages={messages}
+                  isLoadingMessages={isLoadingMessages}
+                  isSending={isSending}
+                  sendChatMessage={handleChatSent}
+                  loadSessions={loadSessions}
+                  activeSessionId={activeSessionId}
+                  startNewChat={startNewChat}
+                  onUpdateMessage={handleUpdateMessage}
+                  onDeleteMessage={deleteMessageBranch}
+                  onEditMessage={editMessage}
+                  onRegenerateSubmit={regenerateResponse}
+                  followups={followups}
+                  onFollowupClick={(text) => sendChatMessage(text)}
+                  sqlRetryStatus={sqlRetryStatus}
+                />
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <ChatPage
+                  key="new"
+                  onNewChat={handleNewChat}
+                  messages={[]}
+                  isLoadingMessages={false}
+                  isSending={isSending}
+                  sendChatMessage={handleChatSent}
+                  loadSessions={loadSessions}
+                  activeSessionId={null}
+                  startNewChat={startNewChat}
+                  onUpdateMessage={handleUpdateMessage}
+                  onDeleteMessage={deleteMessageBranch}
+                  onEditMessage={editMessage}
+                  onRegenerateSubmit={regenerateResponse}
+                  followups={[]}
+                  onFollowupClick={(text) => sendChatMessage(text)}
+                  sqlRetryStatus={null}
+                />
+              }
+            />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

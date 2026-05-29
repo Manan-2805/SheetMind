@@ -53,9 +53,13 @@ export async function setupUser(username: string): Promise<SetupResponse> {
   }
 }
 
-export async function deleteUser(username: string): Promise<{ success: boolean; username: string }> {
+export async function deleteUser(
+  username: string
+): Promise<{ success: boolean; username: string }> {
   try {
-    const res = await client.delete<{ success: boolean; username: string }>(`/auth/users/${username}`);
+    const res = await client.delete<{ success: boolean; username: string }>(
+      `/auth/users/${username}`
+    );
     return res.data;
   } catch (error) {
     handleError(error);

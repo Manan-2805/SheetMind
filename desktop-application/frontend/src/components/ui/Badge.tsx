@@ -29,18 +29,11 @@ const VARIANT_STYLES: Record<string, { bg: string; color: string }> = {
   },
 };
 
-export function Badge({
-  children,
-  variant = "default",
-  className,
-}: BadgeProps) {
+export function Badge({ children, variant = "default", className }: BadgeProps) {
   const styles = VARIANT_STYLES[variant];
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 text-ui-label",
-        className
-      )}
+      className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-ui-label", className)}
       style={{
         backgroundColor: styles.bg,
         color: styles.color,

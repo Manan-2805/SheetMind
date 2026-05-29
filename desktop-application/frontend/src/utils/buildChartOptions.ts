@@ -87,36 +87,33 @@ export function buildChartOptions({
     labels: type === "pie" || type === "donut" ? labels : undefined,
     title: title
       ? {
-        text: title,
-        style: {
-          fontSize: "14px",
-          fontWeight: "600",
-          color: isDark ? "#F4F4F5" : "#09090B",
-          fontFamily: "Inter, sans-serif",
-        },
-        margin: 12,
-      }
+          text: title,
+          style: {
+            fontSize: "14px",
+            fontWeight: "600",
+            color: isDark ? "#F4F4F5" : "#09090B",
+            fontFamily: "Inter, sans-serif",
+          },
+          margin: 12,
+        }
       : undefined,
     plotOptions: buildPlotOptions(type),
     dataLabels: {
       enabled: type === "pie" || type === "donut",
       style: { fontSize: "11px", fontFamily: "Inter, sans-serif" },
     },
-    stroke:
-      type === "line" || type === "area"
-        ? { curve: "smooth", width: 2 }
-        : { width: 0 },
+    stroke: type === "line" || type === "area" ? { curve: "smooth", width: 2 } : { width: 0 },
     fill:
       type === "area"
         ? {
-          type: "gradient",
-          gradient: {
-            shadeIntensity: 1,
-            opacityFrom: 0.4,
-            opacityTo: 0.05,
-            stops: [0, 100],
-          },
-        }
+            type: "gradient",
+            gradient: {
+              shadeIntensity: 1,
+              opacityFrom: 0.4,
+              opacityTo: 0.05,
+              stops: [0, 100],
+            },
+          }
         : undefined,
   };
 

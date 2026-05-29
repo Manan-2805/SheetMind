@@ -1,14 +1,14 @@
-import { apiClient as client } from './apiClient';
-import type { 
-  CellValue, 
-  SheetData, 
-  ExcelEditorFile, 
-  CellFormatting, 
+import type {
+  CellFormatting,
+  CellValue,
+  DiffRow,
+  ExcelEditorFile,
   MutationOperationType,
-  DiffRow
-} from '@/types/ExcelEditor';
+  SheetData,
+} from "@/types/ExcelEditor";
+import { apiClient as client } from "./apiClient";
 
-const API_BASE = '/excel-editor';
+const API_BASE = "/excel-editor";
 
 export const getAvailableFiles = async (): Promise<ExcelEditorFile[]> => {
   const resp = await client.get(`${API_BASE}/files`);
@@ -28,7 +28,9 @@ export const openFile = async (fileId: string): Promise<OpenFileResponse> => {
 };
 
 export const getSheetData = async (fileId: string, sheetName: string): Promise<SheetData> => {
-  const resp = await client.get(`${API_BASE}/sheet-data`, { params: { file_id: fileId, sheet_name: sheetName } });
+  const resp = await client.get(`${API_BASE}/sheet-data`, {
+    params: { file_id: fileId, sheet_name: sheetName },
+  });
   return resp.data;
 };
 
@@ -87,7 +89,10 @@ export const getHistory = async (fileId: string): Promise<HistoryRecord[]> => {
   return resp.data.history;
 };
 
-export const restoreBackup = async (fileId: string, backupPath: string): Promise<{ success: boolean }> => {
+export const restoreBackup = async (
+  fileId: string,
+  backupPath: string
+): Promise<{ success: boolean }> => {
   const resp = await client.post(`${API_BASE}/restore`, { fileId, backupPath });
   return resp.data;
 };

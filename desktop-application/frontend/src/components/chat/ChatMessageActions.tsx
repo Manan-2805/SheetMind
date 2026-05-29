@@ -1,25 +1,21 @@
 import {
   BarChart2,
   Code2,
+  Copy,
   Download,
+  Edit2,
+  Info,
   RotateCcw,
   Star,
+  Table,
   ThumbsDown,
   ThumbsUp,
-  Info,
-  Copy,
-  Edit2,
   Trash2,
-  Table,
 } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { ChatMessageMeta } from "./ChatMessageMeta";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ChatMessage } from "@/types/ChatMessage";
+import { ChatMessageMeta } from "./ChatMessageMeta";
 
 interface ChatMessageActionsProps {
   onRegenerate?: () => void;
@@ -78,7 +74,7 @@ export function ChatMessageActions({
     copyTable: onCopyTable,
   };
 
-  const filteredActions = ACTIONS.filter(a => {
+  const filteredActions = ACTIONS.filter((a) => {
     if (a.role !== "both" && a.role !== message.role) return false;
     if (a.key === "copyTable" && !message.sql_generated) return false;
     return true;
@@ -88,8 +84,9 @@ export function ChatMessageActions({
     <div className="flex items-center gap-0.5 mt-1">
       {filteredActions.map(({ icon: Icon, label, key }) => {
         const isFeedbackAction = key === "thumbUp" || key === "thumbDown";
-        const isSelected = (key === "thumbUp" && message.feedback === "like") ||
-                          (key === "thumbDown" && message.feedback === "dislike");
+        const isSelected =
+          (key === "thumbUp" && message.feedback === "like") ||
+          (key === "thumbDown" && message.feedback === "dislike");
         const isDisabled = isFeedbackAction && !!message.feedback;
 
         return (
@@ -103,9 +100,7 @@ export function ChatMessageActions({
                     isSelected ? "bg-white/10" : ""
                   }`}
                   style={{
-                    color: isSelected
-                      ? "var(--color-accent)"
-                      : "var(--color-text-tertiary)",
+                    color: isSelected ? "var(--color-accent)" : "var(--color-text-tertiary)",
                     opacity: isDisabled && !isSelected ? 0.3 : 1,
                     cursor: isDisabled ? "default" : "pointer",
                   }}
@@ -120,8 +115,7 @@ export function ChatMessageActions({
                     if (isDisabled || isSelected) return;
                     (e.currentTarget as HTMLButtonElement).style.color =
                       "var(--color-text-tertiary)";
-                    (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                      "transparent";
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
                   }}
                   aria-label={label}
                 >
@@ -144,7 +138,9 @@ export function ChatMessageActions({
       })}
 
       {/* Info Hover Tooltip */}
-      {(message.token_count_input != null || message.sql_execution_ms != null || message.confidence_score != null) && (
+      {(message.token_count_input != null ||
+        message.sql_execution_ms != null ||
+        message.confidence_score != null) && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -152,16 +148,13 @@ export function ChatMessageActions({
                 className="rounded p-1 transition-colors duration-[120ms]"
                 style={{ color: "var(--color-text-tertiary)" }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "var(--color-text-primary)";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
                   (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                     "var(--color-bg-hover)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.color =
-                    "var(--color-text-tertiary)";
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                    "transparent";
+                  (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)";
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
                 }}
                 aria-label="Query details"
               >
@@ -176,7 +169,7 @@ export function ChatMessageActions({
               border: "1px solid var(--color-border-default)",
               color: "var(--color-text-primary)",
               fontSize: "11px",
-              padding: "4px"
+              padding: "4px",
             }}
           >
             <ChatMessageMeta message={message} />

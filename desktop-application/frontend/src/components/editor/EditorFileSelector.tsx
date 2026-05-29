@@ -1,5 +1,5 @@
-import { TableProperties, FileSpreadsheet, ChevronRight } from 'lucide-react';
-import type { ExcelEditorFile } from '@/types/ExcelEditor';
+import { ChevronRight, FileSpreadsheet, TableProperties } from "lucide-react";
+import type { ExcelEditorFile } from "@/types/ExcelEditor";
 
 interface EditorFileSelectorProps {
   files: ExcelEditorFile[];
@@ -8,7 +8,12 @@ interface EditorFileSelectorProps {
   onGoToDataSources: () => void;
 }
 
-export function EditorFileSelector({ files, onSelect, isLoading, onGoToDataSources }: EditorFileSelectorProps) {
+export function EditorFileSelector({
+  files,
+  onSelect,
+  isLoading,
+  onGoToDataSources,
+}: EditorFileSelectorProps) {
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -17,7 +22,7 @@ export function EditorFileSelector({ files, onSelect, isLoading, onGoToDataSourc
           style={{
             backgroundColor: "var(--color-bg-elevated)",
             border: "1px solid var(--color-border-default)",
-            boxShadow: "0 0 40px -10px var(--color-accent-subtle)"
+            boxShadow: "0 0 40px -10px var(--color-accent-subtle)",
           }}
         >
           <div className="flex flex-col items-center text-center">
@@ -49,7 +54,7 @@ export function EditorFileSelector({ files, onSelect, isLoading, onGoToDataSourc
         style={{
           backgroundColor: "var(--color-bg-elevated)",
           border: "1px solid var(--color-border-default)",
-          boxShadow: "0 0 40px -10px var(--color-accent-subtle)"
+          boxShadow: "0 0 40px -10px var(--color-accent-subtle)",
         }}
       >
         <div className="flex flex-col items-center text-center">
@@ -78,7 +83,7 @@ export function EditorFileSelector({ files, onSelect, isLoading, onGoToDataSourc
                   key={file.fileId}
                   onClick={() => onSelect(file.fileId)}
                   className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-bg-hover"
-                  style={{ height: '44px' }}
+                  style={{ height: "44px" }}
                 >
                   <FileSpreadsheet className="h-5 w-5 text-accent" />
                   <div className="flex flex-1 items-center justify-between">

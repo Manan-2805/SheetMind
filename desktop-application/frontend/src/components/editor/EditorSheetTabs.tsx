@@ -1,5 +1,5 @@
-import { Plus } from 'lucide-react';
-import type { SheetData } from '@/types/ExcelEditor';
+import { Plus } from "lucide-react";
+import type { SheetData } from "@/types/ExcelEditor";
 
 interface EditorSheetTabsProps {
   sheets: SheetData[];
@@ -32,9 +32,7 @@ export function EditorSheetTabs({ sheets, activeIndex, onSwitch }: EditorSheetTa
                 style={{ backgroundColor: "var(--color-accent)" }}
               />
             )}
-            {!isActive && (
-              <div className="absolute inset-0 hover:bg-bg-hover -z-10" />
-            )}
+            {!isActive && <div className="absolute inset-0 hover:bg-bg-hover -z-10" />}
           </button>
         );
       })}

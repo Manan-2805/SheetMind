@@ -6,9 +6,7 @@ const STORAGE_KEY = "sheetmind-theme";
 
 function resolveTheme(preference: Theme): "dark" | "light" {
   if (preference === "system") {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   return preference;
 }

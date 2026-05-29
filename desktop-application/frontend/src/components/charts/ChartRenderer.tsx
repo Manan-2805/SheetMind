@@ -1,6 +1,6 @@
+import type { ApexAxisChartSeries, ApexNonAxisChartSeries } from "apexcharts";
 import { useMemo } from "react";
 import ReactApexChart from "react-apexcharts";
-import type { ApexAxisChartSeries, ApexNonAxisChartSeries } from "apexcharts";
 
 import { useTheme } from "@/hooks/useTheme";
 import { buildChartOptions } from "@/utils/buildChartOptions";
@@ -44,7 +44,17 @@ export function ChartRenderer({
 }: ChartRendererProps) {
   const { resolvedTheme } = useTheme();
   const options = useMemo(
-    () => buildChartOptions({ type, theme: resolvedTheme, title, categories, labels, height, colors, chartId }),
+    () =>
+      buildChartOptions({
+        type,
+        theme: resolvedTheme,
+        title,
+        categories,
+        labels,
+        height,
+        colors,
+        chartId,
+      }),
     [type, resolvedTheme, title, categories, labels, height, colors, chartId]
   );
 

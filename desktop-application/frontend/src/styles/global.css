@@ -24,42 +24,42 @@
 
 /* Dark theme — default */
 :root {
-  --color-bg-base: #0D0D0F;
+  --color-bg-base: #0d0d0f;
   --color-bg-elevated: #131316;
-  --color-bg-hover: #1C1C21;
+  --color-bg-hover: #1c1c21;
   --color-bg-active: #222228;
-  --color-border-default: #2A2A32;
-  --color-border-subtle: #1E1E26;
-  --color-text-primary: #F4F4F5;
-  --color-text-secondary: #A1A1AA;
-  --color-text-tertiary: #52525B;
-  --color-accent: #7C3AED;
-  --color-accent-hover: #6D28D9;
+  --color-border-default: #2a2a32;
+  --color-border-subtle: #1e1e26;
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #52525b;
+  --color-accent: #7c3aed;
+  --color-accent-hover: #6d28d9;
   --color-accent-subtle: rgba(124, 58, 237, 0.08);
   --color-accent-border: rgba(124, 58, 237, 0.25);
-  --color-destructive: #EF4444;
-  --color-success: #22C55E;
-  --color-warning: #F59E0B;
+  --color-destructive: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
 }
 
 /* Light theme */
 .light {
-  --color-bg-base: #FAFAFA;
-  --color-bg-elevated: #FFFFFF;
-  --color-bg-hover: #F4F4F5;
-  --color-bg-active: #E4E4E7;
-  --color-border-default: #E4E4E7;
-  --color-border-subtle: #F4F4F5;
-  --color-text-primary: #09090B;
-  --color-text-secondary: #52525B;
-  --color-text-tertiary: #A1A1AA;
-  --color-accent: #7C3AED;
-  --color-accent-hover: #6D28D9;
+  --color-bg-base: #fafafa;
+  --color-bg-elevated: #ffffff;
+  --color-bg-hover: #f4f4f5;
+  --color-bg-active: #e4e4e7;
+  --color-border-default: #e4e4e7;
+  --color-border-subtle: #f4f4f5;
+  --color-text-primary: #09090b;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #a1a1aa;
+  --color-accent: #7c3aed;
+  --color-accent-hover: #6d28d9;
   --color-accent-subtle: rgba(124, 58, 237, 0.08);
   --color-accent-border: rgba(124, 58, 237, 0.25);
-  --color-destructive: #DC2626;
-  --color-success: #16A34A;
-  --color-warning: #D97706;
+  --color-destructive: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
 }
 
 /* Shimmer skeleton animation */
@@ -74,10 +74,12 @@
 }
 
 .skeleton {
-  background: linear-gradient(90deg,
-      var(--color-bg-elevated) 25%,
-      var(--color-bg-hover) 50%,
-      var(--color-bg-elevated) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-elevated) 25%,
+    var(--color-bg-hover) 50%,
+    var(--color-bg-elevated) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
@@ -85,7 +87,6 @@
 
 /* Typing indicator dots */
 @keyframes typing-dot {
-
   0%,
   60%,
   100% {

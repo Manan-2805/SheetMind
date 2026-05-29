@@ -1,7 +1,7 @@
+import { ChevronRight, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { UserPlus, ChevronRight, Trash2 } from "lucide-react";
 
-import { listUsers, setupUser, deleteUser, type UserInfo } from "@/api/authApi";
+import { deleteUser, listUsers, setupUser, type UserInfo } from "@/api/authApi";
 import { useToast } from "@/hooks/useToast";
 import { formatAbsoluteDateTime } from "@/utils/formatDate";
 
@@ -46,7 +46,11 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     const name = newUsername.trim();
     if (!name) return;
     if (existingUsers.map((u) => u.username.toLowerCase()).includes(name.toLowerCase())) {
-      addToast({ type: "error", title: "Name taken", description: "That username already exists. Please select it from the list." });
+      addToast({
+        type: "error",
+        title: "Name taken",
+        description: "That username already exists. Please select it from the list.",
+      });
       return;
     }
     setIsLoading(true);
@@ -56,7 +60,11 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       onComplete(name);
     } catch (err: unknown) {
       const e = err as { message?: string };
-      addToast({ type: "error", title: "Setup failed", description: e?.message ?? "Could not complete setup" });
+      addToast({
+        type: "error",
+        title: "Setup failed",
+        description: e?.message ?? "Could not complete setup",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +87,11 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       setUserToDelete(null);
     } catch (err: unknown) {
       const e = err as { message?: string };
-      addToast({ type: "error", title: "Delete failed", description: e?.message ?? "Failed to delete user" });
+      addToast({
+        type: "error",
+        title: "Delete failed",
+        description: e?.message ?? "Failed to delete user",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -131,7 +143,10 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         </div>
 
         {existingUsers.length > 0 && (
-          <div className="mb-4 flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border-default)" }}>
+          <div
+            className="mb-4 flex rounded-lg overflow-hidden"
+            style={{ border: "1px solid var(--color-border-default)" }}
+          >
             <button
               onClick={() => setMode("select")}
               className="flex-1 py-2 text-body transition-colors duration-[120ms]"
@@ -267,12 +282,16 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
               boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
             }}
           >
-            <h3 className="text-body-em font-semibold mb-2" style={{ color: "var(--color-text-primary)" }}>
+            <h3
+              className="text-body-em font-semibold mb-2"
+              style={{ color: "var(--color-text-primary)" }}
+            >
               Delete Profile?
             </h3>
             <p className="text-ui-label mb-4" style={{ color: "var(--color-text-secondary)" }}>
-              This will permanently delete all databases, uploaded files, query history, and charts for{" "}
-              <strong className="text-red-400">{userToDelete}</strong>. This action cannot be undone.
+              This will permanently delete all databases, uploaded files, query history, and charts
+              for <strong className="text-red-400">{userToDelete}</strong>. This action cannot be
+              undone.
             </p>
             <div className="flex gap-2 justify-end">
               <button

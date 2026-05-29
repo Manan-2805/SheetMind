@@ -26,10 +26,7 @@ export function SkeletonArtifactCard() {
           className="h-2.5 rounded"
           style={{ backgroundColor: "var(--color-bg-hover)", width: "30%" }}
         />
-        <div
-          className="h-6 w-16 rounded-lg"
-          style={{ backgroundColor: "var(--color-bg-hover)" }}
-        />
+        <div className="h-6 w-16 rounded-lg" style={{ backgroundColor: "var(--color-bg-hover)" }} />
       </div>
     </div>
   );

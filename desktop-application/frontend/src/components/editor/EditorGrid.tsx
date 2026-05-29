@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
-import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
-import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US';
-import '@univerjs/preset-sheets-core/lib/index.css';
-import type { FUniver } from '@univerjs/presets';
-import type { CellFormattingMap, SheetData } from '@/types/ExcelEditor';
+import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
+import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
+import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets";
+import { useEffect, useRef } from "react";
+import "@univerjs/preset-sheets-core/lib/index.css";
+import type { FUniver } from "@univerjs/presets";
+import type { CellFormattingMap, SheetData } from "@/types/ExcelEditor";
 
 interface EditorGridProps {
   sheets: SheetData[];
@@ -51,7 +51,7 @@ function ExcelCellSkeleton() {
                   <div
                     className="skeleton h-3.5"
                     style={{
-                      width: `${30 + (row * 7 + cIdx * 13) % 55}%`,
+                      width: `${30 + ((row * 7 + cIdx * 13) % 55)}%`,
                       opacity: 0.65,
                     }}
                   />
@@ -80,7 +80,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
         s: {
           bl: 1, // bold
           ht: 2, // center align
-          bg: { rgb: 'F3F4F6' }, // background F3F4F6
+          bg: { rgb: "F3F4F6" }, // background F3F4F6
         },
       };
     });
@@ -97,7 +97,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
 
         if (cellValue === null || cellValue === undefined) {
           cell.v = null;
-        } else if (typeof cellValue === 'string' && cellValue.startsWith('=')) {
+        } else if (typeof cellValue === "string" && cellValue.startsWith("=")) {
           cell.f = cellValue;
         } else {
           cell.v = cellValue;
@@ -108,8 +108,8 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
           if (fmt.bold !== undefined) style.bl = fmt.bold ? 1 : 0;
           if (fmt.italic !== undefined) style.it = fmt.italic ? 1 : 0;
           if (fmt.fontSize) style.fs = fmt.fontSize;
-          if (fmt.textColor) style.cl = { rgb: fmt.textColor.replace('#', '') };
-          if (fmt.bgColor) style.bg = { rgb: fmt.bgColor.replace('#', '') };
+          if (fmt.textColor) style.cl = { rgb: fmt.textColor.replace("#", "") };
+          if (fmt.bgColor) style.bg = { rgb: fmt.bgColor.replace("#", "") };
           if (fmt.align) {
             const alignMap: Record<string, number> = { left: 1, center: 2, right: 3 };
             style.ht = alignMap[fmt.align];
@@ -137,11 +137,11 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
   });
 
   return {
-    id: 'sheetmind-workbook',
+    id: "sheetmind-workbook",
     sheetOrder: sheets.map((_, i) => `sheet_${i}`),
     sheets: sheetsObj,
-    name: 'SheetMind Workbook',
-    appVersion: '0.0.1',
+    name: "SheetMind Workbook",
+    appVersion: "0.0.1",
     locale: LocaleType.EN_US,
   };
 }
@@ -233,12 +233,9 @@ export function EditorGrid({
   return (
     <div
       className="absolute inset-0 univer-container"
-      style={{ width: '100%', height: '100%', contain: 'strict' }}
+      style={{ width: "100%", height: "100%", contain: "strict" }}
     >
-      <div
-        ref={containerRef}
-        style={{ width: '100%', height: '100%' }}
-      />
+      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
     </div>
   );
 }

@@ -32,10 +32,7 @@ export function SkeletonQueryCard() {
           className="h-2.5 rounded"
           style={{ backgroundColor: "var(--color-bg-hover)", width: "28%" }}
         />
-        <div
-          className="h-7 w-14 rounded-lg"
-          style={{ backgroundColor: "var(--color-bg-hover)" }}
-        />
+        <div className="h-7 w-14 rounded-lg" style={{ backgroundColor: "var(--color-bg-hover)" }} />
       </div>
     </div>
   );

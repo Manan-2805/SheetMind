@@ -1,9 +1,6 @@
 import type { AutocompleteFile } from "@/types/DataSource";
 
-export function extractReferencedFiles(
-  content: string,
-  files: AutocompleteFile[]
-): string[] {
+export function extractReferencedFiles(content: string, files: AutocompleteFile[]): string[] {
   if (!content || files.length === 0) return [];
 
   const refs: string[] = [];

@@ -32,18 +32,12 @@ export function Drawer({
 
   const hiddenOffset = width + 52;
   const translateX =
-    side === "left"
-      ? `translateX(-${hiddenOffset}px)`
-      : `translateX(${hiddenOffset}px)`;
+    side === "left" ? `translateX(-${hiddenOffset}px)` : `translateX(${hiddenOffset}px)`;
 
   return (
     <>
       {open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/20"
-          onClick={onClose}
-          aria-hidden="true"
-        />
+        <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
       )}
       <div
         ref={drawerRef}
@@ -52,14 +46,8 @@ export function Drawer({
           width,
           [side]: 52,
           backgroundColor: "var(--color-bg-elevated)",
-          borderRight:
-            side === "left"
-              ? "1px solid var(--color-border-default)"
-              : undefined,
-          borderLeft:
-            side === "right"
-              ? "1px solid var(--color-border-default)"
-              : undefined,
+          borderRight: side === "left" ? "1px solid var(--color-border-default)" : undefined,
+          borderLeft: side === "right" ? "1px solid var(--color-border-default)" : undefined,
           transform: open ? "translateX(0)" : translateX,
           transition: "transform 200ms ease-out",
           boxShadow: open ? "4px 0 24px rgba(0,0,0,0.3)" : "none",

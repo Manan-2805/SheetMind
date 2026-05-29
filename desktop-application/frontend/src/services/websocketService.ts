@@ -8,7 +8,10 @@ class WebSocketService {
 
   public connect(username: string = "default") {
     this.username = username;
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -21,7 +24,9 @@ class WebSocketService {
     }
 
     try {
-      this.socket = new WebSocket(`ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`);
+      this.socket = new WebSocket(
+        `ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`
+      );
 
       this.socket.onopen = () => {
         this.isConnecting = false;

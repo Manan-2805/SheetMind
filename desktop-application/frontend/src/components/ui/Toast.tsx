@@ -1,7 +1,7 @@
-import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 
-import { useToast, type Toast, type ToastType } from "@/hooks/useToast";
+import { type Toast, type ToastType, useToast } from "@/hooks/useToast";
 import { cn } from "@/utils/cn";
 
 const TYPE_COLORS: Record<ToastType, string> = {
@@ -36,17 +36,11 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       />
       <div className="flex flex-1 items-start gap-3 p-3">
         <div className="flex-1">
-          <p
-            className="text-body-em"
-            style={{ color: "var(--color-text-primary)" }}
-          >
+          <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
             {toast.title}
           </p>
           {toast.description && (
-            <p
-              className="mt-0.5 text-body"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
+            <p className="mt-0.5 text-body" style={{ color: "var(--color-text-secondary)" }}>
               {toast.description}
             </p>
           )}
@@ -56,12 +50,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
           className="shrink-0 rounded p-0.5 transition-colors duration-[120ms]"
           style={{ color: "var(--color-text-tertiary)" }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color =
-              "var(--color-text-primary)";
+            (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
           }}
           onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color =
-              "var(--color-text-tertiary)";
+            (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)";
           }}
           aria-label="Dismiss notification"
         >

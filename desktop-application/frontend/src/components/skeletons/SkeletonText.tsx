@@ -9,11 +9,5 @@ export function SkeletonText({
   height = "14px",
   className = "",
 }: SkeletonTextProps) {
-  return (
-    <div
-      className={`skeleton ${className}`}
-      style={{ width, height }}
-      aria-hidden="true"
-    />
-  );
+  return <div className={`skeleton ${className}`} style={{ width, height }} aria-hidden="true" />;
 }

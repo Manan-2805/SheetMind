@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { X } from "lucide-react";
+import { useState } from "react";
 
 interface FeedbackModalProps {
   isOpen: boolean;
@@ -15,18 +15,30 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, type }: FeedbackModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border p-6 shadow-xl" style={{ backgroundColor: "var(--color-bg-primary)", borderColor: "var(--color-border-default)" }}>
+      <div
+        className="w-full max-w-md rounded-xl border p-6 shadow-xl"
+        style={{
+          backgroundColor: "var(--color-bg-primary)",
+          borderColor: "var(--color-border-default)",
+        }}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
             Provide Feedback
           </h2>
-          <button onClick={onClose} className="rounded-full p-1 hover:bg-white/10" style={{ color: "var(--color-text-secondary)" }}>
+          <button
+            onClick={onClose}
+            className="rounded-full p-1 hover:bg-white/10"
+            style={{ color: "var(--color-text-secondary)" }}
+          >
             <X size={20} />
           </button>
         </div>
 
         <p className="mb-4 text-body" style={{ color: "var(--color-text-secondary)" }}>
-          {type === "like" ? "What did you like about this response?" : "What was wrong with this response?"}
+          {type === "like"
+            ? "What did you like about this response?"
+            : "What was wrong with this response?"}
         </p>
 
         <textarea
@@ -35,7 +47,7 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, type }: FeedbackModal
             backgroundColor: "var(--color-bg-secondary)",
             borderColor: "var(--color-border-default)",
             color: "var(--color-text-primary)",
-            minHeight: "100px"
+            minHeight: "100px",
           }}
           placeholder="Optional feedback..."
           value={reason}

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowUp, Sparkles } from 'lucide-react';
-import { EditorChangeStack } from './EditorChangeStack';
-import { EditorDiffTable } from './EditorDiffTable';
-import type { PendingChange } from '@/types/ExcelEditor';
+import { ArrowUp, Sparkles } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
+import type { PendingChange } from "@/types/ExcelEditor";
+import { EditorChangeStack } from "./EditorChangeStack";
+import { EditorDiffTable } from "./EditorDiffTable";
 
 interface EditorAIPanelProps {
   changeStack: PendingChange[];
@@ -23,23 +24,23 @@ export function EditorAIPanel({
   onRejectChange,
   onSubmitPrompt,
   isGenerating,
-  activeSheetName
+  activeSheetName,
 }: EditorAIPanelProps) {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState("");
 
-  const selectedChange = changeStack.find(c => c.changeId === selectedChangeId);
+  const selectedChange = changeStack.find((c) => c.changeId === selectedChangeId);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!prompt.trim() || isGenerating) return;
     onSubmitPrompt(prompt);
-    setPrompt('');
+    setPrompt("");
   };
 
   const suggestions = [
     "Remove duplicate rows",
     "Fill empty cells in column B with 0",
-    "Add a TotalPrice column = Quantity * UnitPrice"
+    "Add a TotalPrice column = Quantity * UnitPrice",
   ];
 
   return (
@@ -95,7 +96,10 @@ export function EditorAIPanel({
                   <button
                     key={idx}
                     onClick={() => setPrompt(s)}
-                    onDoubleClick={() => { setPrompt(s); onSubmitPrompt(s); }}
+                    onDoubleClick={() => {
+                      setPrompt(s);
+                      onSubmitPrompt(s);
+                    }}
                     className="px-2.5 py-1 rounded-full bg-bg-hover border border-border-default text-[10px] hover:border-accent hover:text-accent transition-all whitespace-nowrap"
                   >
                     {s}
@@ -111,7 +115,7 @@ export function EditorAIPanel({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleSubmit();
                   }
@@ -120,7 +124,7 @@ export function EditorAIPanel({
                 disabled={isGenerating}
                 className="w-full rounded-xl bg-bg-base pl-3 pr-12 py-3 text-sm border border-border-default outline-none focus:border-accent transition-colors resize-none overflow-hidden"
                 rows={1}
-                style={{ minHeight: '44px', maxHeight: '120px' }}
+                style={{ minHeight: "44px", maxHeight: "120px" }}
               />
               <button
                 onClick={handleSubmit}

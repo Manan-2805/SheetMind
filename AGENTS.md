@@ -35,15 +35,24 @@ This file is **always loaded into context**. Follow it strictly for every task.
    - If you change **any function/method signature, API endpoint, component prop, etc.**, use search tools to find **all** usages and update them consistently before continuing.  
    - No emojis anywhere in code, comments, logs, or strings. Remove them if found.  
    - **Logging**: Use lazy formatting (`logger.info("msg: %s", var)`) — never f-strings.  
-   - **Imports**: All at the top of the file. Order: standard library → third-party → local (alphabetical within each group). No lazy/dynamic imports.  
-   - **Formatting**: No extra empty lines beyond what's needed for readability.  
+   - **Imports**: All at the top of the file. Order: standard library → third-party → local (alphabetical within each group). No lazy/dynamic imports. Enforce import sorting via Biome (frontend) or Ruff (backend).  
+   - **Formatting**: No extra empty lines beyond what's needed for readability. Enforce consistent code formatting via Biome (frontend) and Ruff (backend).  
    - Write proper docstrings for modules, classes, and public functions.  
    - Follow existing patterns and architecture in the codebase.
 
 5. **Quality Gates**  
-   - After completing all tasks: Run the project's lint checker:
-        - Frontend: npm run lint; npx tsc -b --noEmit   
-        - Backend: .\\venv\\Scripts\\python.exe -m pylint main.py models routers schemas services 
+   - After completing all tasks, run the project's static analysis and lint checkers:
+        - **React Frontend**:
+          - Run **Biome** linter: `npm run lint` (runs `biome check .`)
+          - Run **Biome** formatter: `npm run format` (runs `biome format .`)
+          - Auto-fix style/lint issues: `npm run lint:fix` and `npm run format:fix`
+          - Run **React Doctor**: `npm run doctor` (runs `npx react-doctor@latest` to identify React-specific anti-patterns and performance issues)
+          - Run TypeScript compiler checks: `npx tsc -b --noEmit`
+        - **Python Backend**:
+          - Run **Ruff** linter: `.venv\Scripts\ruff.exe check .` (or `ruff check .`)
+          - Run **Ruff** formatter: `.venv\Scripts\ruff.exe format --check .` (to verify) or `.venv\Scripts\ruff.exe format .` (to format)
+          - Auto-fix lint issues: `ruff check --fix .`
+          - Run **Pylint** (if `.pylintrc` is configured): `.venv\Scripts\python.exe -m pylint main.py models routers schemas services`
    - Fix **all** warnings and errors.  
    - Run relevant tests if they exist.  
    - Verify no regressions.

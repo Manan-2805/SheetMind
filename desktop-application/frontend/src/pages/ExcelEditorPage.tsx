@@ -1,16 +1,17 @@
-import { useCallback, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Panel, Group, Separator } from 'react-resizable-panels';
-import { ChevronLeft, X, Save, AlertTriangle } from 'lucide-react';
-
-import { useExcelEditor } from '@/hooks/useExcelEditor';
-import { EditorFileSelector } from '@/components/editor/EditorFileSelector';
-import { EditorToolbar } from '@/components/editor/EditorToolbar';
-import { EditorGrid } from '@/components/editor/EditorGrid';
-import { EditorAIPanel } from '@/components/editor/EditorAIPanel';
+import { AlertTriangle, ChevronLeft, Save, X } from "lucide-react";
+import { useCallback, useEffect } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { EditorAIPanel } from "@/components/editor/EditorAIPanel";
+import { EditorFileSelector } from "@/components/editor/EditorFileSelector";
+import { EditorGrid } from "@/components/editor/EditorGrid";
+import { EditorToolbar } from "@/components/editor/EditorToolbar";
+import { useExcelEditor } from "@/hooks/useExcelEditor";
 
 interface ExcelEditorPageProps {
-  onViewChange: (view: "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor") => void;
+  onViewChange: (
+    view: "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor"
+  ) => void;
 }
 
 export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
@@ -42,13 +43,16 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const handleSelectFile = useCallback((fileId: string) => {
-    openFile(fileId);
-    navigate(`/excel-editor?fileId=${encodeURIComponent(fileId)}`, { replace: true });
-  }, [navigate, openFile]);
+  const handleSelectFile = useCallback(
+    (fileId: string) => {
+      openFile(fileId);
+      navigate(`/excel-editor?fileId=${encodeURIComponent(fileId)}`, { replace: true });
+    },
+    [navigate, openFile]
+  );
 
   useEffect(() => {
-    const fileId = searchParams.get('fileId');
+    const fileId = searchParams.get("fileId");
     if (fileId && !session && !isLoading) {
       openFile(fileId);
     }
@@ -78,7 +82,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           files={availableFiles}
           onSelect={handleSelectFile}
           isLoading={isLoading}
-          onGoToDataSources={() => onViewChange('data-sources')}
+          onGoToDataSources={() => onViewChange("data-sources")}
         />
       </div>
     );
@@ -91,11 +95,17 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
       {/* Editor Header */}
       <header
         className="flex h-12 shrink-0 items-center justify-between px-4"
-        style={{ backgroundColor: "var(--color-bg-elevated)", borderBottom: "1px solid var(--color-border-default)" }}
+        style={{
+          backgroundColor: "var(--color-bg-elevated)",
+          borderBottom: "1px solid var(--color-border-default)",
+        }}
       >
         <div className="flex items-center gap-4">
           <button
-            onClick={() => { closeFile(); navigate('/excel-editor', { replace: true }); }}
+            onClick={() => {
+              closeFile();
+              navigate("/excel-editor", { replace: true });
+            }}
             className="flex items-center gap-1.5  hover:text-primary transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -116,7 +126,9 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           {session.isDirty && (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-warning/10 text-warning animate-pulse">
               <div className="h-1.5 w-1.5 rounded-full bg-warning" />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Unsaved Changes</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                Unsaved Changes
+              </span>
             </div>
           )}
 
@@ -134,7 +146,10 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           </button>
 
           <button
-            onClick={() => { closeFile(); navigate('/excel-editor', { replace: true }); }}
+            onClick={() => {
+              closeFile();
+              navigate("/excel-editor", { replace: true });
+            }}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-tertiary hover:bg-bg-hover hover:text-secondary transition-colors"
           >
             <X className="h-4 w-4" />
@@ -169,7 +184,9 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
               {activeSheet.rowCount > 5000 && (
                 <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg bg-warning px-3 py-2 text-white shadow-xl animate-in slide-in-from-right-4">
                   <AlertTriangle className="h-4 w-4" />
-                  <span className="text-xs font-medium">Large sheet ({activeSheet.rowCount} rows). Virtualization active.</span>
+                  <span className="text-xs font-medium">
+                    Large sheet ({activeSheet.rowCount} rows). Virtualization active.
+                  </span>
                 </div>
               )}
             </div>

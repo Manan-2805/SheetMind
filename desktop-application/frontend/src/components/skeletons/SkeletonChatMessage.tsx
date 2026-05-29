@@ -6,10 +6,7 @@ export function SkeletonChatMessage() {
           className="h-7 w-7 rounded-full shrink-0"
           style={{ backgroundColor: "var(--color-bg-hover)" }}
         />
-        <div
-          className="h-3 w-20 rounded"
-          style={{ backgroundColor: "var(--color-bg-hover)" }}
-        />
+        <div className="h-3 w-20 rounded" style={{ backgroundColor: "var(--color-bg-hover)" }} />
       </div>
       <div className="ml-9 flex flex-col gap-2">
         <div

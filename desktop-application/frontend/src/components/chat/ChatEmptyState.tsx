@@ -38,8 +38,8 @@ export function ChatEmptyState({ onSuggestion }: ChatEmptyStateProps) {
         className="text-body mb-10 text-center"
         style={{ color: "var(--color-text-secondary)", maxWidth: 420 }}
       >
-        Ask questions about your Excel data in plain English. Query, visualize,
-        and export results instantly.
+        Ask questions about your Excel data in plain English. Query, visualize, and export results
+        instantly.
       </p>
 
       <div className="flex w-full max-w-lg flex-col gap-2">
@@ -58,22 +58,17 @@ export function ChatEmptyState({ onSuggestion }: ChatEmptyStateProps) {
                 "var(--color-bg-hover)";
               (e.currentTarget as HTMLButtonElement).style.borderColor =
                 "var(--color-accent-border)";
-              (e.currentTarget as HTMLButtonElement).style.color =
-                "var(--color-text-primary)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                 "var(--color-bg-elevated)";
               (e.currentTarget as HTMLButtonElement).style.borderColor =
                 "var(--color-border-default)";
-              (e.currentTarget as HTMLButtonElement).style.color =
-                "var(--color-text-secondary)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
             }}
           >
-            <Icon
-              size={16}
-              style={{ color: "var(--color-accent)", flexShrink: 0 }}
-            />
+            <Icon size={16} style={{ color: "var(--color-accent)", flexShrink: 0 }} />
             {text}
           </button>
         ))}

@@ -1,11 +1,11 @@
+import { Eye, EyeOff, RefreshCw, Save, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, Save, RefreshCw, Zap } from "lucide-react";
 
 import {
   clearChatHistory,
   deleteAllFiles,
-  getSettings,
   getOllamaModels,
+  getSettings,
   testLLM,
   updateSettings,
 } from "@/api/settingsApi";
@@ -23,7 +23,7 @@ function parseTestErrorMessage(raw: string): string {
   const jsonMatch = raw.match(/"message":\s*"([^"]+)"/);
   if (jsonMatch) return jsonMatch[1];
   // Return raw but truncate if very long
-  return raw.length > 200 ? raw.slice(0, 200) + '...' : raw;
+  return raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
 }
 
 interface DestructiveButtonProps {
@@ -63,23 +63,33 @@ function DestructiveButton({ label, description, onConfirm }: DestructiveButtonP
         : label;
 
   return (
-    <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+    <div
+      className="flex items-center justify-between py-4"
+      style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+    >
       <div>
-        <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>{label}</p>
-        <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>{description}</p>
+        <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+          {label}
+        </p>
+        <p className="text-body mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>
+          {description}
+        </p>
       </div>
       <button
         onClick={handleClick}
-        onBlur={() => { if (!isLoading) { cancel(); setIsConfirming(false); } }}
+        onBlur={() => {
+          if (!isLoading) {
+            cancel();
+            setIsConfirming(false);
+          }
+        }}
         disabled={isLoading}
         className="rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-[120ms] active:scale-[0.97]"
         style={{
           border: isConfirming
             ? "1px solid var(--color-destructive)"
             : "1px solid var(--color-border-default)",
-          color: isConfirming
-            ? "var(--color-destructive)"
-            : "var(--color-text-secondary)",
+          color: isConfirming ? "var(--color-destructive)" : "var(--color-text-secondary)",
           backgroundColor: isConfirming ? "rgba(239, 68, 68, 0.1)" : "transparent",
         }}
       >
@@ -98,7 +108,11 @@ export function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
-  const [openaiModels, setOpenaiModels] = useState<string[]>(["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]);
+  const [openaiModels, setOpenaiModels] = useState<string[]>([
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4-turbo",
+  ]);
 
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
@@ -112,7 +126,10 @@ export function SettingsPage() {
   const [autoChartDisplay, setAutoChartDisplay] = useState<boolean>(false);
 
   const [isTesting, setIsTesting] = useState(false);
-  const [testStatus, setTestStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [testStatus, setTestStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const refreshOllamaModels = async () => {
@@ -169,7 +186,7 @@ export function SettingsPage() {
             setOpenaiModel(res.models[0]);
           }
         } else if (llmProvider === "ollama" && res.models) {
-          setOllamaModels(res.models.map(m => ({ name: m })));
+          setOllamaModels(res.models.map((m) => ({ name: m })));
         }
       } else {
         setTestStatus({ type: "error", message: res.message || "Connection failed." });
@@ -195,7 +212,11 @@ export function SettingsPage() {
         auto_sql_retry_max: autoSqlRetryMax,
         auto_chart_display: autoChartDisplay,
       });
-      addToast({ type: "success", title: "Settings Saved", description: "All changes have been persisted." });
+      addToast({
+        type: "success",
+        title: "Settings Saved",
+        description: "All changes have been persisted.",
+      });
     } catch (err: unknown) {
       const e = err as { message?: string };
       addToast({ type: "error", title: "Save Failed", description: e.message });
@@ -205,11 +226,21 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: "var(--color-bg-base)" }}>
-      <header className="flex shrink-0 items-center justify-between border-b px-8 py-5" style={{ borderColor: "var(--color-border-default)" }}>
+    <div
+      className="flex h-full flex-col overflow-hidden"
+      style={{ backgroundColor: "var(--color-bg-base)" }}
+    >
+      <header
+        className="flex shrink-0 items-center justify-between border-b px-8 py-5"
+        style={{ borderColor: "var(--color-border-default)" }}
+      >
         <div>
-          <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>Settings</h1>
-          <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>Configure your application preferences and AI providers.</p>
+          <h1 className="text-page-heading" style={{ color: "var(--color-text-primary)" }}>
+            Settings
+          </h1>
+          <p className="text-body mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+            Configure your application preferences and AI providers.
+          </p>
         </div>
         <button
           onClick={handleSaveAll}
@@ -228,17 +259,34 @@ export function SettingsPage() {
 
       <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin">
         <div className="mx-auto max-w-2xl space-y-8">
-
           {/* Appearance Section */}
           <section>
-            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Appearance</h3>
-            <div className="rounded-2xl p-6 space-y-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+            <h3
+              className="text-ui-label mb-4 uppercase tracking-wider"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              Appearance
+            </h3>
+            <div
+              className="rounded-2xl p-6 space-y-6"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-default)",
+              }}
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Theme</p>
-                  <p className="text-body text-xs" style={{ color: "var(--color-text-tertiary)" }}>Choose between light and dark mode</p>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+                    Theme
+                  </p>
+                  <p className="text-body text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                    Choose between light and dark mode
+                  </p>
                 </div>
-                <div className="flex gap-1 rounded-xl p-1" style={{ backgroundColor: "var(--color-bg-hover)" }}>
+                <div
+                  className="flex gap-1 rounded-xl p-1"
+                  style={{ backgroundColor: "var(--color-bg-hover)" }}
+                >
                   {(["light", "dark"] as Theme[]).map((t) => (
                     <button
                       key={t}
@@ -246,7 +294,8 @@ export function SettingsPage() {
                       className="rounded-lg px-4 py-1.5 text-xs font-medium capitalize transition-all"
                       style={{
                         backgroundColor: theme === t ? "var(--color-bg-elevated)" : "transparent",
-                        color: theme === t ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                        color:
+                          theme === t ? "var(--color-text-primary)" : "var(--color-text-secondary)",
                         boxShadow: theme === t ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
                       }}
                     >
@@ -260,28 +309,55 @@ export function SettingsPage() {
 
           {/* AI Provider Section */}
           <section>
-            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>AI Provider</h3>
-            <div className="rounded-2xl p-6 space-y-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
-
+            <h3
+              className="text-ui-label mb-4 uppercase tracking-wider"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              AI Provider
+            </h3>
+            <div
+              className="rounded-2xl p-6 space-y-6"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-default)",
+              }}
+            >
               <div>
-                <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>SELECT PROVIDER</label>
+                <label
+                  className="text-ui-label mb-2 block"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  SELECT PROVIDER
+                </label>
                 <select
                   value={llmProvider}
                   onChange={(e) => setLlmProvider(e.target.value as LLMProvider)}
                   className="w-full rounded-xl px-4 py-2.5 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
-                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
                 >
                   <option value="openai">OpenAI (Recommended)</option>
                   <option value="ollama">Ollama (Local)</option>
                 </select>
               </div>
 
-              <div className="h-px w-full" style={{ backgroundColor: "var(--color-border-subtle)" }} />
+              <div
+                className="h-px w-full"
+                style={{ backgroundColor: "var(--color-border-subtle)" }}
+              />
 
               {llmProvider === "openai" ? (
                 <div className="space-y-5">
                   <div>
-                    <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>OPENAI API KEY</label>
+                    <label
+                      className="text-ui-label mb-2 block"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      OPENAI API KEY
+                    </label>
                     <div className="relative">
                       <input
                         type={showApiKey ? "text" : "password"}
@@ -289,7 +365,11 @@ export function SettingsPage() {
                         onChange={(e) => setApiKey(e.target.value)}
                         placeholder="sk-..."
                         className="w-full rounded-xl px-4 py-2.5 pr-12 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
-                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                        style={{
+                          backgroundColor: "var(--color-bg-hover)",
+                          border: "1px solid var(--color-border-default)",
+                          color: "var(--color-text-primary)",
+                        }}
                       />
                       <button
                         onClick={() => setShowApiKey(!showApiKey)}
@@ -303,24 +383,46 @@ export function SettingsPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MODEL</label>
+                      <label
+                        className="text-ui-label mb-2 block"
+                        style={{ color: "var(--color-text-secondary)" }}
+                      >
+                        MODEL
+                      </label>
                       <select
                         value={openaiModel}
                         onChange={(e) => setOpenaiModel(e.target.value)}
                         className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
-                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                        style={{
+                          backgroundColor: "var(--color-bg-hover)",
+                          border: "1px solid var(--color-border-default)",
+                          color: "var(--color-text-primary)",
+                        }}
                       >
-                        {openaiModels.map((m: string) => <option key={m} value={m}>{m}</option>)}
+                        {openaiModels.map((m: string) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MAX TOKENS</label>
+                      <label
+                        className="text-ui-label mb-2 block"
+                        style={{ color: "var(--color-text-secondary)" }}
+                      >
+                        MAX TOKENS
+                      </label>
                       <input
                         type="number"
                         value={openaiMaxTokens}
                         onChange={(e) => setOpenaiMaxTokens(parseInt(e.target.value) || 4000)}
                         className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
-                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                        style={{
+                          backgroundColor: "var(--color-bg-hover)",
+                          border: "1px solid var(--color-border-default)",
+                          color: "var(--color-text-primary)",
+                        }}
                       />
                     </div>
                   </div>
@@ -328,38 +430,69 @@ export function SettingsPage() {
               ) : (
                 <div className="space-y-5">
                   <div>
-                    <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>OLLAMA SERVER URL</label>
+                    <label
+                      className="text-ui-label mb-2 block"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      OLLAMA SERVER URL
+                    </label>
                     <input
                       type="text"
                       value={ollamaUrl}
                       onChange={(e) => setOllamaUrl(e.target.value)}
                       placeholder="http://localhost:11434"
                       className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
-                      style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                      style={{
+                        backgroundColor: "var(--color-bg-hover)",
+                        border: "1px solid var(--color-border-default)",
+                        color: "var(--color-text-primary)",
+                      }}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MODEL</label>
+                      <label
+                        className="text-ui-label mb-2 block"
+                        style={{ color: "var(--color-text-secondary)" }}
+                      >
+                        MODEL
+                      </label>
                       <select
                         value={ollamaSelectedModel}
                         onChange={(e) => setOllamaSelectedModel(e.target.value)}
                         className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
-                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                        style={{
+                          backgroundColor: "var(--color-bg-hover)",
+                          border: "1px solid var(--color-border-default)",
+                          color: "var(--color-text-primary)",
+                        }}
                       >
                         <option value="">Select a model</option>
-                        {ollamaModels.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                        {ollamaModels.map((m) => (
+                          <option key={m.name} value={m.name}>
+                            {m.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="text-ui-label mb-2 block" style={{ color: "var(--color-text-secondary)" }}>MAX TOKENS</label>
+                      <label
+                        className="text-ui-label mb-2 block"
+                        style={{ color: "var(--color-text-secondary)" }}
+                      >
+                        MAX TOKENS
+                      </label>
                       <input
                         type="number"
                         value={ollamaMaxTokens}
                         onChange={(e) => setOllamaMaxTokens(parseInt(e.target.value) || 4000)}
                         className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
-                        style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                        style={{
+                          backgroundColor: "var(--color-bg-hover)",
+                          border: "1px solid var(--color-border-default)",
+                          color: "var(--color-text-primary)",
+                        }}
                       />
                     </div>
                   </div>
@@ -377,7 +510,14 @@ export function SettingsPage() {
                     color: "var(--color-text-primary)",
                   }}
                 >
-                  {isTesting ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} className={testStatus?.type === 'success' ? 'text-success' : ''} />}
+                  {isTesting ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <Zap
+                      size={16}
+                      className={testStatus?.type === "success" ? "text-success" : ""}
+                    />
+                  )}
                   {isTesting ? "Verifying Connectivity..." : "Test Connection & Fetch Models"}
                 </button>
 
@@ -385,12 +525,20 @@ export function SettingsPage() {
                   <div
                     className="rounded-xl px-4 py-3 text-xs font-medium animate-in fade-in slide-in-from-top-2"
                     style={{
-                      backgroundColor: testStatus.type === "success" ? "var(--color-success-subtle)" : "var(--color-destructive-subtle)",
-                      color: testStatus.type === "success" ? "var(--color-success)" : "var(--color-destructive)",
-                      border: `1px solid ${testStatus.type === "success" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}`
+                      backgroundColor:
+                        testStatus.type === "success"
+                          ? "var(--color-success-subtle)"
+                          : "var(--color-destructive-subtle)",
+                      color:
+                        testStatus.type === "success"
+                          ? "var(--color-success)"
+                          : "var(--color-destructive)",
+                      border: `1px solid ${testStatus.type === "success" ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"}`,
                     }}
                   >
-                    {testStatus.type === 'error' ? parseTestErrorMessage(testStatus.message) : testStatus.message}
+                    {testStatus.type === "error"
+                      ? parseTestErrorMessage(testStatus.message)
+                      : testStatus.message}
                   </div>
                 )}
               </div>
@@ -399,13 +547,34 @@ export function SettingsPage() {
 
           {/* Chat Behavior Section */}
           <section>
-            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Chat Behavior</h3>
-            <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+            <h3
+              className="text-ui-label mb-4 uppercase tracking-wider"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              Chat Behavior
+            </h3>
+            <div
+              className="rounded-2xl px-6"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-default)",
+              }}
+            >
               {/* Result Row Limit */}
-              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+              <div
+                className="flex items-center justify-between py-4"
+                style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+              >
                 <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Result Row Limit</p>
-                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Max rows returned per query</p>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+                    Result Row Limit
+                  </p>
+                  <p
+                    className="text-body mt-0.5 text-xs"
+                    style={{ color: "var(--color-text-tertiary)" }}
+                  >
+                    Max rows returned per query
+                  </p>
                 </div>
                 <input
                   type="number"
@@ -414,15 +583,29 @@ export function SettingsPage() {
                   value={resultRowLimit}
                   onChange={(e) => setResultRowLimit(parseInt(e.target.value) || 500)}
                   className="w-20 rounded-lg px-2 py-1.5 text-body outline-none text-center"
-                  style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                  style={{
+                    backgroundColor: "var(--color-bg-hover)",
+                    border: "1px solid var(--color-border-default)",
+                    color: "var(--color-text-primary)",
+                  }}
                 />
               </div>
 
               {/* Auto SQL Retry */}
-              <div className="flex items-center justify-between py-4" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+              <div
+                className="flex items-center justify-between py-4"
+                style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+              >
                 <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Auto SQL Error Retry</p>
-                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Automatically correct SQL syntax errors and retry query execution</p>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+                    Auto SQL Error Retry
+                  </p>
+                  <p
+                    className="text-body mt-0.5 text-xs"
+                    style={{ color: "var(--color-text-tertiary)" }}
+                  >
+                    Automatically correct SQL syntax errors and retry query execution
+                  </p>
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center">
                   <input
@@ -440,10 +623,20 @@ export function SettingsPage() {
 
               {/* Max Retry Attempts */}
               {autoSqlRetry && (
-                <div className="flex items-center justify-between py-4 animate-in fade-in slide-in-from-top-1" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+                <div
+                  className="flex items-center justify-between py-4 animate-in fade-in slide-in-from-top-1"
+                  style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
+                >
                   <div>
-                    <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Max Retry Attempts</p>
-                    <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Number of automatic correction attempts</p>
+                    <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+                      Max Retry Attempts
+                    </p>
+                    <p
+                      className="text-body mt-0.5 text-xs"
+                      style={{ color: "var(--color-text-tertiary)" }}
+                    >
+                      Number of automatic correction attempts
+                    </p>
                   </div>
                   <input
                     type="number"
@@ -452,7 +645,11 @@ export function SettingsPage() {
                     value={autoSqlRetryMax}
                     onChange={(e) => setAutoSqlRetryMax(parseInt(e.target.value) || 3)}
                     className="w-16 rounded-lg px-2 py-1.5 text-body outline-none text-center"
-                    style={{ backgroundColor: "var(--color-bg-hover)", border: "1px solid var(--color-border-default)", color: "var(--color-text-primary)" }}
+                    style={{
+                      backgroundColor: "var(--color-bg-hover)",
+                      border: "1px solid var(--color-border-default)",
+                      color: "var(--color-text-primary)",
+                    }}
                   />
                 </div>
               )}
@@ -460,8 +657,15 @@ export function SettingsPage() {
               {/* Auto-Generate Chart */}
               <div className="flex items-center justify-between py-4">
                 <div>
-                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>Auto-Generate Charts</p>
-                  <p className="text-body mt-0.5 text-xs" style={{ color: "var(--color-text-tertiary)" }}>Suggest and display chart visualization above result tables</p>
+                  <p className="text-body-em" style={{ color: "var(--color-text-primary)" }}>
+                    Auto-Generate Charts
+                  </p>
+                  <p
+                    className="text-body mt-0.5 text-xs"
+                    style={{ color: "var(--color-text-tertiary)" }}
+                  >
+                    Suggest and display chart visualization above result tables
+                  </p>
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center">
                   <input
@@ -481,23 +685,45 @@ export function SettingsPage() {
 
           {/* Data & Performance Section */}
           <section>
-            <h3 className="text-ui-label mb-4 uppercase tracking-wider" style={{ color: "var(--color-text-tertiary)" }}>Data & Performance</h3>
-            <div className="rounded-2xl px-6" style={{ backgroundColor: "var(--color-bg-elevated)", border: "1px solid var(--color-border-default)" }}>
+            <h3
+              className="text-ui-label mb-4 uppercase tracking-wider"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              Data & Performance
+            </h3>
+            <div
+              className="rounded-2xl px-6"
+              style={{
+                backgroundColor: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border-default)",
+              }}
+            >
               <DestructiveButton
                 label="Clear Chat History"
                 description="Delete all conversation data permanently"
-                onConfirm={async () => { await clearChatHistory(); addToast({ type: "success", title: "History Cleared" }); }}
+                onConfirm={async () => {
+                  await clearChatHistory();
+                  addToast({ type: "success", title: "History Cleared" });
+                }}
               />
               <DestructiveButton
                 label="Delete All Files"
                 description="Wipe all uploaded datasets and partitions"
-                onConfirm={async () => { await deleteAllFiles(); addToast({ type: "success", title: "Files Deleted" }); }}
+                onConfirm={async () => {
+                  await deleteAllFiles();
+                  addToast({ type: "success", title: "Files Deleted" });
+                }}
               />
             </div>
           </section>
 
           <div className="pb-12 pt-4 text-center">
-            <p className="text-[10px] uppercase tracking-widest" style={{ color: "var(--color-text-tertiary)" }}>SheetMind Production v1.0.4</p>
+            <p
+              className="text-[10px] uppercase tracking-widest"
+              style={{ color: "var(--color-text-tertiary)" }}
+            >
+              SheetMind Production v1.0.4
+            </p>
           </div>
         </div>
       </div>

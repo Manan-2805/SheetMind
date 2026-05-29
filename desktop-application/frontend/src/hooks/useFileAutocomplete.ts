@@ -40,25 +40,22 @@ export function useFileAutocomplete(): UseFileAutocompleteReturn {
     fetchFiles();
   }, [fetchFiles]);
 
-  const detectTrigger = useCallback(
-    (text: string, cursorPos: number) => {
-      const beforeCursor = text.slice(0, cursorPos);
-      const lastHash = beforeCursor.lastIndexOf("#");
-      if (lastHash === -1) {
-        setShowAutocomplete(false);
-        return;
-      }
-      const afterHash = beforeCursor.slice(lastHash + 1);
-      if (/\s/.test(afterHash)) {
-        setShowAutocomplete(false);
-        return;
-      }
-      setTriggerIndex(lastHash);
-      setAutocompleteQuery(afterHash);
-      setShowAutocomplete(true);
-    },
-    []
-  );
+  const detectTrigger = useCallback((text: string, cursorPos: number) => {
+    const beforeCursor = text.slice(0, cursorPos);
+    const lastHash = beforeCursor.lastIndexOf("#");
+    if (lastHash === -1) {
+      setShowAutocomplete(false);
+      return;
+    }
+    const afterHash = beforeCursor.slice(lastHash + 1);
+    if (/\s/.test(afterHash)) {
+      setShowAutocomplete(false);
+      return;
+    }
+    setTriggerIndex(lastHash);
+    setAutocompleteQuery(afterHash);
+    setShowAutocomplete(true);
+  }, []);
 
   const dismiss = useCallback(() => setShowAutocomplete(false), []);
 

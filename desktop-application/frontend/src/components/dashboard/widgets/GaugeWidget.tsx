@@ -1,5 +1,5 @@
-import React from 'react';
-import type { DashboardWidget, WidgetResult, ColumnConfig } from '../../../types/dashboard';
+import type React from "react";
+import type { ColumnConfig, DashboardWidget, WidgetResult } from "../../../types/dashboard";
 
 interface GaugeWidgetProps {
   widget: DashboardWidget;
@@ -7,14 +7,22 @@ interface GaugeWidgetProps {
 }
 
 export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ widget, result }) => {
-  const config: ColumnConfig = JSON.parse(widget.column_config_json || '{}');
+  const config: ColumnConfig = JSON.parse(widget.column_config_json || "{}");
 
   if (result?.error) {
-    return <div className="p-4 text-red-500 h-full flex items-center justify-center text-sm">{result.error}</div>;
+    return (
+      <div className="p-4 text-red-500 h-full flex items-center justify-center text-sm">
+        {result.error}
+      </div>
+    );
   }
 
   if (!result?.data || !result.data.rows) {
-    return <div className="p-4 text-muted-foreground h-full flex items-center justify-center text-sm">Loading...</div>;
+    return (
+      <div className="p-4 text-muted-foreground h-full flex items-center justify-center text-sm">
+        Loading...
+      </div>
+    );
   }
 
   const rows = result.data.rows;

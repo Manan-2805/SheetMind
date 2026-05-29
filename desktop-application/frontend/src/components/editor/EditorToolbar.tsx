@@ -1,6 +1,5 @@
-import { useRef } from 'react';
-
-import { MinusSquare, PlusSquare } from 'lucide-react';
+import { MinusSquare, PlusSquare } from "lucide-react";
+import { useRef } from "react";
 
 interface EditorToolbarProps {
   onAddRow: () => void;
@@ -20,13 +19,17 @@ export function EditorToolbar({
   const freezeRRef = useRef<HTMLInputElement>(null);
   const freezeCRef = useRef<HTMLInputElement>(null);
 
-  const toolbarBtnClass = "flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-bg-hover active:scale-95";
+  const toolbarBtnClass =
+    "flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-bg-hover active:scale-95";
   const separatorClass = "mx-1 h-4 w-[1px] bg-border-default";
 
   return (
     <div
       className="flex h-10 items-center gap-1 px-3"
-      style={{ backgroundColor: "var(--color-bg-elevated)", borderBottom: "1px solid var(--color-border-default)" }}
+      style={{
+        backgroundColor: "var(--color-bg-elevated)",
+        borderBottom: "1px solid var(--color-border-default)",
+      }}
     >
       {/* Freeze Controls */}
       <div className="flex items-center gap-1.5 ml-1">
@@ -49,7 +52,12 @@ export function EditorToolbar({
           className="h-7 w-8 rounded border border-border-default bg-bg-base px-1 text-xs outline-none"
         />
         <button
-          onClick={() => onFreeze(parseInt(freezeRRef.current?.value || '0'), parseInt(freezeCRef.current?.value || '0'))}
+          onClick={() =>
+            onFreeze(
+              parseInt(freezeRRef.current?.value || "0"),
+              parseInt(freezeCRef.current?.value || "0")
+            )
+          }
           className="text-[11px] font-medium text-accent hover:underline px-1"
         >
           Apply

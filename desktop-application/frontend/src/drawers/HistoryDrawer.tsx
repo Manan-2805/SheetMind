@@ -1,6 +1,14 @@
+import {
+  ChevronDown,
+  ChevronRight,
+  Edit2,
+  Folder,
+  FolderOpen,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-
-import { ChevronDown, ChevronRight, Edit2, Folder, FolderOpen, Search, Star, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { getSessions } from "@/api/chatApi";
@@ -8,12 +16,7 @@ import { SkeletonText } from "@/components/skeletons/SkeletonText";
 import { Drawer } from "@/components/ui/Drawer";
 import { useToast } from "@/hooks/useToast";
 import type { ChatSession } from "@/types/ChatMessage";
-import {
-  formatRelativeTime,
-  isToday,
-  isWithinLastWeek,
-  isYesterday,
-} from "@/utils/formatDate";
+import { formatRelativeTime, isToday, isWithinLastWeek, isYesterday } from "@/utils/formatDate";
 
 interface HistoryDrawerProps {
   open: boolean;
@@ -69,11 +72,11 @@ export function HistoryDrawer({
   }, [open, addToast]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const filtered = sessions.filter((s) =>
-    s.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = sessions.filter((s) => s.title.toLowerCase().includes(search.toLowerCase()));
   const favorites = filtered.filter((s) => s.is_favorite);
   const nonFavorites = filtered.filter((s) => !s.is_favorite);
   const groups = groupSessions(nonFavorites);
@@ -82,14 +85,8 @@ export function HistoryDrawer({
   return (
     <Drawer open={open} onClose={onClose} side="left" width={240}>
       <div className="flex h-full flex-col">
-        <div
-          className="px-3 py-3"
-          style={{ borderBottom: "1px solid var(--color-border-subtle)" }}
-        >
-          <p
-            className="text-panel-heading mb-3"
-            style={{ color: "var(--color-text-primary)" }}
-          >
+        <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
+          <p className="text-panel-heading mb-3" style={{ color: "var(--color-text-primary)" }}>
             History
           </p>
           <div className="relative">
@@ -161,7 +158,7 @@ export function HistoryDrawer({
                       )}
                     </div>
                   </div>
-                  
+
                   {isFavoritesExpanded && (
                     <div className="mt-1 flex flex-col gap-0.5 pl-1.5 border-l border-white/[0.04] ml-3.5">
                       {favorites.map((session) => {
@@ -182,7 +179,10 @@ export function HistoryDrawer({
                             }}
                             onMouseEnter={() => setHoveredId(session.id)}
                             onMouseLeave={() => setHoveredId(null)}
-                            onClick={() => { onSelectSession(session.id); onClose(); }}
+                            onClick={() => {
+                              onSelectSession(session.id);
+                              onClose();
+                            }}
                           >
                             <span
                               className="flex-1 truncate px-2 text-body"
@@ -198,32 +198,60 @@ export function HistoryDrawer({
                               <div className="flex shrink-0 items-center gap-0.5 pr-1">
                                 <button
                                   className="rounded p-1 transition-colors duration-[120ms]"
-                                  style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                                  style={{
+                                    color: session.is_favorite
+                                      ? "var(--color-accent)"
+                                      : "var(--color-text-tertiary)",
+                                  }}
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                      const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
-                                      setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                      const updated = await import("@/api/chatApi").then((m) =>
+                                        m.updateSession(session.id, {
+                                          is_favorite: !session.is_favorite,
+                                        })
+                                      );
+                                      setSessions((prev) =>
+                                        prev.map((s) => (s.id === session.id ? updated : s))
+                                      );
                                     } catch {
-                                      addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
+                                      addToast({
+                                        type: "error",
+                                        title: "Error",
+                                        description: "Failed to update favorite status",
+                                      });
                                     }
                                   }}
                                   aria-label="Star session"
                                 >
-                                  <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
+                                  <Star
+                                    size={12}
+                                    fill={session.is_favorite ? "currentColor" : "none"}
+                                  />
                                 </button>
                                 <button
                                   className="rounded p-1 transition-colors duration-[120ms]"
                                   style={{ color: "var(--color-text-tertiary)" }}
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    const newTitle = prompt("Enter new title for session:", session.title);
+                                    const newTitle = prompt(
+                                      "Enter new title for session:",
+                                      session.title
+                                    );
                                     if (newTitle && newTitle !== session.title) {
                                       try {
-                                        const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
-                                        setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                        const updated = await import("@/api/chatApi").then((m) =>
+                                          m.updateSession(session.id, { title: newTitle })
+                                        );
+                                        setSessions((prev) =>
+                                          prev.map((s) => (s.id === session.id ? updated : s))
+                                        );
                                       } catch {
-                                        addToast({ type: "error", title: "Error", description: "Failed to rename session" });
+                                        addToast({
+                                          type: "error",
+                                          title: "Error",
+                                          description: "Failed to rename session",
+                                        });
                                       }
                                     }
                                   }}
@@ -238,13 +266,21 @@ export function HistoryDrawer({
                                     e.stopPropagation();
                                     if (confirm("Are you sure you want to delete this session?")) {
                                       try {
-                                        await import("@/api/chatApi").then(m => m.deleteSession(session.id));
-                                        setSessions(prev => prev.filter(s => s.id !== session.id));
+                                        await import("@/api/chatApi").then((m) =>
+                                          m.deleteSession(session.id)
+                                        );
+                                        setSessions((prev) =>
+                                          prev.filter((s) => s.id !== session.id)
+                                        );
                                         if (activeSessionId === session.id) {
                                           navigate("/", { replace: true });
                                         }
                                       } catch {
-                                        addToast({ type: "error", title: "Error", description: "Failed to delete session" });
+                                        addToast({
+                                          type: "error",
+                                          title: "Error",
+                                          description: "Failed to delete session",
+                                        });
                                       }
                                     }
                                   }}
@@ -298,7 +334,10 @@ export function HistoryDrawer({
                           }}
                           onMouseEnter={() => setHoveredId(session.id)}
                           onMouseLeave={() => setHoveredId(null)}
-                          onClick={() => { onSelectSession(session.id); onClose(); }}
+                          onClick={() => {
+                            onSelectSession(session.id);
+                            onClose();
+                          }}
                         >
                           <span
                             className="flex-1 truncate px-2 text-body"
@@ -314,37 +353,65 @@ export function HistoryDrawer({
                             <div className="flex shrink-0 items-center gap-0.5 pr-1">
                               <button
                                 className="rounded p-1 transition-colors duration-[120ms]"
-                                style={{ color: session.is_favorite ? "var(--color-accent)" : "var(--color-text-tertiary)" }}
+                                style={{
+                                  color: session.is_favorite
+                                    ? "var(--color-accent)"
+                                    : "var(--color-text-tertiary)",
+                                }}
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { is_favorite: !session.is_favorite }));
-                                    setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                    const updated = await import("@/api/chatApi").then((m) =>
+                                      m.updateSession(session.id, {
+                                        is_favorite: !session.is_favorite,
+                                      })
+                                    );
+                                    setSessions((prev) =>
+                                      prev.map((s) => (s.id === session.id ? updated : s))
+                                    );
                                   } catch {
-                                    addToast({ type: "error", title: "Error", description: "Failed to update favorite status" });
+                                    addToast({
+                                      type: "error",
+                                      title: "Error",
+                                      description: "Failed to update favorite status",
+                                    });
                                   }
                                 }}
                                 aria-label="Star session"
                               >
-                                <Star size={12} fill={session.is_favorite ? "currentColor" : "none"} />
+                                <Star
+                                  size={12}
+                                  fill={session.is_favorite ? "currentColor" : "none"}
+                                />
                               </button>
                               <button
                                 className="rounded p-1 transition-colors duration-[120ms]"
                                 style={{ color: "var(--color-text-tertiary)" }}
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  const newTitle = prompt("Enter new title for session:", session.title);
+                                  const newTitle = prompt(
+                                    "Enter new title for session:",
+                                    session.title
+                                  );
                                   if (newTitle && newTitle !== session.title) {
                                     try {
-                                      const updated = await import("@/api/chatApi").then(m => m.updateSession(session.id, { title: newTitle }));
-                                      setSessions(prev => prev.map(s => s.id === session.id ? updated : s));
+                                      const updated = await import("@/api/chatApi").then((m) =>
+                                        m.updateSession(session.id, { title: newTitle })
+                                      );
+                                      setSessions((prev) =>
+                                        prev.map((s) => (s.id === session.id ? updated : s))
+                                      );
                                     } catch {
-                                      addToast({ type: "error", title: "Error", description: "Failed to rename session" });
+                                      addToast({
+                                        type: "error",
+                                        title: "Error",
+                                        description: "Failed to rename session",
+                                      });
                                     }
                                   }
                                 }}
                                 aria-label="Rename session"
-                               >
+                              >
                                 <Edit2 size={12} />
                               </button>
                               <button
@@ -354,13 +421,21 @@ export function HistoryDrawer({
                                   e.stopPropagation();
                                   if (confirm("Are you sure you want to delete this session?")) {
                                     try {
-                                      await import("@/api/chatApi").then(m => m.deleteSession(session.id));
-                                      setSessions(prev => prev.filter(s => s.id !== session.id));
+                                      await import("@/api/chatApi").then((m) =>
+                                        m.deleteSession(session.id)
+                                      );
+                                      setSessions((prev) =>
+                                        prev.filter((s) => s.id !== session.id)
+                                      );
                                       if (activeSessionId === session.id) {
                                         navigate("/", { replace: true });
                                       }
                                     } catch {
-                                      addToast({ type: "error", title: "Error", description: "Failed to delete session" });
+                                      addToast({
+                                        type: "error",
+                                        title: "Error",
+                                        description: "Failed to delete session",
+                                      });
                                     }
                                   }
                                 }}

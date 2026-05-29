@@ -25,9 +25,7 @@ function handleError(error: unknown): never {
 
 export async function getSessions(): Promise<ChatSession[]> {
   try {
-    const res: AxiosResponse<ChatSession[]> = await client.get(
-      "/chat/sessions"
-    );
+    const res: AxiosResponse<ChatSession[]> = await client.get("/chat/sessions");
     return res.data;
   } catch (error) {
     handleError(error);
@@ -71,7 +69,10 @@ export async function sendMessage(
   }
 }
 
-export async function updateSession(sessionId: string, data: { title?: string, is_favorite?: boolean }): Promise<ChatSession> {
+export async function updateSession(
+  sessionId: string,
+  data: { title?: string; is_favorite?: boolean }
+): Promise<ChatSession> {
   try {
     const res: AxiosResponse<ChatSession> = await client.put(`/chat/sessions/${sessionId}`, data);
     return res.data;
@@ -111,7 +112,13 @@ export async function regenerateMessage(
   try {
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/regenerate`,
-      { content, referenced_files: referencedFiles, reason, instruction, parent_user_message_id: parentUserMessageId }
+      {
+        content,
+        referenced_files: referencedFiles,
+        reason,
+        instruction,
+        parent_user_message_id: parentUserMessageId,
+      }
     );
     return res.data;
   } catch (error) {
@@ -121,10 +128,9 @@ export async function regenerateMessage(
 
 export async function getMessageData(messageId: string, page?: number): Promise<ResultTable> {
   try {
-    const res: AxiosResponse<ResultTable> = await client.get(
-      `/chat/messages/${messageId}/data`,
-      { params: page ? { page } : undefined }
-    );
+    const res: AxiosResponse<ResultTable> = await client.get(`/chat/messages/${messageId}/data`, {
+      params: page ? { page } : undefined,
+    });
     return res.data;
   } catch (error) {
     handleError(error);

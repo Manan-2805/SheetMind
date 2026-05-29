@@ -103,7 +103,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     },
     icon: path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
     title: "SheetMind"
@@ -132,6 +133,20 @@ function createWindow() {
 app.whenReady().then(async () => {
   try {
     await startBackend();
+    
+    // Set up React DevTools in development mode
+    if (!app.isPackaged) {
+      try {
+        const installer = require("electron-devtools-installer");
+        const installExtension = installer.default;
+        const { REACT_DEVELOPER_TOOLS } = installer;
+        
+        const name = await installExtension(REACT_DEVELOPER_TOOLS);
+        console.log(`[Electron] Added extension: ${name}`);
+      } catch (err) {
+        console.error("[Electron] Failed to install React DevTools:", err);
+      }
+    }
     
     // Give backend 1.5 seconds to start up uvicorn completely
     setTimeout(() => {

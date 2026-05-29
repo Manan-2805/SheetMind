@@ -47,10 +47,7 @@ export async function updateSettings(data: Partial<Settings>): Promise<Settings>
 
 export async function testLLM(data: TestLLMRequest): Promise<TestLLMResponse> {
   try {
-    const res: AxiosResponse<TestLLMResponse> = await client.post(
-      "/settings/test-llm",
-      data
-    );
+    const res: AxiosResponse<TestLLMResponse> = await client.post("/settings/test-llm", data);
     return res.data;
   } catch (error) {
     handleError(error);
@@ -66,14 +63,11 @@ export async function getOllamaModels(): Promise<{ models: { name: string }[] }>
   }
 }
 
-export async function pullOllamaModel(
-  modelName: string
-): Promise<PullModelResponse> {
+export async function pullOllamaModel(modelName: string): Promise<PullModelResponse> {
   try {
-    const res: AxiosResponse<PullModelResponse> = await client.post(
-      "/settings/pull-ollama-model",
-      { model_name: modelName }
-    );
+    const res: AxiosResponse<PullModelResponse> = await client.post("/settings/pull-ollama-model", {
+      model_name: modelName,
+    });
     return res.data;
   } catch (error) {
     handleError(error);

@@ -26,7 +26,11 @@ export function useChat() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [followups, setFollowups] = useState<string[]>([]);
-  const [sqlRetryStatus, setSqlRetryStatus] = useState<{ attempt: number; max: number; error?: string } | null>(null);
+  const [sqlRetryStatus, setSqlRetryStatus] = useState<{
+    attempt: number;
+    max: number;
+    error?: string;
+  } | null>(null);
 
   const activeSessionIdRef = useRef<string | null>(null);
 
@@ -46,18 +50,12 @@ export function useChat() {
           error: payload.error,
         });
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === TYPING_ID
-              ? { ...msg, typing_status: "fixing_sql" }
-              : msg
-          )
+          prev.map((msg) => (msg.id === TYPING_ID ? { ...msg, typing_status: "fixing_sql" } : msg))
         );
       } else if (payload.type === "chat_status") {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === TYPING_ID
-              ? { ...msg, typing_status: payload.status }
-              : msg
+            msg.id === TYPING_ID ? { ...msg, typing_status: payload.status } : msg
           )
         );
       }
@@ -193,10 +191,10 @@ export function useChat() {
           prev.map((s) =>
             s.id === sessionId
               ? {
-                ...s,
-                updated_at: new Date().toISOString(),
-                title: response.session_title ?? s.title,
-              }
+                  ...s,
+                  updated_at: new Date().toISOString(),
+                  title: response.session_title ?? s.title,
+                }
               : s
           )
         );
@@ -215,126 +213,141 @@ export function useChat() {
     [activeSessionId, addToast, navigate]
   );
 
-  const deleteMessageBranchHandler = useCallback(async (messageId: string) => {
-    if (!activeSessionId) return;
-    try {
-      await deleteMessageBranch(activeSessionId, messageId);
-      const msgToDelete = messages.find(m => m.id === messageId);
-      if (msgToDelete) {
-        setMessages(prev => prev.filter(m => m.created_at < msgToDelete.created_at));
+  const deleteMessageBranchHandler = useCallback(
+    async (messageId: string) => {
+      if (!activeSessionId) return;
+      try {
+        await deleteMessageBranch(activeSessionId, messageId);
+        const msgToDelete = messages.find((m) => m.id === messageId);
+        if (msgToDelete) {
+          setMessages((prev) => prev.filter((m) => m.created_at < msgToDelete.created_at));
+        }
+        addToast({ type: "success", title: "Deleted", description: "Message branch removed" });
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        addToast({ type: "error", title: "Error", description: e.message ?? "Failed to delete" });
       }
-      addToast({ type: "success", title: "Deleted", description: "Message branch removed" });
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to delete" });
-    }
-  }, [activeSessionId, messages, addToast]);
+    },
+    [activeSessionId, messages, addToast]
+  );
 
-  const editMessageHandler = useCallback(async (messageId: string, content: string, referencedFiles: string[]) => {
-    if (!activeSessionId) return;
+  const editMessageHandler = useCallback(
+    async (messageId: string, content: string, referencedFiles: string[]) => {
+      if (!activeSessionId) return;
 
-    const typingMessage: ChatMessage = {
-      id: TYPING_ID,
-      session_id: activeSessionId,
-      role: "assistant",
-      content: "",
-      created_at: new Date().toISOString(),
-      is_typing: true,
-      parent_user_message_id: messageId,
-    };
+      const typingMessage: ChatMessage = {
+        id: TYPING_ID,
+        session_id: activeSessionId,
+        role: "assistant",
+        content: "",
+        created_at: new Date().toISOString(),
+        is_typing: true,
+        parent_user_message_id: messageId,
+      };
 
-    const targetMsg = messages.find(m => m.id === messageId);
-    if (!targetMsg) return;
+      const targetMsg = messages.find((m) => m.id === messageId);
+      if (!targetMsg) return;
 
-    // Optimistically update: delete everything after targetMsg time and add typing
-    setMessages(prev => [
-      ...prev.filter(m => m.created_at < targetMsg.created_at),
-      { ...targetMsg, content, referenced_files: referencedFiles, created_at: new Date().toISOString() },
-      typingMessage
-    ]);
-    setFollowups([]);
-    setSqlRetryStatus(null);
-    setIsSending(true);
-
-    try {
-      const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
+      // Optimistically update: delete everything after targetMsg time and add typing
+      setMessages((prev) => [
+        ...prev.filter((m) => m.created_at < targetMsg.created_at),
+        {
+          ...targetMsg,
+          content,
+          referenced_files: referencedFiles,
+          created_at: new Date().toISOString(),
+        },
+        typingMessage,
+      ]);
+      setFollowups([]);
       setSqlRetryStatus(null);
-      setMessages(prev => {
-        const updated = prev
-          .filter(m => m.id !== TYPING_ID)
-          .map(m => {
-            if (m.id === messageId && response.parent_user_message_id) {
-              return { ...m, id: response.parent_user_message_id };
-            }
-            return m;
-          });
-        return updated.concat(response);
-      });
-      if (response.followups) {
-        setFollowups(response.followups);
+      setIsSending(true);
+
+      try {
+        const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
+        setSqlRetryStatus(null);
+        setMessages((prev) => {
+          const updated = prev
+            .filter((m) => m.id !== TYPING_ID)
+            .map((m) => {
+              if (m.id === messageId && response.parent_user_message_id) {
+                return { ...m, id: response.parent_user_message_id };
+              }
+              return m;
+            });
+          return updated.concat(response);
+        });
+        if (response.followups) {
+          setFollowups(response.followups);
+        }
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
+        addToast({ type: "error", title: "Error", description: e.message ?? "Failed to edit" });
+        // Re-load to sync state
+        const data = await getMessages(activeSessionId);
+        setMessages(data);
+      } finally {
+        setIsSending(false);
       }
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      setMessages(prev => prev.filter(m => m.id !== TYPING_ID));
-      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to edit" });
-      // Re-load to sync state
-      const data = await getMessages(activeSessionId);
-      setMessages(data);
-    } finally {
-      setIsSending(false);
-    }
-  }, [activeSessionId, messages, addToast]);
+    },
+    [activeSessionId, messages, addToast]
+  );
 
-  const regenerateResponseHandler = useCallback(async (msg: ChatMessage, reason: string, instruction: string) => {
-    if (!activeSessionId) return;
+  const regenerateResponseHandler = useCallback(
+    async (msg: ChatMessage, reason: string, instruction: string) => {
+      if (!activeSessionId) return;
 
-    // Find the actual user message that this assistant message belongs to
-    const parentId = msg.role === "user" ? msg.id : msg.parent_user_message_id;
-    if (!parentId) return;
+      // Find the actual user message that this assistant message belongs to
+      const parentId = msg.role === "user" ? msg.id : msg.parent_user_message_id;
+      if (!parentId) return;
 
-    const typingMessage: ChatMessage = {
-      id: TYPING_ID,
-      session_id: activeSessionId,
-      role: "assistant",
-      content: "",
-      created_at: new Date(Date.now() + 1000).toISOString(), // Ensure it's after the user message
-      is_typing: true,
-      parent_user_message_id: parentId,
-    };
+      const typingMessage: ChatMessage = {
+        id: TYPING_ID,
+        session_id: activeSessionId,
+        role: "assistant",
+        content: "",
+        created_at: new Date(Date.now() + 1000).toISOString(), // Ensure it's after the user message
+        is_typing: true,
+        parent_user_message_id: parentId,
+      };
 
-    setMessages(prev => [
-      ...prev.filter(m => m.id !== TYPING_ID),
-      typingMessage
-    ]);
-    setFollowups([]);
-    setSqlRetryStatus(null);
-    setIsSending(true);
-
-    try {
-      const response = await regenerateMessage(
-        activeSessionId,
-        msg.content,
-        msg.referenced_files ?? [],
-        reason,
-        instruction,
-        parentId // Correctly pass the user message ID
-      );
+      setMessages((prev) => [...prev.filter((m) => m.id !== TYPING_ID), typingMessage]);
+      setFollowups([]);
       setSqlRetryStatus(null);
-      setMessages(prev => prev.filter(m => m.id !== TYPING_ID).concat(response));
-      if (response.followups) {
-        setFollowups(response.followups);
+      setIsSending(true);
+
+      try {
+        const response = await regenerateMessage(
+          activeSessionId,
+          msg.content,
+          msg.referenced_files ?? [],
+          reason,
+          instruction,
+          parentId // Correctly pass the user message ID
+        );
+        setSqlRetryStatus(null);
+        setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID).concat(response));
+        if (response.followups) {
+          setFollowups(response.followups);
+        }
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
+        addToast({
+          type: "error",
+          title: "Error",
+          description: e.message ?? "Failed to regenerate",
+        });
+        // Reload messages to ensure sync if something went wrong
+        const data = await getMessages(activeSessionId);
+        setMessages(data);
+      } finally {
+        setIsSending(false);
       }
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      setMessages(prev => prev.filter(m => m.id !== TYPING_ID));
-      addToast({ type: "error", title: "Error", description: e.message ?? "Failed to regenerate" });
-      // Reload messages to ensure sync if something went wrong
-      const data = await getMessages(activeSessionId);
-      setMessages(data);
-    } finally {
-      setIsSending(false);
-    }
-  }, [activeSessionId, addToast]);
+    },
+    [activeSessionId, addToast]
+  );
 
   return {
     sessions,

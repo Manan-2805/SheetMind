@@ -1,10 +1,6 @@
 import axios, { type AxiosResponse } from "axios";
 
-import type {
-  AutocompleteResponse,
-  DataSource,
-  DataSourcePreview,
-} from "@/types/DataSource";
+import type { AutocompleteResponse, DataSource, DataSourcePreview } from "@/types/DataSource";
 
 import { apiClient as client } from "./apiClient";
 
@@ -39,11 +35,9 @@ export async function uploadFile(file: File): Promise<DataSource> {
   try {
     const form = new FormData();
     form.append("file", file);
-    const res: AxiosResponse<DataSource> = await client.post(
-      "/data-sources/upload",
-      form,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
+    const res: AxiosResponse<DataSource> = await client.post("/data-sources/upload", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     return res.data;
   } catch (error) {
     handleError(error);
@@ -58,10 +52,7 @@ export async function deleteDataSource(id: string): Promise<void> {
   }
 }
 
-export async function getDataSourcePreview(
-  id: string,
-  sheet?: string
-): Promise<DataSourcePreview> {
+export async function getDataSourcePreview(id: string, sheet?: string): Promise<DataSourcePreview> {
   try {
     const params = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
     const res: AxiosResponse<DataSourcePreview> = await client.get(
@@ -86,10 +77,9 @@ export async function listForAutocomplete(): Promise<AutocompleteResponse> {
 
 export async function uploadFromUrl(url: string): Promise<DataSource> {
   try {
-    const res: AxiosResponse<DataSource> = await client.post(
-      "/data-sources/upload-from-url",
-      { url }
-    );
+    const res: AxiosResponse<DataSource> = await client.post("/data-sources/upload-from-url", {
+      url,
+    });
     return res.data;
   } catch (error) {
     handleError(error);

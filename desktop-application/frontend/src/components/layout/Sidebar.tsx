@@ -2,22 +2,25 @@ import {
   Bookmark,
   Clock,
   Database,
+  LayoutDashboard,
   LogOut,
   Package,
   PenLine,
   Settings,
   TableProperties,
-  LayoutDashboard,
 } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/utils/cn";
 
-type ActiveView = "chat" | "data-sources" | "settings" | "saved-queries" | "artifacts" | "excel-editor" | "dashboards";
+type ActiveView =
+  | "chat"
+  | "data-sources"
+  | "settings"
+  | "saved-queries"
+  | "artifacts"
+  | "excel-editor"
+  | "dashboards";
 type ActiveDrawer = "history" | null;
 
 interface SidebarProps {
@@ -47,30 +50,21 @@ function SidebarButton({ icon: Icon, label, isActive, onClick }: SidebarButtonPr
               "active:scale-[0.97]"
             )}
             style={{
-              backgroundColor: isActive
-                ? "var(--color-accent-subtle)"
-                : "transparent",
-              color: isActive
-                ? "var(--color-accent)"
-                : "var(--color-text-tertiary)",
-              border: isActive
-                ? "1px solid var(--color-accent-border)"
-                : "1px solid transparent",
+              backgroundColor: isActive ? "var(--color-accent-subtle)" : "transparent",
+              color: isActive ? "var(--color-accent)" : "var(--color-text-tertiary)",
+              border: isActive ? "1px solid var(--color-accent-border)" : "1px solid transparent",
             }}
             onMouseEnter={(e) => {
               if (!isActive) {
                 (e.currentTarget as HTMLButtonElement).style.backgroundColor =
                   "var(--color-bg-hover)";
-                (e.currentTarget as HTMLButtonElement).style.color =
-                  "var(--color-text-secondary)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
               }
             }}
             onMouseLeave={(e) => {
               if (!isActive) {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                  "transparent";
-                (e.currentTarget as HTMLButtonElement).style.color =
-                  "var(--color-text-tertiary)";
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-tertiary)";
               }
             }}
             aria-label={label}
@@ -93,7 +87,6 @@ function SidebarButton({ icon: Icon, label, isActive, onClick }: SidebarButtonPr
     </Tooltip>
   );
 }
-
 
 export function Sidebar({
   activeView,
@@ -130,11 +123,7 @@ export function Sidebar({
         }}
       />
 
-      <SidebarButton
-        icon={PenLine}
-        label="New Chat"
-        onClick={onNewChat}
-      />
+      <SidebarButton icon={PenLine} label="New Chat" onClick={onNewChat} />
       <SidebarButton
         icon={Clock}
         label="Chat History"
@@ -181,7 +170,6 @@ export function Sidebar({
         onClick={() => onViewChange("settings")}
       />
 
-
       <Tooltip>
         <TooltipTrigger
           render={
@@ -194,8 +182,7 @@ export function Sidebar({
                   "var(--color-bg-hover)";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                  "transparent";
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
               }}
               aria-label="Logout"
             >
@@ -218,4 +205,3 @@ export function Sidebar({
     </div>
   );
 }
-
