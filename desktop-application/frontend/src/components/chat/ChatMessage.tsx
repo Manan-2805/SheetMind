@@ -10,7 +10,7 @@ import { FileAutocomplete } from "./FileAutocomplete";
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
 import { extractReferencedFiles } from "@/utils/chatReferences";
-import { formatRelativeTime } from "@/utils/formatDate";
+import { formatMessageTime } from "@/utils/formatDate";
 import { useToast } from "@/hooks/useToast";
 
 interface ChatMessageProps {
@@ -287,16 +287,21 @@ export function ChatMessage({
           </div>
         ) : (
           <>
-            <div
-              className="max-w-[60%] rounded-xl px-4 py-2.5 text-body"
-              style={{
-                backgroundColor: "var(--color-bg-hover)",
-                color: "var(--color-text-primary)",
-                borderBottomRightRadius: "2px",
-                border: "1px solid var(--color-border-default)",
-              }}
-            >
-              <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="flex flex-col items-end gap-1 max-w-[60%]">
+              <div
+                className="w-full rounded-xl px-4 py-2.5 text-body"
+                style={{
+                  backgroundColor: "var(--color-bg-hover)",
+                  color: "var(--color-text-primary)",
+                  borderBottomRightRadius: "2px",
+                  border: "1px solid var(--color-border-default)",
+                }}
+              >
+                <p className="whitespace-pre-wrap">{message.content}</p>
+              </div>
+              <span className="text-[10px] pr-1" style={{ color: "var(--color-text-tertiary)" }}>
+                {formatMessageTime(message.created_at)}
+              </span>
             </div>
             <ChatMessageActions
               message={message}
@@ -326,7 +331,7 @@ export function ChatMessage({
               SheetMind
             </span>
             <span className="text-ui-label" style={{ color: "var(--color-text-tertiary)" }}>
-              {formatRelativeTime(message.created_at)}
+              {formatMessageTime(message.created_at)}
             </span>
           </div>
 

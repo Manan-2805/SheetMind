@@ -2,13 +2,13 @@
 
 **Product Requirements Document**
 
-_Version 1.2 · Desktop Application_
+_Version 1.3 · Desktop Application_
 
 Windows · macOS · Linux
 
 _Intelligence built into every sheet._
 
-_v1.2 — Added Excel Editor page, Live Dashboard page, updated sidebar, expanded error states and suggestions._
+_v1.3 — Converted Artifacts and Saved Queries from slide-in drawers to premium full-page layouts, optimized build system with Nuitka compiler caching and cross-platform scripts, resolved Excel editor and WebSocket bugs._
 
 ---
 
@@ -132,8 +132,8 @@ A 52px fixed left sidebar (icon-only, always visible) sits alongside the main co
 |---|---|---|---|---|
 | Top | SquarePen | New chat | Opens a fresh chat session | Replaces main area |
 | Top | Clock | History | Browse and search past sessions | Slide-in drawer (220px) |
-| Top | Layers | Artifacts | View all exports and charts | Slide-in drawer (280px) |
-| Top | Bookmark | Saved queries | Browse and reuse labeled queries | Slide-in drawer (300px) |
+| Top | Layers | Artifacts | View all exports and charts | Replaces main area |
+| Top | Bookmark | Saved queries | Browse and reuse labeled queries | Replaces main area |
 | Top | Database | Data Sources | Upload and manage Excel files | Replaces main area |
 | Top | TableProperties | Excel Editor | Full spreadsheet grid editor | Replaces main area |
 | Top | LayoutDashboard | Dashboards | Create and view dashboards | Replaces main area |
@@ -254,48 +254,53 @@ Slides in from left over the main content, 220px wide, 200ms ease-out. No backdr
 
 ## 4.5 Artifacts Page
 
-Slide-in drawer, 280px wide. Two tabs: Excel Exports and Charts.
+Replaces the main content area. A premium dashboard page featuring a two-tab view: **Excel Exports** and **Saved Charts**, equipped with advanced search filters, visual grid galleries, and rich details/preview overlays.
 
-### Excel Exports tab
+### Excel Exports Tab
 
-- Filter by filename (search input) and date range picker.
-- Each row: file icon, filename, source session name, file size, created date.
-- Row hover actions: Download, Rename (inline), Delete (with confirmation), Preview (opens modal with first 50 rows), Generate Chart (opens chart builder pre-loaded with this file).
+- **Grid / Table Toggle Layout**: Display exported `.xlsx` files with clean metadata cards or a tabular list.
+- **Advanced Header**: Features quick search by filename, source session name, and a dual-calendar date range filter.
+- **Card Metadata**: File icon (distinguishing standard from mutated files), export title, source session link, precise file size (e.g. `124 KB`), and upload/creation date formatted as `DD-MM-YYYY`.
+- **Card Actions (Hover & Direct)**:
+  - *Download/Export*: Open system save dialog to export local file.
+  - *Inline Rename*: Click title or pencil icon to update filename inline.
+  - *Delete*: With double-confirmation prompt to prevent accidental data loss.
+  - *Preview*: Open high-performance premium modal displaying the first 100 rows in an interactive `Handsontable` grid.
+  - *Create Chart*: Action shortcut to open the Chart Builder pre-loaded with this export's schema.
 
-### Charts tab
+### Saved Charts Tab
 
-- 2-column grid of thumbnail cards.
-- Each card: chart preview thumbnail (violet-to-purple gradient placeholder), chart type badge, source session, date.
-- Card hover: scale(1.02) + violet border, 150ms transition.
-- Card click: opens full chart preview modal.
-- Actions: Download PNG, Delete.
+- **Rich Gallery Grid**: 3-column responsive layout of generated charts using live interactive thumbnails (with light/dark adaptive themes), chart type badge (Bar, Scatter, Donut, etc.), and original natural language query used to generate it.
+- **Premium Lightbox Modal**: Clicking any chart card opens a high-fidelity full-screen lightbox preview showing the interactive ApexCharts widget.
+- **Actions Panel**: Download as PNG, download as SVG, view underlying query SQL, or delete.
 
 Artifacts are independent from chat sessions. Deleting a session does not delete its artifacts.
 
 ---
 
-## 4.6 Saved Queries Drawer
+## 4.6 Saved Queries Page
 
-Slide-in drawer, 300px wide.
+Replaces the main content area. A dual-panel analytical dashboard for managing, running, and analyzing reusable saved queries.
 
-- Search input filters by label or NL query text.
-- Time filter dropdown: All time, Today, Last 7 days, Last 30 days.
-- Favorite toggle: star icon, pinned favorites section at top.
+### Left Panel: Browse & Search
 
-### Per-query card shows
+- **Search Header**: Fuzzy matching across query labels, SQL statements, and natural language descriptions.
+- **Time/Usage Filters**: Filter by All Time, Today, Last 7 Days, or Last 30 Days.
+- **Favorite Filter Pinning**: Quick toggling between "All Queries" and "Favorites Only."
+- **Query List Cards**:
+  - Interactive cards showing query label, natural language query prompt (2 lines max, truncated), execution use count badge (e.g., `×24`), and last-used date formatted as `DD-MM-YYYY`.
+  - Active query highlighted with a custom sidebar accent.
+  - Favorite star toggle is easily clickable directly on the list item.
 
-- User label (editable inline on click).
-- NL query text (2 lines max, truncated with ellipsis).
-- Use count badge (e.g. ×12) and last-used relative date.
-- `{}` View SQL toggle: expands a JetBrains Mono code block below the card.
+### Right Panel: Query Details & Interactive Preview
 
-### Per-query actions
-
-- **Run:** inserts the NL query into the current active chat input and sends immediately.
-- Result appears at the right side of the drawer as a mini result panel with the table, save to artifacts button, and generate chart button.
-- **Rename label:** inline edit.
-- **Delete:** with confirmation.
-- **Favorite:** toggles pinned state.
+- **Details Mode (Default when query is selected)**:
+  - *Title & Meta*: In-place renaming of the query label, description text area.
+  - *Visual SQL Editor*: Syntax-highlighted read-only editor showing the exact SQL statement in JetBrains Mono.
+  - *Quick Run Button*: Instantly execute the query on the current DuckDB database.
+- **Interactive Results Panel (Shown on Run)**:
+  - Displays the result inside an interactive `ExcelPreviewGrid` with pagination controls.
+  - *Quick Actions*: "Export to Excel" (writes to artifacts), "Create Chart" (loads result into Chart Builder), or "Insert to Active Chat" (closes page and copies SQL/NL directly into the active chat session context).
 
 ---
 

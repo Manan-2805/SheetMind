@@ -17,6 +17,7 @@ from schemas.excel_editor_schemas import (
 )
 from services.duckdb_service import get_connection
 from services.excel_import_service import import_df_to_duckdb, now_utc
+from services.logging_service import get_logger
 from services.storage_service import get_backups_dir
 
 
@@ -145,7 +146,7 @@ def extract_formatting_map(path: str) -> dict[str, dict]:
                             fmt_dict["align"] = align
                         formatting_map[key] = fmt_dict
     except Exception as e:
-        print(f"Error extracting formatting map: {e}")
+        get_logger().error("Error extracting formatting map: %s", e)
     return formatting_map
 
 
@@ -165,7 +166,7 @@ def open_excel_file(file_id: str) -> dict | None:
         xl = pd.ExcelFile(path)
         sheet_names = xl.sheet_names
     except Exception as e:
-        print(f"Error reading excel sheets: {e}")
+        get_logger().error("Error reading excel sheets: %s", e)
         return None
 
     sheets = []
@@ -184,7 +185,7 @@ def open_excel_file(file_id: str) -> dict | None:
                     )
                 )
             except Exception as e:
-                print(f"Error parsing first sheet {sheet_name}: {e}")
+                get_logger().error("Error parsing first sheet %s: %s", sheet_name, e)
                 sheets.append(
                     SheetData(sheetName=sheet_name, columns=[], rows=[], rowCount=0, colCount=0)
                 )
@@ -243,7 +244,7 @@ def open_excel_sheet(file_id: str, sheet_name: str) -> SheetData | None:
             colCount=len(df_clean.columns),
         )
     except Exception as e:
-        print(f"Error opening sheet {sheet_name}: {e}")
+        get_logger().error("Error opening sheet %s: %s", sheet_name, e)
         return None
 
 

@@ -31,7 +31,9 @@ class WebSocketService {
       this.socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log("[WebSocketEvent]", data.type || "unknown_event", data);
+          if (import.meta.env.DEV) {
+            console.debug("[WebSocketEvent]", data.type || "unknown_event", data);
+          }
           this.listeners.forEach((listener) => {
             try {
               listener(data);

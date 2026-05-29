@@ -7,14 +7,13 @@ import uuid
 import pandas as pd
 
 from dependencies import current_username
+from models.chat_models import broadcast_datasource_status
 from services.duckdb_service import get_connection
 from services.excel_import_service import (
     clean_columns,
     import_df_to_duckdb,
-    safe_table_name,
-)
-from services.excel_import_service import (
     now_utc as _now,
+    safe_table_name,
 )
 from services.storage_service import list_account_users
 
@@ -133,7 +132,11 @@ async def queue_worker():
     async def worker_task(username, file_id, file_path):
         """Execute the worker_task operation."""
         async with sem:
-            await _process_wrapper(username, file_id, file_path)
+            task = asyncio.create_task(_process_wrapper(username, file_id, file_path))
+            await asyncio.sleep(0.05)
+            await broadcast_datasource_status()
+            await task
+            await broadcast_datasource_status()
 
     while True:
         try:

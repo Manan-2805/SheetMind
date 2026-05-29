@@ -51,11 +51,16 @@ export const DashboardsPage: React.FC = () => {
 
   const toggleFavorite = async (id: string, current: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
+    setDashboards((prev) =>
+      prev.map((db) => (db.id === id ? { ...db, is_favorite: !current } : db))
+    );
     try {
       await dashboardsApi.updateDashboard(id, { is_favorite: !current });
-      loadDashboards();
     } catch (err) {
       console.error(err);
+      setDashboards((prev) =>
+        prev.map((db) => (db.id === id ? { ...db, is_favorite: current } : db))
+      );
     }
   };
 
@@ -127,7 +132,7 @@ export const DashboardsPage: React.FC = () => {
               <h1 className="text-lg font-bold tracking-tight">Dashboards</h1>
               <button
                 onClick={handleCreate}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground p-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                className="bg-accent text-white hover:scale-[1.02] active:scale-[0.98] p-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition-all shadow-md shadow-accent/15"
               >
                 <Plus size={14} />
                 <span>New</span>
@@ -143,7 +148,7 @@ export const DashboardsPage: React.FC = () => {
                   placeholder="Search..."
                   value={search}
                   onChange={handleSearch}
-                  className="w-full bg-background border border-input rounded-md pl-9 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full bg-background border border-input rounded-md pl-9 pr-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent transition-all"
                 />
               </div>
 
@@ -151,7 +156,7 @@ export const DashboardsPage: React.FC = () => {
                 <select
                   value={filter}
                   onChange={e => setFilter(e.target.value)}
-                  className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer"
+                  className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer font-medium"
                 >
                   <option value="all">All</option>
                   <option value="favorites">Favorites</option>
@@ -160,7 +165,7 @@ export const DashboardsPage: React.FC = () => {
                 <select
                   value={sort}
                   onChange={e => setSort(e.target.value)}
-                  className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer"
+                  className="flex-1 bg-background border border-input rounded-md px-2 py-1 text-xs outline-none cursor-pointer font-medium"
                 >
                   <option value="name">A-Z Name</option>
                   <option value="created">Created</option>
@@ -181,13 +186,13 @@ export const DashboardsPage: React.FC = () => {
                     key={db.id}
                     onClick={() => setSelectedId(db.id)}
                     className={`flex flex-col p-3 rounded-lg cursor-pointer transition-all border group relative ${selectedId === db.id
-                        ? 'bg-primary/10 border-primary text-foreground'
+                        ? 'bg-accent/15 border-accent text-foreground'
                         : 'border-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground'
                       }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2 truncate">
-                        <Layout size={14} className={selectedId === db.id ? 'text-primary' : 'text-muted-foreground'} />
+                        <Layout size={14} className={selectedId === db.id ? 'text-accent' : 'text-muted-foreground'} />
                         <span className="font-medium text-sm truncate">{db.title}</span>
                       </div>
                       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -235,14 +240,14 @@ export const DashboardsPage: React.FC = () => {
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-muted/10">
-            <Layout size={48} className="text-muted-foreground/30 mb-4" />
+            <Layout size={48} className="text-muted-foreground/30 mb-4 animate-bounce-slow" />
             <h2 className="text-xl font-semibold tracking-tight">No Dashboard Selected</h2>
             <p className="text-sm text-muted-foreground max-w-sm mt-1">
               Select an existing dashboard from the sidebar, or create a brand new interactive dashboard layout.
             </p>
             <button
               onClick={handleCreate}
-              className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition-colors shadow-sm"
+              className="mt-4 bg-accent text-white hover:scale-[1.02] active:scale-[0.98] px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition-all shadow-lg shadow-accent/20"
             >
               <Plus size={16} />
               <span>Create Dashboard</span>

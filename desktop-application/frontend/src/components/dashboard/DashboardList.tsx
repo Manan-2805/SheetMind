@@ -41,11 +41,16 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
   };
 
   const toggleFavorite = async (id: string, current: boolean) => {
+    setDashboards((prev) =>
+      prev.map((db) => (db.id === id ? { ...db, is_favorite: !current } : db))
+    );
     try {
       await dashboardsApi.updateDashboard(id, { is_favorite: !current });
-      loadDashboards();
     } catch (e) {
       console.error(e);
+      setDashboards((prev) =>
+        prev.map((db) => (db.id === id ? { ...db, is_favorite: current } : db))
+      );
     }
   };
 
@@ -70,7 +75,7 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
         <div className="text-muted-foreground">No dashboards yet. Create your first one.</div>
         <button 
           onClick={onCreate}
-          className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-md font-medium flex items-center space-x-2 transition-colors"
+          className="bg-accent hover:scale-[1.02] active:scale-[0.98] text-white px-4 py-2 rounded-md font-medium flex items-center space-x-2 transition-all shadow-lg shadow-accent/20"
         >
           <Plus size={16} />
           <span>Create Dashboard</span>
@@ -80,12 +85,12 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
   }
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
+    <div className="flex flex-col h-full bg-background text-foreground animate-in fade-in duration-300">
       <div className="flex items-center justify-between p-6 border-b border-border">
         <h1 className="text-2xl font-bold">Dashboards</h1>
         <button 
           onClick={onCreate}
-          className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-md font-medium flex items-center space-x-2 transition-colors"
+          className="bg-accent hover:scale-[1.02] active:scale-[0.98] text-white px-4 py-2 rounded-md font-medium flex items-center space-x-2 transition-all shadow-lg shadow-accent/20"
         >
           <Plus size={16} />
           <span>Create Dashboard</span>
@@ -98,12 +103,12 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
           placeholder="Search dashboards..." 
           value={search}
           onChange={handleSearch}
-          className="flex-1 bg-muted border-none rounded-md px-4 py-2 focus:ring-2 focus:ring-violet-500 outline-none"
+          className="flex-1 bg-muted border-none rounded-md px-4 py-2 focus:ring-2 focus:ring-accent/50 outline-none"
         />
         <select 
           value={filter} 
           onChange={e => setFilter(e.target.value)}
-          className="bg-muted border-none rounded-md px-4 py-2 outline-none cursor-pointer"
+          className="bg-muted border-none rounded-md px-4 py-2 outline-none cursor-pointer text-sm font-medium"
         >
           <option value="all">All</option>
           <option value="favorites">Favorites</option>
@@ -112,7 +117,7 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
         <select 
           value={sort} 
           onChange={e => setSort(e.target.value)}
-          className="bg-muted border-none rounded-md px-4 py-2 outline-none cursor-pointer"
+          className="bg-muted border-none rounded-md px-4 py-2 outline-none cursor-pointer text-sm font-medium"
         >
           <option value="name">Sort by Name</option>
           <option value="created">Sort by Created Date</option>
@@ -146,10 +151,10 @@ export const DashboardList: React.FC<DashboardListProps> = ({ onCreate, onView, 
                 <td className="py-4 text-right text-muted-foreground text-sm">{formatDistanceToNow(new Date(db.created_at))}</td>
                 <td className="py-4 text-right pr-4">
                   <div className="flex justify-end space-x-2" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => onView(db.id)} className="p-2 text-muted-foreground hover:text-violet-500 transition-colors" title="View">
+                    <button onClick={() => onView(db.id)} className="p-2 text-muted-foreground hover:text-accent transition-colors" title="View">
                       <LayoutTemplate size={16} />
                     </button>
-                    <button onClick={() => onRedesign(db.id)} className="p-2 text-muted-foreground hover:text-violet-500 transition-colors" title="Redesign">
+                    <button onClick={() => onRedesign(db.id)} className="p-2 text-muted-foreground hover:text-accent transition-colors" title="Redesign">
                       <Edit2 size={16} />
                     </button>
                     <button onClick={() => handleDelete(db.id)} className="p-2 text-muted-foreground hover:text-red-500 transition-colors" title="Delete">

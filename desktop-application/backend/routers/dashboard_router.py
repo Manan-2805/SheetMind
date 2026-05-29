@@ -15,6 +15,7 @@ from schemas.dashboard import (
     DashboardUpdate,
 )
 from services import dashboard_service, llm_service
+from services.duckdb_service import get_connection
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -97,7 +98,23 @@ async def refresh_dashboard(dashboard_id: str):
 async def generate_dashboard_name(data: AINameGenRequest):
     """Execute the generate_dashboard_name operation."""
     try:
-        title = await llm_service.generate_dashboard_name([w.model_dump() for w in data.widgets])
+        conn = get_connection()
+        widgets_with_rich_context = []
+        for w in data.widgets:
+            widget_dict = w.model_dump()
+            if w.saved_query_id:
+                # Query saved_queries for details
+                sq_row = conn.execute(
+                    "SELECT label, sql_query, natural_query FROM saved_queries WHERE id = ?",
+                    [w.saved_query_id]
+                ).fetchone()
+                if sq_row:
+                    widget_dict["query_name"] = sq_row[0]
+                    widget_dict["sql_query"] = sq_row[1]
+                    widget_dict["natural_query"] = sq_row[2]
+            widgets_with_rich_context.append(widget_dict)
+            
+        title = await llm_service.generate_dashboard_name(widgets_with_rich_context)
         return AINameGenResponse(title=title)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

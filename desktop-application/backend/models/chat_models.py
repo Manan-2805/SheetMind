@@ -1214,6 +1214,39 @@ async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
     _ws_clients.difference_update(dead)
 
 
+async def broadcast_datasource_status() -> None:
+    """Broadcast current datasource status list to all connected WebSocket clients."""
+    logger = get_logger()
+    try:
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT id, status, error_message, row_count, column_count FROM excel_files"
+        ).fetchall()
+        updates = [
+            {
+                "id": r[0],
+                "status": r[1],
+                "error_message": r[2],
+                "row_count": r[3],
+                "column_count": r[4],
+            }
+            for r in rows
+        ]
+        logger.info(
+            "WebSocket Broadcast (status_update): data_sources_count=%d", len(updates)
+        )
+        
+        dead = set()
+        for ws in list(_ws_clients):
+            try:
+                await ws.send_json({"type": "status_update", "data": updates})
+            except Exception:
+                dead.add(ws)
+        _ws_clients.difference_update(dead)
+    except Exception as e:
+        logger.error("Failed to broadcast datasource status: %s", e)
+
+
 async def _generate_combined_second_call(
     result_rows: list,
     columns: list,

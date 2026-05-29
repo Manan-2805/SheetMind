@@ -33,14 +33,26 @@ async def generate_dashboard_layout(description: str) -> dict[str, Any]:
     return await _call_llm_json(settings, prompt_msgs)
 
 
-async def generate_dashboard_name(widgets: list[dict[str, str]]) -> str:
-    """Generates a dashboard name based on the widgets it contains."""
+async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
+    """Generates a dashboard name based on the widgets it contains and their bound queries."""
     settings = get_settings()
 
-    widgets_text = ", ".join([f"{w['label']} ({w['widget_type']})" for w in widgets])
+    widgets_lines = []
+    for w in widgets:
+        line = f"- Widget: '{w['label']}' ({w['widget_type']})"
+        if w.get("query_name"):
+            line += f", Bound Query Name: '{w['query_name']}'"
+        if w.get("natural_query"):
+            line += f", User Ask: '{w['natural_query']}'"
+        if w.get("sql_query"):
+            line += f", SQL Query: '{w['sql_query']}'"
+        widgets_lines.append(line)
+        
+    widgets_text = "\n".join(widgets_lines)
 
     system_prompt = (
-        "You are a dashboard naming assistant. Based on the widgets provided, suggest a short, descriptive dashboard name.\n"
+        "You are a dashboard naming assistant. Analyze the widgets, query names, natural language user questions, and SQL queries to understand what data is displayed.\n"
+        "Generate a short, highly professional and descriptive name for this overall dashboard (max 6 words).\n"
         "Return ONLY a valid JSON object with this structure:\n"
         "{\n"
         '  "title": "Your Suggested Name"\n'
@@ -50,7 +62,7 @@ async def generate_dashboard_name(widgets: list[dict[str, str]]) -> str:
 
     prompt_msgs = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Widgets: {widgets_text}"},
+        {"role": "user", "content": f"Widgets & Data Context:\n{widgets_text}"},
     ]
 
     res = await _call_llm_json(settings, prompt_msgs)

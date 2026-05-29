@@ -10,8 +10,9 @@ import httpx
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-import models.data_source_models as ds_models
 from dependencies import current_username
+from models.chat_models import broadcast_datasource_status
+import models.data_source_models as ds_models
 from schemas.common_schemas import SuccessResponse
 from schemas.data_source_schemas import (
     AutocompleteResponse,
@@ -76,6 +77,7 @@ async def upload_data_source(file: UploadFile = File(...)) -> DataSourceResponse
     )
 
     task_queue.put_nowait((username, file_id, stored_path))
+    await broadcast_datasource_status()
 
     return DataSourceResponse(
         id=file_id,
@@ -153,6 +155,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
     )
 
     task_queue.put_nowait((username, file_id, stored_path))
+    await broadcast_datasource_status()
 
     return DataSourceResponse(
         id=file_id,
@@ -170,6 +173,7 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
 async def delete_data_source(source_id: str) -> SuccessResponse:
     """Execute the delete_data_source operation."""
     ds_models.delete(source_id)
+    await broadcast_datasource_status()
     return SuccessResponse(success=True)
 
 

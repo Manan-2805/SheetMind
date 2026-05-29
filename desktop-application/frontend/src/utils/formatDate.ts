@@ -17,24 +17,29 @@ export function formatRelativeTime(dateString: string): string {
 }
 
 export function formatAbsoluteDate(dateString: string): string {
+  if (!dateString) return "";
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year:
-      date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
-  });
+  if (isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 export function formatAbsoluteDateTime(dateString: string): string {
+  if (!dateString) return "";
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (isNaN(date.getTime())) return "";
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${hours}:${minutes} ${day}-${month}-${year}`;
+}
+
+export function formatMessageTime(dateString: string): string {
+  return formatAbsoluteDateTime(dateString);
 }
 
 export function formatFileSize(bytes: number): string {

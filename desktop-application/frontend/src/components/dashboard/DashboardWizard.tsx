@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { dashboardsApi } from '../../api/dashboardsApi';
 import { getSavedQueries, runSavedQuery } from '../../api/savedQueriesApi';
+import { useToast } from '../../hooks/useToast';
 import type { Dashboard, DashboardWidget, WidgetType, ColumnConfig, WidgetStyles } from '../../types/dashboard';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,19 +38,19 @@ const TEMPLATES = [
       { id: 'sales-1', widget_type: 'KpiWidget', label: 'Total Sales', column_config_json: JSON.stringify({ valueColumn: 'sales', aggregation: 'SUM' }), x: 0, y: 0, w: 4, h: 2 },
       { id: 'sales-2', widget_type: 'KpiWidget', label: 'Conversion Rate', column_config_json: JSON.stringify({ valueColumn: 'conversion', aggregation: 'AVG' }), x: 4, y: 0, w: 4, h: 2 },
       { id: 'sales-3', widget_type: 'KpiWidget', label: 'AOV', column_config_json: JSON.stringify({ valueColumn: 'order_value', aggregation: 'AVG' }), x: 8, y: 0, w: 4, h: 2 },
-      { id: 'sales-4', widget_type: 'ChartWidget', label: 'Sales Trends', column_config_json: JSON.stringify({ chartType: 'Line', xAxisColumn: 'date', yAxisColumn: 'sales' }), x: 0, y: 2, w: 8, h: 4 },
-      { id: 'sales-5', widget_type: 'TableWidget', label: 'Top Customers', column_config_json: JSON.stringify({ selectedColumns: ['customer', 'total_purchase', 'country'] }), x: 8, y: 2, w: 4, h: 4 },
-      { id: 'sales-6', widget_type: 'TextWidget', label: 'Summary Remarks', column_config_json: JSON.stringify({ textContext: 'Quarterly sales revenue increased by 15% due to higher average order value.' }), x: 0, y: 6, w: 12, h: 2 }
+      { id: 'sales-4', widget_type: 'ChartWidget', label: 'Sales Trends', column_config_json: JSON.stringify({ chartType: 'Line', xAxisColumn: 'date', yAxisColumn: 'sales' }), x: 0, y: 2, w: 8, h: 3 },
+      { id: 'sales-5', widget_type: 'TableWidget', label: 'Top Customers', column_config_json: JSON.stringify({ selectedColumns: ['customer', 'total_purchase', 'country'] }), x: 8, y: 2, w: 4, h: 3 },
+      { id: 'sales-6', widget_type: 'TextWidget', label: 'Summary Remarks', column_config_json: JSON.stringify({ textContext: 'Quarterly sales revenue increased by 15% due to higher average order value.' }), x: 0, y: 5, w: 12, h: 1.5 }
     ]
   },
   {
     name: 'Operations & Growth',
     description: 'Monitor departmental budgets, active targets, and task lists side by side.',
     widgets: [
-      { id: 'ops-1', widget_type: 'KpiWidget', label: 'Total Revenue', column_config_json: JSON.stringify({ valueColumn: 'revenue', aggregation: 'SUM' }), x: 0, y: 0, w: 4, h: 4 },
-      { id: 'ops-2', widget_type: 'GaugeWidget', label: 'Revenue Target', column_config_json: JSON.stringify({ progressColumn: 'revenue', targetValue: 100000 }), x: 0, y: 4, w: 4, h: 4 },
-      { id: 'ops-3', widget_type: 'ChartWidget', label: 'Budgets vs Costs', column_config_json: JSON.stringify({ chartType: 'Bar', xAxisColumn: 'department', yAxisColumn: 'costs' }), x: 4, y: 0, w: 8, h: 4 },
-      { id: 'ops-4', widget_type: 'TableWidget', label: 'Recent Activity Log', column_config_json: JSON.stringify({ selectedColumns: ['time', 'action', 'status'] }), x: 4, y: 4, w: 8, h: 4 }
+      { id: 'ops-1', widget_type: 'KpiWidget', label: 'Total Revenue', column_config_json: JSON.stringify({ valueColumn: 'revenue', aggregation: 'SUM' }), x: 0, y: 0, w: 4, h: 3 },
+      { id: 'ops-2', widget_type: 'GaugeWidget', label: 'Revenue Target', column_config_json: JSON.stringify({ progressColumn: 'revenue', targetValue: 100000 }), x: 0, y: 3, w: 4, h: 3 },
+      { id: 'ops-3', widget_type: 'ChartWidget', label: 'Budgets vs Costs', column_config_json: JSON.stringify({ chartType: 'Bar', xAxisColumn: 'department', yAxisColumn: 'costs' }), x: 4, y: 0, w: 8, h: 3 },
+      { id: 'ops-4', widget_type: 'TableWidget', label: 'Recent Activity Log', column_config_json: JSON.stringify({ selectedColumns: ['time', 'action', 'status'] }), x: 4, y: 3, w: 8, h: 3 }
     ]
   },
   {
@@ -60,8 +61,8 @@ const TEMPLATES = [
       { id: 'saas-2', widget_type: 'KpiWidget', label: 'Active Users', column_config_json: JSON.stringify({ valueColumn: 'active_users', aggregation: 'MAX' }), x: 3, y: 0, w: 3, h: 2 },
       { id: 'saas-3', widget_type: 'KpiWidget', label: 'Conversions', column_config_json: JSON.stringify({ valueColumn: 'conversions', aggregation: 'SUM' }), x: 6, y: 0, w: 3, h: 2 },
       { id: 'saas-4', widget_type: 'KpiWidget', label: 'Churn Rate', column_config_json: JSON.stringify({ valueColumn: 'churn', aggregation: 'AVG' }), x: 9, y: 0, w: 3, h: 2 },
-      { id: 'saas-5', widget_type: 'ChartWidget', label: 'Active User Distribution', column_config_json: JSON.stringify({ chartType: 'Scatter', xAxisColumn: 'tenure', yAxisColumn: 'usage_score' }), x: 0, y: 2, w: 8, h: 4 },
-      { id: 'saas-6', widget_type: 'PlaceholderWidget', label: 'Product Section Info', column_config_json: '{}', x: 8, y: 2, w: 4, h: 4 }
+      { id: 'saas-5', widget_type: 'ChartWidget', label: 'Active User Distribution', column_config_json: JSON.stringify({ chartType: 'Scatter', xAxisColumn: 'tenure', yAxisColumn: 'usage_score' }), x: 0, y: 2, w: 8, h: 3 },
+      { id: 'saas-6', widget_type: 'PlaceholderWidget', label: 'Product Section Info', column_config_json: '{}', x: 8, y: 2, w: 4, h: 3 }
     ]
   }
 ];
@@ -139,6 +140,7 @@ const UnboundIllustration: React.FC<{ type: WidgetType }> = ({ type }) => {
 };
 
 export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSaveSuccess, initialDashboard }) => {
+  const { addToast } = useToast();
   const [step, setStep] = useState(initialDashboard ? 2 : 1);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [layout, setLayout] = useState<any[]>(initialDashboard ? JSON.parse(initialDashboard.layout_json) : []);
@@ -148,6 +150,31 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [widgetSearch, setWidgetSearch] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isNamingLoading, setIsNamingLoading] = useState(false);
+
+  const handleGenerateName = async () => {
+    setIsNamingLoading(true);
+    try {
+      const res = await dashboardsApi.generateName({ widgets });
+      if (res && res.title) {
+        setName(res.title);
+        addToast({
+          type: 'success',
+          title: 'AI Name Generated',
+          description: `Suggested name: "${res.title}"`
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      addToast({
+        type: 'error',
+        title: 'Generation Failed',
+        description: 'Failed to generate a dashboard name with AI.'
+      });
+    } finally {
+      setIsNamingLoading(false);
+    }
+  };
 
   // Binding Panel Drawer
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
@@ -237,7 +264,7 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
 
   const addWidget = (type: WidgetType) => {
     const id = uuidv4();
-    const l = { i: id, x: 0, y: Infinity, w: 6, h: 4 };
+    const l = { i: id, x: 0, y: Infinity, w: 4, h: 3 };
     setLayout([...layout, l]);
     setWidgets([...widgets, {
       id,
@@ -256,6 +283,18 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
   };
 
   const saveDashboard = async () => {
+    const unboundWidgets = widgets.filter(
+      w => w.widget_type !== 'PlaceholderWidget' && !w.saved_query_id
+    );
+    if (unboundWidgets.length > 0) {
+      addToast({
+        type: 'error',
+        title: 'Query Selection Required',
+        description: `Please select a query for the following widgets: ${unboundWidgets.map(w => w.label).join(', ')}.`
+      });
+      return;
+    }
+
     const data = {
       title: name,
       layout_json: JSON.stringify(layout),
@@ -274,7 +313,11 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
       onSaveSuccess();
     } catch (e) {
       console.error('Failed to save dashboard', e);
-      alert('Failed to save dashboard');
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        description: 'An error occurred while saving the dashboard.'
+      });
     }
   };
 
@@ -450,8 +493,14 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
                   <ChevronLeft size={16} />
                 </button>
                 <div>
-                  <h2 className="text-sm font-bold tracking-tight">Designing Canvas</h2>
-                  <p className="text-[10px] text-muted-foreground">Grid layout drag & resize active</p>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="text-sm font-bold tracking-tight bg-transparent border-b border-transparent hover:border-border focus:border-accent outline-none py-0 px-1 w-64 transition-all rounded-sm focus:ring-1 focus:ring-accent"
+                    title="Click to rename dashboard"
+                  />
+                  <p className="text-[10px] text-muted-foreground px-1">Grid layout drag & resize active</p>
                 </div>
               </div>
               <div className="flex space-x-2 items-center">
@@ -460,11 +509,11 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
                 </button>
                 <span className="text-[10px] text-muted-foreground border-l border-border pl-2 mr-2">{widgets.length} elements</span>
                 <button 
-                  onClick={() => setStep(3)} 
+                  onClick={() => initialDashboard ? saveDashboard() : setStep(3)} 
                   disabled={widgets.length === 0} 
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50 px-4 py-1.5 rounded-md text-xs font-semibold shadow-sm transition-all"
+                  className="bg-accent text-white hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100 disabled:grayscale px-4 py-1.5 rounded-md text-xs font-semibold shadow-md shadow-accent/15 transition-all"
                 >
-                  Save & Publish →
+                  {initialDashboard ? 'Save & Update' : 'Save & Publish →'}
                 </button>
               </div>
             </div>
@@ -684,29 +733,74 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
                     {/* Text Label fields */}
                     {selectedWidget.widget_type === 'TextWidget' && (
                       <>
-                        <div>
+                        <div className="space-y-1">
                           <label className="block text-[10px] font-medium text-muted-foreground mb-1">Template Bracket Text</label>
                           <textarea 
                             rows={4}
                             value={selectedWidgetConfig.textContext || ''}
                             onChange={e => updateWidgetConfig({ textContext: e.target.value })}
-                            className="w-full bg-background border border-input rounded px-3 py-1.5 outline-none"
+                            className="w-full bg-background border border-input rounded px-3 py-1.5 outline-none text-xs"
                             placeholder="E.g., High sales by {customer} in {country}."
                           />
+                          {queryColumns.length > 0 && (
+                            <div className="mt-1">
+                              <span className="text-[9px] font-semibold text-muted-foreground block uppercase tracking-wider">Available Columns:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {queryColumns.map(c => (
+                                  <span 
+                                    key={c} 
+                                    onClick={() => {
+                                      const text = selectedWidgetConfig.textContext || '';
+                                      updateWidgetConfig({ textContext: text + `{${c}}` });
+                                    }}
+                                    className="bg-muted hover:bg-accent hover:text-accent-foreground text-[10px] px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                    title="Click to insert column bracket"
+                                  >
+                                    {c}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div>
+                        <div className="space-y-2">
                           <label className="block text-[10px] font-medium text-muted-foreground mb-1">Target Row Index</label>
-                          <select 
-                            value={selectedWidgetConfig.textRowIndex || 'first'}
-                            onChange={e => updateWidgetConfig({ textRowIndex: e.target.value })}
-                            className="w-full bg-background border border-input rounded px-3 py-1.5 outline-none cursor-pointer"
-                          >
-                            <option value="first">First Row</option>
-                            <option value="last">Last Row</option>
-                            <option value="0">Index 0</option>
-                            <option value="1">Index 1</option>
-                            <option value="2">Index 2</option>
-                          </select>
+                          <div className="grid grid-cols-3 gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updateWidgetConfig({ textRowIndex: 'first' })}
+                              className={`py-1 text-xs font-semibold rounded border transition-colors ${(!selectedWidgetConfig.textRowIndex || selectedWidgetConfig.textRowIndex === 'first') ? 'bg-accent text-white border-accent' : 'bg-background hover:bg-muted border-input'}`}
+                            >
+                              First
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateWidgetConfig({ textRowIndex: 'last' })}
+                              className={`py-1 text-xs font-semibold rounded border transition-colors ${(selectedWidgetConfig.textRowIndex === 'last') ? 'bg-accent text-white border-accent' : 'bg-background hover:bg-muted border-input'}`}
+                            >
+                              Last
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateWidgetConfig({ textRowIndex: '0' })}
+                              className={`py-1 text-xs font-semibold rounded border transition-colors ${(selectedWidgetConfig.textRowIndex !== 'first' && selectedWidgetConfig.textRowIndex !== 'last' && selectedWidgetConfig.textRowIndex !== undefined) ? 'bg-accent text-white border-accent' : 'bg-background hover:bg-muted border-input'}`}
+                            >
+                              Custom
+                            </button>
+                          </div>
+                          {(selectedWidgetConfig.textRowIndex !== 'first' && selectedWidgetConfig.textRowIndex !== 'last' && selectedWidgetConfig.textRowIndex !== undefined) && (
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={isNaN(parseInt(selectedWidgetConfig.textRowIndex as string)) ? 0 : parseInt(selectedWidgetConfig.textRowIndex as string)}
+                              onChange={e => {
+                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                updateWidgetConfig({ textRowIndex: String(val) });
+                              }}
+                              className="w-full bg-background border border-input rounded px-3 py-1.5 outline-none text-xs"
+                              placeholder="Row index (0-based)"
+                            />
+                          )}
                         </div>
                       </>
                     )}
@@ -1051,19 +1145,34 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({ onCancel, onSa
           <div className="bg-card border border-border p-8 rounded-xl shadow-xl w-full max-w-md">
             <h2 className="text-xl font-bold mb-4 tracking-tight text-center">Name your dashboard</h2>
             
-            <input 
-              type="text" 
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Sales Overview Q1 2024"
-              className="w-full bg-background border border-input rounded-lg px-4 py-2.5 text-base outline-none focus:ring-1 focus:ring-primary mb-2 text-center"
-            />
+            <div className="relative mb-2">
+              <input 
+                type="text" 
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Sales Overview Q1 2024"
+                className="w-full bg-background border border-input rounded-lg pl-4 pr-12 py-2.5 text-base outline-none focus:ring-1 focus:ring-accent text-center font-medium"
+              />
+              <button
+                type="button"
+                onClick={handleGenerateName}
+                disabled={isNamingLoading || widgets.length === 0}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-accent hover:bg-accent/10 active:scale-95 transition-all disabled:opacity-30 disabled:scale-100"
+                title="Auto-generate dashboard name with AI"
+              >
+                {isNamingLoading ? (
+                  <div className="h-4 w-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                ) : (
+                  <Wand2 size={16} />
+                )}
+              </button>
+            </div>
             
             <div className="flex space-x-3 w-full mt-6">
               <button onClick={onCancel} className="flex-1 bg-muted hover:bg-muted/80 text-foreground py-2 rounded-lg font-semibold text-xs transition-colors">
                 Cancel
               </button>
-              <button onClick={saveDashboard} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground py-2 rounded-lg font-semibold text-xs transition-colors shadow-sm">
+              <button onClick={saveDashboard} className="flex-1 bg-accent text-white hover:scale-[1.02] active:scale-[0.98] py-2 rounded-lg font-semibold text-xs transition-all shadow-md shadow-accent/15">
                 Save Dashboard
               </button>
             </div>

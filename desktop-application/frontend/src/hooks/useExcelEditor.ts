@@ -22,6 +22,7 @@ export function useExcelEditor() {
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
 
   const univerRef = useRef<FUniver | null>(null);
+  const failedFileIdRef = useRef<string | null>(null);
   const { addToast } = useToast();
 
   const sessionRef = useRef<EditorSession | null>(null);
@@ -36,15 +37,25 @@ export function useExcelEditor() {
       setAvailableFiles(files);
     } catch (error) {
       console.error('Failed to load available files:', error);
+      addToast({
+        type: 'error',
+        title: 'Error loading files',
+        description: 'Could not load available Excel files.',
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
-  const openFile = useCallback(async (fileId: string) => {
+   const openFile = useCallback(async (fileId: string) => {
+    if (failedFileIdRef.current === fileId) {
+      console.warn('[ExcelEditor] Skipping openFile as it previously failed:', fileId);
+      return;
+    }
     setIsLoading(true);
     try {
       const data = await api.openFile(fileId);
+      failedFileIdRef.current = null; // reset failure flag on success
       if (import.meta.env.DEV) {
         const sheetStats = data.sheets.map((sheet) => ({
           sheetName: sheet.sheetName,
@@ -70,15 +81,22 @@ export function useExcelEditor() {
         frozenCols: 0,
       });
     } catch (error) {
+      failedFileIdRef.current = fileId; // set failure flag
       console.error('Failed to open file:', error);
+      addToast({
+        type: 'error',
+        title: 'Failed to open file',
+        description: 'An error occurred while opening the Excel file. Please try again.',
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   const closeFile = useCallback(() => {
     setSession(null);
     setSelectedChangeId(null);
+    failedFileIdRef.current = null;
   }, []);
 
   const setActiveSheet = useCallback(async (index: number) => {
@@ -146,11 +164,16 @@ export function useExcelEditor() {
         });
       } catch (error) {
         console.error('Failed to load sheet data:', error);
+        addToast({
+          type: 'error',
+          title: 'Failed to load sheet',
+          description: 'Could not load sheet data. Please try again.',
+        });
       } finally {
         setIsLoading(false);
       }
     }
-  }, [session]);
+  }, [session, addToast]);
 
   const onWorkbookReady = useCallback((univerAPI: FUniver) => {
     univerRef.current = univerAPI;
@@ -335,10 +358,15 @@ export function useExcelEditor() {
       setSelectedChangeId(newChange.changeId);
     } catch (error) {
       console.error('Mutation failed:', error);
+      addToast({
+        type: 'error',
+        title: 'Mutation Failed',
+        description: 'Failed to process AI instructions for editing the Excel sheet.',
+      });
     } finally {
       setIsGenerating(false);
     }
-  }, [session, extractRowsFromSnapshot]);
+  }, [session, extractRowsFromSnapshot, addToast]);
 
   const acceptChange = useCallback(async (changeId: string) => {
     const change = session?.changeStack.find((c) => c.changeId === changeId);

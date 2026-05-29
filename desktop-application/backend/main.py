@@ -2,16 +2,18 @@
 
 import asyncio
 import sys
+import traceback
 from contextlib import asynccontextmanager
 
-import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.websockets import WebSocketState
+import uvicorn
 
 from dependencies import current_username
-from models.chat_models import _ws_clients
+from models.chat_models import _ws_clients, broadcast_datasource_status
 from routers.artifacts_router import router as artifacts_router
 from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
@@ -42,6 +44,44 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SheetMind API", version="1.0.0", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle request validation errors gracefully and return user-friendly messages."""
+    logger = get_logger()
+    logger.error("Validation error: %s, body: %s", exc.errors(), exc.body)
+    errors_summary = []
+    for err in exc.errors():
+        loc = " -> ".join(str(l) for l in err.get("loc", []))
+        msg = err.get("msg", "Value is invalid")
+        errors_summary.append(f"{loc}: {msg}")
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": f"Request validation failed: {'; '.join(errors_summary)}"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Handle all uncaught exceptions globally, logging traceback and returning a 500 error."""
+    logger = get_logger()
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail}
+        )
+    
+    logger.error("Unhandled global exception occurred on %s: %s\n%s", 
+                 request.url.path, str(exc), traceback.format_exc())
+    
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Please try again."}
+    )
 
 
 @app.middleware("http")
@@ -101,40 +141,28 @@ async def websocket_datasources(websocket: WebSocket):
     logger.info("WebSocket Connected: username=%s", username)
 
     try:
+        # Broadcast initial status update on connection
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT id, status, error_message, row_count, column_count FROM excel_files"
+        ).fetchall()
+        updates = [
+            {
+                "id": r[0],
+                "status": r[1],
+                "error_message": r[2],
+                "row_count": r[3],
+                "column_count": r[4],
+            }
+            for r in rows
+        ]
+        await websocket.send_json({"type": "status_update", "data": updates})
+
+        # Keep connection alive without polling, wait for close/disconnection
         while True:
-            try:
-                if (
-                    websocket.client_state == WebSocketState.DISCONNECTED
-                    or websocket.application_state == WebSocketState.DISCONNECTED
-                ):
-                    break
-                conn = get_connection()
-                rows = conn.execute(
-                    "SELECT id, status, error_message, row_count, column_count FROM excel_files"
-                ).fetchall()
-                updates = [
-                    {
-                        "id": r[0],
-                        "status": r[1],
-                        "error_message": r[2],
-                        "row_count": r[3],
-                        "column_count": r[4],
-                    }
-                    for r in rows
-                ]
-                logger.info(
-                    "WebSocket Broadcast (status_update): username=%s, data=%s", username, updates
-                )
-                await websocket.send_json({"type": "status_update", "data": updates})
-            except WebSocketDisconnect:
-                break
-            except RuntimeError as loop_err:
-                if 'Cannot call "send"' in str(loop_err):
-                    break
-                logger.error("WebSocket loop query error: %s", loop_err)
-            except Exception as loop_err:
-                logger.error("WebSocket loop query error: %s", loop_err)
-            await asyncio.sleep(2)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
     except Exception as e:
         logger.error("WebSocket connection error: %s", e)
     finally:

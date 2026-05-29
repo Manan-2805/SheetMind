@@ -1,5 +1,5 @@
-# SheetMind Desktop Application Builder
-# Usage: .\build.ps1 [-Version "1.0.0"]
+# SheetMind Desktop Application Builder for Windows
+# Usage: .\build-windows.ps1 [-Version "1.0.0"]
 
 param(
     [string]$Version = "1.0.0",
@@ -14,7 +14,7 @@ $LogPath = "$ROOT\build.log"
 Start-Transcript -Path $LogPath -Force | Out-Null
 
 Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "   SheetMind Desktop Builder v$Version" -ForegroundColor Cyan
+Write-Host "   SheetMind Desktop Windows Builder v$Version" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "Logging build process to: $LogPath" -ForegroundColor DarkGray
 
@@ -43,6 +43,14 @@ Stop-Process -Name "sheetmind-backend" -Force -ErrorAction SilentlyContinue
 Stop-Process -Name "electron" -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
+# Set Nuitka Cache Dir environment variable to use local directory
+$NuitkaCacheDir = "$ROOT\backend\.nuitka-cache"
+if (-not (Test-Path $NuitkaCacheDir)) {
+    New-Item -ItemType Directory -Force $NuitkaCacheDir | Out-Null
+}
+$env:NUITKA_CACHE_DIR = $NuitkaCacheDir
+Write-Host "Nuitka cache directory configured at: $NuitkaCacheDir" -ForegroundColor DarkGray
+
 # Step 1: Clean and Prepare Build Directory
 Write-Host "`n[1/5] Cleaning and preparing build directories..." -ForegroundColor Yellow
 $BuildDir = "$ROOT\build"
@@ -61,6 +69,9 @@ if ($Clean) {
     $NuitkaOnefileDir = "$ROOT\backend\main.onefile-build"
     if (Test-Path $NuitkaOnefileDir) {
         Remove-Item -Recurse -Force $NuitkaOnefileDir
+    }
+    if (Test-Path $NuitkaCacheDir) {
+        Remove-Item -Recurse -Force $NuitkaCacheDir
     }
 } else {
     Write-Host "Incremental build. Keeping Nuitka build cache and existing build directories..." -ForegroundColor DarkGray
@@ -84,8 +95,8 @@ Write-Host "Build directories prepared successfully." -ForegroundColor Green
 # Step 2: Build Frontend (React + Vite)
 Write-Host "`n[2/5] Building Frontend (React + Vite)..." -ForegroundColor Yellow
 Set-Location "$ROOT\frontend"
-Write-Host "Running npm install..." -ForegroundColor DarkGray
-npm install
+Write-Host "Running npm ci..." -ForegroundColor DarkGray
+npm ci
 Write-Host "Running npm run build..." -ForegroundColor DarkGray
 npm run build
 Write-Host "Copying built frontend assets..." -ForegroundColor DarkGray
@@ -96,13 +107,17 @@ Write-Host "Frontend build completed." -ForegroundColor Green
 Write-Host "`n[3/5] Compiling Backend with Nuitka..." -ForegroundColor Yellow
 Set-Location "$ROOT\backend"
 
-# Activate Virtual Environment
+# Activate Virtual Environment or Create if missing
 $VenvActivate = "$ROOT\backend\.venv\Scripts\Activate.ps1"
-if (Test-Path $VenvActivate) {
+if (-not (Test-Path $VenvActivate)) {
+    Write-Host "Virtual environment not found. Creating a new one using uv..." -ForegroundColor Yellow
+    uv venv "$ROOT\backend\.venv"
+    . $VenvActivate
+    Write-Host "Installing dependencies using uv..." -ForegroundColor DarkGray
+    uv pip install -r pyproject.toml
+} else {
     Write-Host "Activating python virtual environment..." -ForegroundColor DarkGray
     . $VenvActivate
-} else {
-    Write-Error "Virtual environment not found at $ROOT\backend\.venv. Please create one first."
 }
 
 # Install Nuitka using uv if not already installed
@@ -115,35 +130,44 @@ uv pip install nuitka ordered-set zstandard
 # - Bundles missing dynamic packages: aiofiles, seaborn, matplotlib, numpy, httpx, jinja2
 Write-Host "Compiling backend to native executable (using 8 parallel jobs)..." -ForegroundColor DarkGray
 
+$nuitkaPackages = @(
+    "fastapi",
+    "uvicorn",
+    "duckdb",
+    "pandas",
+    "openpyxl",
+    "openai",
+    "websockets",
+    "starlette",
+    "anyio",
+    "aiofiles",
+    "seaborn",
+    "matplotlib",
+    "numpy",
+    "httpx",
+    "routers",
+    "services",
+    "models",
+    "schemas",
+    "dependencies"
+)
+
 $nuitkaArgs = @(
     "--standalone",
     "--onefile",
     "--jobs=8",
     "--lto=no",
+    "--no-progressbar",
     "--output-dir=$BackendBuildDir",
-    "--output-filename=sheetmind-backend",
-    "--include-package=fastapi",
-    "--include-package=uvicorn",
-    "--include-package=duckdb",
-    "--include-package=pandas",
-    "--include-package=openpyxl",
-    "--include-package=openai",
-    "--include-package=websockets",
-    "--include-package=starlette",
-    "--include-package=anyio",
-    "--include-package=aiofiles",
-    "--include-package=seaborn",
-    "--include-package=matplotlib",
-    "--include-package=numpy",
-    "--include-package=httpx",
-    "--include-package=routers",
-    "--include-package=services",
-    "--include-package=models",
-    "--include-package=schemas",
-    "--include-package=dependencies",
-    "--include-package-data=uvicorn",
-    "--windows-console-mode=disable"
+    "--output-filename=sheetmind-backend"
 )
+
+foreach ($pkg in $nuitkaPackages) {
+    $nuitkaArgs += "--include-package=$pkg"
+}
+
+$nuitkaArgs += "--include-package-data=uvicorn"
+$nuitkaArgs += "--windows-console-mode=disable"
 
 if ($Clean) {
     Write-Host "Clean build: Nuitka will remove intermediate output directory upon completion." -ForegroundColor DarkGray
@@ -156,6 +180,14 @@ $nuitkaArgs += "main.py"
 
 python -B -m nuitka @nuitkaArgs
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Nuitka backend compilation failed with exit code $LASTEXITCODE"
+    if (Get-Command deactivate -ErrorAction SilentlyContinue) {
+        deactivate
+    }
+    Stop-Transcript | Out-Null
+    exit $LASTEXITCODE
+}
 
 # Deactivate Venv
 if (Get-Command deactivate -ErrorAction SilentlyContinue) {
@@ -175,8 +207,8 @@ $Pkg = Get-Content $PkgPath | ConvertFrom-Json
 $Pkg.version = $Version
 $Pkg | ConvertTo-Json -Depth 100 | Set-Content $PkgPath
 
-Write-Host "Running npm install for Electron..." -ForegroundColor DarkGray
-npm install
+Write-Host "Running npm ci for Electron..." -ForegroundColor DarkGray
+npm ci
 
 Write-Host "Building final desktop installer..." -ForegroundColor DarkGray
 # Use standard electron-builder to build for host OS (Windows installer)

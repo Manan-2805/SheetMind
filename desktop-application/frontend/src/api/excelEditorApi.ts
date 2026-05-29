@@ -23,12 +23,12 @@ export interface OpenFileResponse {
 }
 
 export const openFile = async (fileId: string): Promise<OpenFileResponse> => {
-  const resp = await client.get(`${API_BASE}/open`, { params: { fileId } });
+  const resp = await client.get(`${API_BASE}/open`, { params: { file_id: fileId } });
   return resp.data;
 };
 
 export const getSheetData = async (fileId: string, sheetName: string): Promise<SheetData> => {
-  const resp = await client.get(`${API_BASE}/sheet-data`, { params: { fileId, sheetName } });
+  const resp = await client.get(`${API_BASE}/sheet-data`, { params: { file_id: fileId, sheet_name: sheetName } });
   return resp.data;
 };
 

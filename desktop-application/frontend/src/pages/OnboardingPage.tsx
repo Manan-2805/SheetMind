@@ -3,6 +3,7 @@ import { UserPlus, ChevronRight, Trash2 } from "lucide-react";
 
 import { listUsers, setupUser, deleteUser, type UserInfo } from "@/api/authApi";
 import { useToast } from "@/hooks/useToast";
+import { formatAbsoluteDateTime } from "@/utils/formatDate";
 
 interface OnboardingPageProps {
   onComplete: (username: string) => void;
@@ -87,8 +88,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const formatLastLogin = (isoString?: string) => {
     if (!isoString) return "";
     try {
-      const d = new Date(isoString);
-      return `Last login: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      return `Last login: ${formatAbsoluteDateTime(isoString)}`;
     } catch {
       return "";
     }

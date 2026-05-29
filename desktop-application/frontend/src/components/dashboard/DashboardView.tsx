@@ -152,6 +152,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ dashboardId, onBac
   }
 
   const layout = JSON.parse(dashboard.layout_json || '[]');
+  const staticLayout = React.useMemo(() => {
+    return layout.map((item: any) => ({ ...item, static: true }));
+  }, [layout]);
 
   const renderWidget = (widget: DashboardWidget) => {
     const result = results[widget.id];
@@ -247,12 +250,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ dashboardId, onBac
       <div className="flex-1 overflow-auto p-6 bg-muted/20" ref={dashboardRef}>
         <Grid
           className="layout"
-          layout={layout}
+          layout={staticLayout}
           cols={12}
-          rowHeight={100}
+          rowHeight={60}
           width={1200}
           isDraggable={false}
           isResizable={false}
+          compactType="vertical"
           margin={[16, 16]}
         >
           {dashboard.widgets.map(w => {
