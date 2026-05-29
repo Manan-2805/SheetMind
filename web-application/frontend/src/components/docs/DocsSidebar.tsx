@@ -93,11 +93,7 @@ export default function DocsSidebar({ onClose }: DocsSidebarProps) {
 
   return (
     <nav
-      className="h-full overflow-y-auto py-6"
-      style={{
-        backgroundColor: 'var(--color-bg-elevated)',
-        borderRight: '1px solid var(--color-border)',
-      }}
+      className="h-full overflow-y-auto py-6 border-r border-white/10 bg-black/30 backdrop-blur-md"
     >
       <div className="px-4 mb-6">
         <Link to="/" className="flex items-center gap-2" onClick={onClose}>
@@ -123,24 +119,11 @@ export default function DocsSidebar({ onClose }: DocsSidebarProps) {
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
-                className="block py-[7px] pl-8 pr-4 text-[13px] font-medium transition-all duration-150"
-                style={{
-                  color: isActive ? 'var(--color-primary-light)' : 'var(--color-text-secondary)',
-                  backgroundColor: isActive ? 'var(--color-primary-glow)' : 'transparent',
-                  borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.color = 'var(--color-text-primary)'
-                    e.currentTarget.style.backgroundColor = 'var(--color-bg-card)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.color = 'var(--color-text-secondary)'
-                    e.currentTarget.style.backgroundColor = 'transparent'
-                  }
-                }}
+                className={`block py-[7px] pl-8 pr-4 text-[13px] font-medium transition-all duration-150 border-l-2 ${
+                  isActive
+                    ? 'text-brand bg-brand/10 border-brand'
+                    : 'text-white/60 hover:text-white hover:bg-white/5 border-transparent'
+                }`}
               >
                 {item.label}
               </Link>

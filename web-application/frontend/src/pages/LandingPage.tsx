@@ -2,18 +2,21 @@ import { useState } from 'react';
 
 import { motion } from 'framer-motion';
 import {
-  Bot,
+  BarChart2,
+  Bookmark,
   ChevronRight,
-  Database,
+  Cpu,
   Download,
-  FileSpreadsheet,
-  FileText,
-  History,
+  Files,
+  LayoutDashboard,
+  Lock,
   Menu,
-  MoreHorizontal,
+  MessageSquare,
   Search,
-  Sparkles,
+  ShieldCheck,
   Table,
+  Users,
+  Wand2,
   X
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -79,27 +82,25 @@ const gradientStyle = {
   filter: 'url(#c3-noise)',
 };
 
+const features = [
+  { icon: MessageSquare, name: 'Natural Language Queries', description: 'Ask questions about your Excel data in plain English. SheetMind converts them to SQL and returns instant results — no database knowledge required.' },
+  { icon: Files, name: 'Multi-File Support', description: 'Reference multiple Excel files in a single query using # mentions. Join data across files as naturally as asking a question.' },
+  { icon: BarChart2, name: 'Chart Builder', description: 'Generate bar charts, line graphs, pie charts, scatter plots, and 7 more chart types from any query result with one click.' },
+  { icon: Table, name: 'Excel Editor', description: 'Open any uploaded file in a full Handsontable-powered spreadsheet editor. Format cells, freeze rows, and edit data directly.' },
+  { icon: Wand2, name: 'AI Data Mutations', description: "Describe changes in plain English: 'increase column D by 10% where column E is less than 50.' Preview the exact diff before applying." },
+  { icon: LayoutDashboard, name: 'Live Dashboards', description: 'Build dashboards powered by your saved queries. Auto-refreshes every time you open it. Export as PNG with one click.' },
+  { icon: Bookmark, name: 'Saved Queries', description: 'Save your best queries with labels. Reuse them from anywhere. Run them directly from the saved queries drawer and see live results.' },
+  { icon: Cpu, name: 'Multi-LLM Support', description: 'Connect your OpenAI API key for GPT-4, or run completely offline with a local Ollama model. Your choice, switchable at any time.' },
+  { icon: Lock, name: '100% Local & Private', description: 'All data stays on your machine. No telemetry, no cloud sync, no analytics. Your Excel data is never sent to any server.' },
+  { icon: Users, name: 'Multi-User Accounts', description: 'Multiple local user accounts, each with fully isolated data, upload history, and settings. No passwords required.' },
+  { icon: Download, name: 'Artifacts & Exports', description: 'Every query result can be exported as an Excel file. Every chart can be saved as PNG or SVG. All stored locally in your artifacts.' },
+  { icon: ShieldCheck, name: 'Confidence Scoring', description: 'Confidence levels (1–5) accompany every generated query. Low-confidence results trigger a warning so you know when to verify.' },
+];
+
 export default function LandingPage() {
-  const [isYearly, setIsYearly] = useState(false);
-  const [activeTab, setActiveTab] = useState('Chat');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const menuItems = ['Features', 'Pricing', 'Blog', 'Documentation', 'Careers'];
-  const mockSheets = [
-    { name: 'Sales_Data.xlsx', color: '#00d2ff' },
-    { name: 'Customers.xlsx', color: '#A4F4FD' },
-    { name: 'Inventory.xlsx', color: '#f59e0b' },
-    { name: 'Expenses.xlsx', color: '#10b981' },
-  ];
-
-  const recentQueries = [
-    { title: 'Sales Analysis', desc: 'Top 5 products by revenue...', table: 'Sales_Data', time: '9:41 AM', active: true },
-    { title: 'Sophia Chen', desc: 'Re-calculate commission formulas...', table: 'Staff_Salaries', time: '8:12 AM', active: false },
-    { title: 'Inventory Audit', desc: 'Find items with low stock...', table: 'Inventory', time: 'Yesterday', active: false },
-    { title: 'Stripe Sync', desc: 'List all payout gaps...', table: 'Payouts', time: 'Yesterday', active: false },
-    { title: 'Vercel Deploy', desc: 'Audit deployment performance...', table: 'Deploy_Log', time: 'Mon', active: false },
-    { title: 'GitHub Activity', desc: 'List PR review lead time...', table: 'PR_Metrics', time: 'Mon', active: false },
-  ];
+  const menuItems = ['Features', 'Documentation'];
 
   return (
     <ClickSpark
@@ -109,7 +110,7 @@ export default function LandingPage() {
       sparkCount={9}
       duration={500}
     >
-      <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
+      <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white pt-16">
         
         {/* Global background video (fixed, behind everything) */}
         <div className="fixed inset-0 z-0 pointer-events-none">
@@ -139,48 +140,50 @@ export default function LandingPage() {
           </defs>
         </svg>
 
-        {/* SECTION 1 - NAVBAR */}
+        {/* SECTION 1 - STICKY NAVBAR */}
         <motion.nav
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="relative z-50 max-w-6xl mx-auto px-6 py-6 flex items-center justify-between"
+          className="fixed top-0 left-0 right-0 z-50 bg-[#0c0c0c]/70 backdrop-blur-md border-b border-white/10 h-16 flex items-center"
         >
-          <div className="flex items-center">
-            <Link to="/">
-              <LogoMark className="w-8 h-8 text-white" />
-            </Link>
-          </div>
+          <div className="max-w-6xl w-full mx-auto px-6 flex items-center justify-between">
+            <div className="flex items-center">
+              <Link to="/">
+                <LogoMark className="w-8 h-8 text-white" />
+              </Link>
+            </div>
 
-          <div className="hidden md:flex gap-8 items-center">
-            {menuItems.map((item, index) => (
-              <motion.div
-                key={item}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 + index * 0.05, ease: 'easeOut' }}
-              >
-                <Link
-                  to={`/${item.toLowerCase()}`}
-                  className="text-white/70 text-sm font-medium hover:text-white transition-colors"
+            <div className="hidden md:flex gap-8 items-center">
+              {menuItems.map((item, index) => (
+                <motion.div
+                  key={item}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 + index * 0.05, ease: 'easeOut' }}
                 >
-                  {item}
-                </Link>
-              </motion.div>
-            ))}
-          </div>
+                  <a
+                    href={item === 'Features' ? '#features' : '/docs'}
+                    className="text-white/70 text-sm font-medium hover:text-white transition-colors"
+                  >
+                    {item}
+                  </a>
+                </motion.div>
+              ))}
+            </div>
 
-          <div className="hidden md:block">
-            <AppleButton />
-          </div>
+            <div className="hidden md:block">
+              <AppleButton />
+            </div>
 
-          <div className="md:hidden">
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="w-10 h-10 flex items-center justify-center rounded-full border border-white/10 bg-white/5 text-white"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            <div className="md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="w-10 h-10 flex items-center justify-center rounded-full border border-white/10 bg-white/5 text-white"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </motion.nav>
 
@@ -189,17 +192,17 @@ export default function LandingPage() {
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-20 left-0 right-0 z-40 bg-[#0c0c0c]/95 border-b border-white/10 backdrop-blur-xl px-6 py-8 flex flex-col gap-6 md:hidden"
+            className="fixed top-16 left-0 right-0 z-40 bg-[#0c0c0c]/95 border-b border-white/10 backdrop-blur-xl px-6 py-8 flex flex-col gap-6 md:hidden"
           >
             {menuItems.map((item) => (
-              <Link
+              <a
                 key={item}
-                to={`/${item.toLowerCase()}`}
+                href={item === 'Features' ? '#features' : '/docs'}
                 onClick={() => setMobileMenuOpen(false)}
                 className="text-white/70 text-lg font-medium hover:text-white transition-colors"
               >
                 {item}
-              </Link>
+              </a>
             ))}
             <div className="pt-4 border-t border-white/10">
               <AppleButton full />
@@ -276,326 +279,63 @@ export default function LandingPage() {
           </div>
         </motion.section>
 
-        {/* SECTION 4 - APPLICATION MOCKUP */}
+        {/* SECTION 4 - TEMPORARY APPLICATION MOCKUP IMAGE PLACEHOLDER */}
         <section className="relative z-10 max-w-6xl mx-auto px-6 py-16 md:py-24">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.0, delay: 1.1, ease: [0.22, 1, 0.36, 1] }}
-            className="relative rounded-2xl overflow-hidden border border-white/10 bg-[#0e1014]/90 backdrop-blur-2xl shadow-2xl"
+            className="relative rounded-2xl overflow-hidden border border-white/10 bg-[#0e1014]/90 backdrop-blur-2xl shadow-2xl p-2 liquid-glass"
           >
-            {/* Title bar */}
-            <div className="h-12 border-b border-white/10 bg-black/20 flex items-center px-4 justify-between">
-              <div className="flex gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-                <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
-                <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+            <div className="w-full h-[520px] rounded-xl bg-gradient-to-br from-[#0e1014] via-[#161a22] to-[#0c0c0c] flex items-center justify-center border border-white/5 relative overflow-hidden">
+              <div className="absolute inset-0 bg-radial-gradient from-brand/10 via-transparent to-transparent opacity-50" />
+              <div className="text-center z-10 px-4">
+                <LogoMark className="w-16 h-16 text-white mx-auto opacity-70 mb-4 animate-pulse" />
+                <span className="text-sm font-semibold uppercase tracking-widest text-white/50">SheetMind Interface Mockup</span>
+                <p className="text-xs text-white/35 mt-2 max-w-xs mx-auto leading-relaxed">
+                  This preview placeholder will be replaced with the original high quality application dashboard screenshot.
+                </p>
               </div>
-              <div className="text-xs text-white/50 font-medium">
-                SheetMind — Query & Editor
-              </div>
-              <div className="w-14" />
-            </div>
-
-            {/* Body */}
-            <div className="grid grid-cols-12 h-[520px]">
-              
-              {/* Sidebar */}
-              <div className="col-span-12 md:col-span-3 border-r border-white/10 bg-black/30 p-4 flex flex-col justify-between overflow-y-auto">
-                <div className="flex flex-col gap-5">
-                  <button className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white text-black text-xs font-semibold px-3 py-2.5 transition-all hover:bg-white/90 active:scale-[0.98]">
-                    <Sparkles className="w-3.5 h-3.5 text-black fill-black" />
-                    <span>New Query</span>
-                  </button>
-
-                  <div className="flex flex-col gap-1">
-                    {[
-                      { name: 'Chat', icon: Bot, count: 12, active: true },
-                      { name: 'History', icon: History, count: 3, active: false },
-                      { name: 'Artifacts', icon: FileText, count: 0, active: false },
-                      { name: 'Saved Queries', icon: Sparkles, count: 2, active: false },
-                      { name: 'Data Sources', icon: Database, count: 0, active: false },
-                      { name: 'Excel Editor', icon: Table, count: 0, active: false },
-                    ].map((nav) => (
-                      <button
-                        key={nav.name}
-                        onClick={() => setActiveTab(nav.name)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                          nav.name === activeTab
-                            ? 'bg-white/10 text-white'
-                            : 'text-white/60 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <nav.icon className="w-3.5 h-3.5" />
-                          <span>{nav.name}</span>
-                        </div>
-                        {nav.count > 0 && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-white/10 text-white/50 text-[10px]">
-                            {nav.count}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-white/5">
-                  <div className="text-[10px] font-bold tracking-wider uppercase text-white/40 mb-2 px-1">
-                    Data Sources
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {mockSheets.map((sheet) => (
-                      <div
-                        key={sheet.name}
-                        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer text-xs"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5" style={{ color: sheet.color }} />
-                        <span className="text-white/70 truncate">{sheet.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Query stream */}
-              <div className="hidden md:flex md:col-span-4 border-r border-white/10 flex-col overflow-y-auto">
-                <div className="p-3 border-b border-white/10 flex items-center gap-2">
-                  <Search className="w-3.5 h-3.5 text-white/40" />
-                  <input
-                    type="text"
-                    placeholder="Search queries"
-                    className="w-full bg-transparent text-xs text-white placeholder-white/30 focus:outline-none"
-                  />
-                </div>
-                <div className="divide-y divide-white/5">
-                  {recentQueries.map((query) => (
-                    <div
-                      key={query.title}
-                      className={`p-3 flex flex-col gap-1 transition-all cursor-pointer ${
-                        query.active ? 'bg-white/5 border-l-2 border-brand' : 'hover:bg-white/[0.02]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-white">{query.title}</span>
-                        <span className="text-[10px] text-white/40">{query.time}</span>
-                      </div>
-                      <span className="text-[11px] text-white/50 line-clamp-1">{query.desc}</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <FileSpreadsheet className="w-3 h-3 text-cyan-400" />
-                        <span className="text-[10px] text-cyan-400 font-semibold">{query.table}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Analytical viewer */}
-              <div className="col-span-12 md:col-span-5 flex flex-col justify-between overflow-y-auto">
-                <div>
-                  {/* Toolbar */}
-                  <div className="p-3 border-b border-white/10 flex items-center justify-between bg-black/10">
-                    <div className="flex gap-2">
-                      {['Export PNG', 'View SQL', 'Saved Queries', 'Settings'].map((btn) => (
-                        <button
-                          key={btn}
-                          className="px-2 py-1 rounded-md text-[10px] font-medium text-white/70 hover:bg-white/5 hover:text-white transition-all"
-                        >
-                          {btn}
-                        </button>
-                      ))}
-                    </div>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/5 text-white/60">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Header info */}
-                  <div className="p-4 flex items-center gap-3 border-b border-white/5">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00d2ff] to-[#0B2551] flex items-center justify-center text-white font-bold text-sm shadow">
-                      S
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xs font-bold text-white">Sales Analysis</h3>
-                      <div className="text-[10px] text-white/40 truncate">
-                        Sales_Data · by AI Agent · 9:41 AM
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-brand/10 border border-brand/20 text-brand text-[10px] font-semibold">
-                      Analytical
-                    </span>
-                  </div>
-
-                  {/* Main content body */}
-                  <div className="p-4 flex flex-col gap-4">
-                    {/* Insight Card */}
-                    <div className="rounded-xl border border-[#A4F4FD]/20 bg-[#A4F4FD]/5 p-3 flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-cyan-300">
-                        <Sparkles className="w-3.5 h-3.5 fill-cyan-300" />
-                        <span className="text-[11px] font-bold uppercase tracking-wider">AI Insight by SheetMind</span>
-                      </div>
-                      <p className="text-[11px] leading-[1.4] text-white/80">
-                        Product 'Pro Macbook' contributed 42% of total sales, followed by 'Studio Display' at 18%. Revenue shows a 12% MoM growth.
-                      </p>
-                    </div>
-
-                    {/* Table */}
-                    <div className="rounded-xl border border-white/10 bg-black/40 overflow-hidden">
-                      <table className="w-full border-collapse text-[10px]">
-                        <thead>
-                          <tr className="border-b border-white/10 bg-white/5 text-white/50 text-left">
-                            <th className="p-2 font-semibold">Product</th>
-                            <th className="p-2 font-semibold text-right">Revenue</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5 text-white/80">
-                          <tr>
-                            <td className="p-2 font-medium">Pro Macbook</td>
-                            <td className="p-2 text-right font-semibold">$120,400</td>
-                          </tr>
-                          <tr>
-                            <td className="p-2 font-medium">Studio Display</td>
-                            <td className="p-2 text-right font-semibold">$52,000</td>
-                          </tr>
-                          <tr>
-                            <td className="p-2 font-medium">Keyboard</td>
-                            <td className="p-2 text-right font-semibold">$14,000</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Attachment / Download pill */}
-                <div className="p-4 bg-black/20 border-t border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                    <span className="text-[11px] text-white/70 font-medium">sales-summary-q1.xlsx</span>
-                  </div>
-                  <button className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold transition-all">
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download summary</span>
-                  </button>
-                </div>
-              </div>
-
             </div>
           </motion.div>
         </section>
 
-        {/* SECTION 5 - FEATURE QUERY */}
-        <section className="relative z-10 max-w-6xl mx-auto px-6 py-20 md:py-28">
-          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-start">
-            
-            {/* Left Column */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7 }}
-              className="flex flex-col items-start"
-            >
-              <SectionEyebrow label="Query" tag="AI-native" />
-              <h2 className="mt-5 text-3xl md:text-5xl font-semibold tracking-tight leading-[1.02] text-white">
-                Query spreadsheets<br />
-                in a single pass.
-              </h2>
-              <p className="mt-6 text-white/60 text-base leading-[1.6] max-w-md">
-                SheetMind reads your question, maps the columns, and executes highly optimized local queries. Focus on finding insights — let our AI handle the SQL generation and formula logic.
-              </p>
+        {/* SECTION 5 - FEATURES SECTION (12 LIQUID GLASS CARDS) */}
+        <section id="features" className="relative z-10 max-w-6xl mx-auto px-6 py-20 md:py-28">
+          <div className="flex flex-col items-center text-center mb-16">
+            <SectionEyebrow label="Features" tag="Free & Open Source" />
+            <h2 className="mt-6 text-3xl font-bold md:text-5xl text-white">
+              Everything your spreadsheets deserve
+            </h2>
+            <p className="mt-4 max-w-2xl text-base md:text-lg text-white/60">
+              From natural language queries to AI-powered editing — SheetMind transforms how you work with Excel data, running entirely locally.
+            </p>
+          </div>
 
-              <div className="mt-8 flex flex-wrap gap-2">
-                {[
-                  'Natural Language to SQL',
-                  'Automatic Visualization',
-                  'Excel Direct Editing',
-                  'AI Formula Injection',
-                ].map((chip) => (
-                  <span
-                    key={chip}
-                    className="text-xs text-white/70 px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03] hover:bg-white/5 transition-all cursor-default"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Right Column */}
-            <div className="liquid-glass rounded-2xl p-5 shadow-2xl">
-              <div className="text-xs text-white/40 tracking-wider mb-4 font-medium uppercase">
-                Today · 42 analytical queries executed
-              </div>
-              <div className="flex flex-col gap-3">
-                {[
-                  { title: 'Schema Resolved', count: 4, color: '#ffffff', items: ['Sales_Data.xlsx', 'Customers.xlsx'] },
-                  { title: 'SQL Generated', count: 7, color: '#e5e5e5', items: ['SELECT product, SUM(revenue)...', 'SELECT customer_name...'] },
-                  { title: 'Charts Rendered', count: 18, color: '#a3a3a3', items: ['Monthly Sales (Bar)', 'User Retention (Line)'] },
-                  { title: 'Excel Backups', count: 13, color: '#525252', items: ['Sales_Data_Backup_2026.xlsx', 'Expenses_Backup.xlsx'] },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="liquid-glass rounded-lg p-3 hover:bg-white/[0.02] transition-all"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-xs font-semibold text-white/90">{item.title}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-white/50">{item.count} items</span>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      {item.items.map((sub, i) => (
-                        <div key={i} className="text-[10px] font-mono text-white/60 truncate pl-3">
-                          {sub}
-                        </div>
-                      ))}
-                    </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature, i) => {
+              const Icon = feature.icon;
+              return (
+                <motion.div
+                  key={feature.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: (i % 3) * 0.1 }}
+                  className="liquid-glass rounded-2xl p-6 shadow-xl hover:bg-white/[0.02] transition-all"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-brand mb-4 border border-white/5">
+                    <Icon className="w-5 h-5 text-brand" />
                   </div>
-                ))}
-              </div>
-            </div>
-
+                  <h3 className="text-base font-semibold text-white mb-2">{feature.name}</h3>
+                  <p className="text-xs leading-relaxed text-white/60">{feature.description}</p>
+                </motion.div>
+              );
+            })}
           </div>
         </section>
 
-        {/* SECTION 6 - LOGO CLOUD */}
-        <section className="relative z-10 max-w-6xl mx-auto px-6 py-16 md:py-20">
-          <div className="text-center">
-            <span className="text-xs uppercase tracking-widest text-white/40 font-semibold">
-              Trusted by the world's most analytical teams
-            </span>
-          </div>
-
-          <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-6 justify-center items-center">
-            {[
-              'Linear',
-              'Vercel',
-              'Figma',
-              'Stripe',
-              'Ramp',
-              'Notion',
-              'Loom',
-              'Arc',
-            ].map((logo, i) => (
-              <motion.div
-                key={logo}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.05 }}
-                className="text-center"
-              >
-                <span className="text-sm font-semibold tracking-tight text-white/50 hover:text-white transition-colors cursor-default">
-                  {logo}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* SECTION 7 - TESTIMONIALS */}
+        {/* SECTION 6 - TESTIMONIALS */}
         <section className="relative z-10 max-w-6xl mx-auto px-6 py-20 md:py-28 border-t border-white/10">
           <div className="grid md:grid-cols-3 gap-6">
             {[
@@ -637,139 +377,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* SECTION 8 - PRICING */}
-        <section className="c3-pricing-section relative z-10">
-          
-          {/* Pricing SVG Noise Filter */}
-          <svg className="absolute w-0 h-0 pointer-events-none">
-            <defs>
-              <filter id="c3-noise-pricing">
-                <feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="2" stitchTiles="stitch" />
-                <feComponentTransfer>
-                  <feFuncA type="linear" slope="0.075" />
-                </feComponentTransfer>
-                <feComposite in2="SourceGraphic" operator="in" result="noise" />
-                <feBlend in="SourceGraphic" in2="noise" mode="overlay" />
-              </filter>
-            </defs>
-          </svg>
-
-          {/* Watermark Line */}
-          <div className="c3-watermark-container">
-            <div className="c3-watermark-main" style={{ filter: 'url(#c3-noise-pricing)' }}>
-              <span className="c3-watermark-line-1">Your spreadsheet.</span>
-              <span className="c3-watermark-line-2">Revitalized</span>
-            </div>
-          </div>
-
-          {/* Toggle Block */}
-          <div className="c3-toggle-wrap">
-            <span className="text-xs font-semibold uppercase tracking-wider text-white/60">
-              Yearly billing
-            </span>
-            <button
-              onClick={() => setIsYearly(!isYearly)}
-              className={`c3-toggle ${isYearly ? 'active' : ''}`}
-            >
-              <span className="c3-toggle-knob" />
-            </button>
-          </div>
-
-          {/* Grid Blocks */}
-          <div className="c3-grid">
-            
-            {/* Card 1 */}
-            <div className="c3-card">
-              <span className="c3-tier-small">Free</span>
-              <span className="c3-tier-large">Free</span>
-              <p className="c3-desc">
-                For individuals getting started with SheetMind.
-              </p>
-              <ul className="c3-list">
-                {[
-                  'Up to 3 Excel files',
-                  'Local DuckDB database',
-                  'Basic NL-to-SQL querying',
-                  'Standard table and 3 basic charts',
-                  'Access via desktop client',
-                ].map((feat) => (
-                  <li key={feat}>
-                    <span className="c3-check">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              <button className="c3-btn">Choose Plan</button>
-            </div>
-
-            {/* Card 2 */}
-            <div className="c3-card">
-              <span className="c3-tier-small">Standard</span>
-              <span className="c3-tier-large">
-                {isYearly ? '$99.99/y' : '$9.99/m'}
-              </span>
-              <p className="c3-desc">
-                For freelancers and small teams who need absolute freedom and flexibility.
-              </p>
-              <ul className="c3-list">
-                {[
-                  'Up to 50 Excel files',
-                  'Advanced chart builder (10 types)',
-                  'Direct Excel grid editor',
-                  'AI-powered formula injection & mutation',
-                  'Automatic local version backups',
-                ].map((feat) => (
-                  <li key={feat}>
-                    <span className="c3-check">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              <button className="c3-btn">Choose Plan</button>
-            </div>
-
-            {/* Card 3 */}
-            <div className="c3-card c3-card-pro">
-              <span className="c3-tier-small">Pro</span>
-              <span className="c3-tier-large">
-                {isYearly ? '$199.99/y' : '$19.99/m'}
-              </span>
-              <p className="c3-desc">
-                For agencies, finance departments, and data professionals.
-              </p>
-              <ul className="c3-list">
-                {[
-                  'Unlimited Excel files',
-                  'Advanced multi-sheet relationship detection',
-                  'Dashboard creator with live unbound widget builder',
-                  'PNG & PDF dashboard exports',
-                  'Premium customer support',
-                ].map((feat) => (
-                  <li key={feat}>
-                    <span className="c3-check">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              <button className="c3-btn">Choose Plan</button>
-            </div>
-
-          </div>
-        </section>
-
-        {/* SECTION 9 - FINAL CTA */}
+        {/* SECTION 7 - FINAL CTA */}
         <section className="relative z-10 max-w-6xl mx-auto px-6 py-20 md:py-32">
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
@@ -792,15 +400,20 @@ export default function LandingPage() {
             </h2>
 
             <p className="mt-6 text-white/60 max-w-md mx-auto text-sm leading-[1.6]">
-              Join thousands of builders, analysts, and operators who query data with natural language — not tedious VLOOKUPs.
+              SheetMind is completely free, open-source, and runs entirely offline. Query your spreadsheets with local natural language models — zero cloud dependencies.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <AppleButton label="Download SheetMind" />
-              <button className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/15 text-white text-sm font-medium px-5 py-3 hover:bg-white/5 transition-all">
-                <span>Talk to sales</span>
+              <a
+                href="https://github.com/Manan-2805/SheetMind"
+                target="_blank"
+                rel="noreferrer"
+                className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/15 text-white text-sm font-medium px-5 py-3 hover:bg-white/5 transition-all"
+              >
+                <span>GitHub Repository</span>
                 <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-[1px]" />
-              </button>
+              </a>
             </div>
           </motion.div>
         </section>
