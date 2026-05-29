@@ -8,6 +8,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        brand: '#8B5CF6',
         'bg-base': 'var(--color-bg-base)',
         'bg-elevated': 'var(--color-bg-elevated)',
         'bg-card': 'var(--color-bg-card)',
@@ -34,7 +35,7 @@ const config: Config = {
         xl: 'var(--radius-xl)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
     },
