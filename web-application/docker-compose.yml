@@ -1,4 +1,5 @@
 services:
+  # ─── PostgreSQL ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -16,54 +17,65 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ─── Backend (FastAPI) ───────────────────────────────────────
   backend:
     build:
       context: ./backend
+      # Use the same multi-stage Dockerfile for dev; override CMD below
+      target: runtime
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       SECRET_KEY: ${SECRET_KEY}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
-      BACKEND_PORT: ${BACKEND_PORT}
-      ENVIRONMENT: ${ENVIRONMENT}
-      MAINTENANCE_MODE: ${MAINTENANCE_MODE}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      ENVIRONMENT: development
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
       VITE_APP_URL: ${VITE_APP_URL}
     expose:
       - "8000"
+    # In dev: mount source for hot-reload, override CMD with --reload
     volumes:
-      - ./backend:/app
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - ./backend/app:/app/app:ro
+      - ./backend/alembic:/app/alembic:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
+  # ─── Frontend (Vite dev server) ──────────────────────────────
   frontend:
     build:
       context: ./frontend
+      # Use only the builder stage for dev (npm run dev inside)
+      target: builder
     depends_on:
       - backend
     expose:
       - "5173"
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-      VITE_APP_URL: ${VITE_APP_URL}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost/api}
+      VITE_APP_URL: ${VITE_APP_URL:-http://localhost}
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+      - ./frontend/index.html:/app/index.html:ro
     command: npm run dev -- --host 0.0.0.0
     restart: unless-stopped
 
+  # ─── Nginx (reverse proxy) ───────────────────────────────────
   nginx:
-    image: nginx:1.25-alpine
+    image: nginx:1.27-alpine
     ports:
       - "80:80"
     depends_on:

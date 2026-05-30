@@ -1,11 +1,23 @@
 services:
+  # ─── PostgreSQL ──────────────────────────────────────────────
+  # Remove dev port exposure in production
   postgres:
     ports: !reset []
 
+  # ─── Backend ─────────────────────────────────────────────────
+  # Production: no source mounts, multi-worker uvicorn
   backend:
+    build:
+      context: ./backend
+      target: runtime
     volumes: !reset []
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    environment:
+      ENVIRONMENT: production
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --no-access-log
+    restart: always
 
+  # ─── Frontend ────────────────────────────────────────────────
+  # Production: full multi-stage build (builder + nginx)
   frontend:
     build:
       context: ./frontend
@@ -13,7 +25,10 @@ services:
     volumes: !reset []
     command: !reset ""
     entrypoint: !reset []
+    restart: always
 
+  # ─── Nginx ───────────────────────────────────────────────────
   nginx:
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    restart: always

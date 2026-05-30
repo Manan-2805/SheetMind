@@ -1,0 +1,31 @@
+# Heavy directories — never needed in the build context
+node_modules/
+dist/
+.vite/
+
+# Test / tooling artefacts
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
