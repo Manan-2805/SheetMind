@@ -1,5 +1,5 @@
 interface SectionBadgeProps {
-  text: string
+  text: string;
 }
 
 export default function SectionBadge({ text }: SectionBadgeProps) {
@@ -14,5 +14,5 @@ export default function SectionBadge({ text }: SectionBadgeProps) {
     >
       {text}
     </span>
-  )
+  );
 }

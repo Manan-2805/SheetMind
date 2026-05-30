@@ -1,13 +1,13 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom';
 
 interface SidebarItem {
-  label: string
-  path: string
+  label: string;
+  path: string;
 }
 
 interface SidebarSection {
-  title: string
-  items: SidebarItem[]
+  title: string;
+  items: SidebarItem[];
 }
 
 const sections: SidebarSection[] = [
@@ -82,19 +82,17 @@ const sections: SidebarSection[] = [
       { label: 'Data Management', path: '/docs/settings/data-management' },
     ],
   },
-]
+];
 
 interface DocsSidebarProps {
-  onClose?: () => void
+  onClose?: () => void;
 }
 
 export default function DocsSidebar({ onClose }: DocsSidebarProps) {
-  const location = useLocation()
+  const location = useLocation();
 
   return (
-    <nav
-      className="h-full overflow-y-auto py-6 border-r border-white/10 bg-black/30 backdrop-blur-md"
-    >
+    <nav className="h-full overflow-y-auto py-6 border-r border-white/10 bg-black/30 backdrop-blur-md">
       <div className="px-4 mb-6">
         <Link to="/" className="flex items-center gap-2" onClick={onClose}>
           <div className="h-5 w-5 rounded" style={{ backgroundColor: 'var(--color-primary)' }} />
@@ -113,7 +111,7 @@ export default function DocsSidebar({ onClose }: DocsSidebarProps) {
             {section.title}
           </div>
           {section.items.map((item) => {
-            const isActive = location.pathname === item.path
+            const isActive = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
@@ -127,10 +125,10 @@ export default function DocsSidebar({ onClose }: DocsSidebarProps) {
               >
                 {item.label}
               </Link>
-            )
+            );
           })}
         </div>
       ))}
     </nav>
-  )
+  );
 }

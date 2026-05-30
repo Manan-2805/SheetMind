@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -19,10 +19,11 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   background-color: #0c0c0c;
   color: #ffffff;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -55,19 +56,44 @@ html, body {
 }
 
 .liquid-glass::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   padding: 1.4px;
-  background: linear-gradient(180deg,
-    rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 20%,
-    rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0) 60%,
-    rgba(255, 255, 255, 0.15) 80%, rgba(255, 255, 255, 0.45) 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.15) 80%,
+    rgba(255, 255, 255, 0.45) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 99px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.55);
 }
 
 .c3-pricing-section {
@@ -104,7 +130,7 @@ html, body {
 }
 
 .c3-watermark-line-2 {
-  background: linear-gradient(to right, #091020 0%, #0B2551 25%, #A4F4FD 65%, #00d2ff 100%);
+  background: linear-gradient(to right, #091020 0%, #0b2551 25%, #a4f4fd 65%, #00d2ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -132,13 +158,13 @@ html, body {
   min-height: 580px;
   display: flex;
   flex-direction: column;
-  transition: all 0.6s cubic-bezier(.22, 1, .36, 1);
+  transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
   position: relative;
 }
 
 .c3-card::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -211,7 +237,7 @@ html, body {
   border: none;
   cursor: pointer;
   align-self: center;
-  transition: all 0.3s cubic-bezier(.22, 1, .36, 1);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .c3-btn:hover {
@@ -239,7 +265,7 @@ html, body {
   position: relative;
   cursor: pointer;
   border: none;
-  transition: background 0.3s cubic-bezier(.4, 0, .2, 1);
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
 }
 
@@ -251,7 +277,7 @@ html, body {
   position: absolute;
   top: 4px;
   left: 4px;
-  transition: all 0.3s cubic-bezier(.4, 0, .2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .c3-toggle.active {

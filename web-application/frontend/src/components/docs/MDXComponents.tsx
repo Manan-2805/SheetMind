@@ -1,21 +1,28 @@
-import type { ReactNode } from 'react'
-
-import { AlertCircle, Info, Lightbulb } from 'lucide-react'
+import { AlertCircle, Info, Lightbulb } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface CalloutProps {
-  type?: 'info' | 'warning' | 'tip'
-  children: ReactNode
+  type?: 'info' | 'warning' | 'tip';
+  children: ReactNode;
 }
 
 const calloutStyles = {
-  info: { borderColor: 'var(--color-primary)', icon: Info, iconColor: 'var(--color-primary-light)' },
-  warning: { borderColor: 'var(--color-warning)', icon: AlertCircle, iconColor: 'var(--color-warning)' },
+  info: {
+    borderColor: 'var(--color-primary)',
+    icon: Info,
+    iconColor: 'var(--color-primary-light)',
+  },
+  warning: {
+    borderColor: 'var(--color-warning)',
+    icon: AlertCircle,
+    iconColor: 'var(--color-warning)',
+  },
   tip: { borderColor: 'var(--color-success)', icon: Lightbulb, iconColor: 'var(--color-success)' },
-}
+};
 
 export function Callout({ type = 'info', children }: CalloutProps) {
-  const style = calloutStyles[type]
-  const Icon = style.icon
+  const style = calloutStyles[type];
+  const Icon = style.icon;
 
   return (
     <div
@@ -31,7 +38,7 @@ export function Callout({ type = 'info', children }: CalloutProps) {
         {children}
       </div>
     </div>
-  )
+  );
 }
 
 export function DocH1({ children }: { children: ReactNode }) {
@@ -45,40 +52,31 @@ export function DocH1({ children }: { children: ReactNode }) {
     >
       {children}
     </h1>
-  )
+  );
 }
 
 export function DocH2({ children }: { children: ReactNode }) {
   return (
-    <h2
-      className="text-2xl font-bold mt-12 mb-4"
-      style={{ color: 'var(--color-text-primary)' }}
-    >
+    <h2 className="text-2xl font-bold mt-12 mb-4" style={{ color: 'var(--color-text-primary)' }}>
       {children}
     </h2>
-  )
+  );
 }
 
 export function DocH3({ children }: { children: ReactNode }) {
   return (
-    <h3
-      className="text-xl font-semibold mt-8 mb-3"
-      style={{ color: 'var(--color-text-primary)' }}
-    >
+    <h3 className="text-xl font-semibold mt-8 mb-3" style={{ color: 'var(--color-text-primary)' }}>
       {children}
     </h3>
-  )
+  );
 }
 
 export function DocP({ children }: { children: ReactNode }) {
   return (
-    <p
-      className="text-[15px] leading-7 mb-4"
-      style={{ color: 'var(--color-text-secondary)' }}
-    >
+    <p className="text-[15px] leading-7 mb-4" style={{ color: 'var(--color-text-secondary)' }}>
       {children}
     </p>
-  )
+  );
 }
 
 export function DocCode({ children }: { children: ReactNode }) {
@@ -94,7 +92,7 @@ export function DocCode({ children }: { children: ReactNode }) {
     >
       {children}
     </code>
-  )
+  );
 }
 
 export function DocPre({ children }: { children: ReactNode }) {
@@ -111,7 +109,7 @@ export function DocPre({ children }: { children: ReactNode }) {
     >
       {children}
     </pre>
-  )
+  );
 }
 
 export function DocUl({ children }: { children: ReactNode }) {
@@ -119,7 +117,7 @@ export function DocUl({ children }: { children: ReactNode }) {
     <ul className="mb-4 pl-5 list-disc" style={{ color: 'var(--color-text-secondary)' }}>
       {children}
     </ul>
-  )
+  );
 }
 
 export function DocOl({ children }: { children: ReactNode }) {
@@ -127,7 +125,7 @@ export function DocOl({ children }: { children: ReactNode }) {
     <ol className="mb-4 pl-5 list-decimal" style={{ color: 'var(--color-text-secondary)' }}>
       {children}
     </ol>
-  )
+  );
 }
 
 export function DocLi({ children }: { children: ReactNode }) {
@@ -135,7 +133,7 @@ export function DocLi({ children }: { children: ReactNode }) {
     <li className="leading-7 mb-1.5 text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>
       {children}
     </li>
-  )
+  );
 }
 
 export function DocBlockquote({ children }: { children: ReactNode }) {
@@ -150,7 +148,7 @@ export function DocBlockquote({ children }: { children: ReactNode }) {
     >
       {children}
     </blockquote>
-  )
+  );
 }
 
 export function DocTable({ children }: { children: ReactNode }) {
@@ -158,7 +156,7 @@ export function DocTable({ children }: { children: ReactNode }) {
     <div className="overflow-x-auto mb-6">
       <table className="w-full border-collapse">{children}</table>
     </div>
-  )
+  );
 }
 
 export function DocTh({ children }: { children: ReactNode }) {
@@ -172,7 +170,7 @@ export function DocTh({ children }: { children: ReactNode }) {
     >
       {children}
     </th>
-  )
+  );
 }
 
 export function DocTd({ children }: { children: ReactNode }) {
@@ -186,9 +184,9 @@ export function DocTd({ children }: { children: ReactNode }) {
     >
       {children}
     </td>
-  )
+  );
 }
 
 export function DocHr() {
-  return <hr className="my-10" style={{ borderColor: 'var(--color-border)' }} />
+  return <hr className="my-10" style={{ borderColor: 'var(--color-border)' }} />;
 }

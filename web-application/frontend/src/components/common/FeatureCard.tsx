@@ -1,31 +1,30 @@
-import { useCallback, useRef, useState } from 'react'
-
-import type { LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
 interface FeatureCardProps {
-  icon: LucideIcon
-  name: string
-  description: string
+  icon: LucideIcon;
+  name: string;
+  description: string;
 }
 
 export default function FeatureCard({ icon: Icon, name, description }: FeatureCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null)
-  const [transform, setTransform] = useState('')
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState('');
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const card = cardRef.current
-    if (!card) return
-    const rect = card.getBoundingClientRect()
-    const x = e.clientX - rect.left - rect.width / 2
-    const y = e.clientY - rect.top - rect.height / 2
-    const rotateX = (-y / rect.height) * 8
-    const rotateY = (x / rect.width) * 8
-    setTransform(`perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`)
-  }, [])
+    const card = cardRef.current;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    const rotateX = (-y / rect.height) * 8;
+    const rotateY = (x / rect.width) * 8;
+    setTransform(`perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`);
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setTransform('')
-  }, [])
+    setTransform('');
+  }, []);
 
   return (
     <div
@@ -46,18 +45,12 @@ export default function FeatureCard({ icon: Icon, name, description }: FeatureCa
       >
         <Icon size={24} style={{ color: 'var(--color-primary-light)' }} />
       </div>
-      <h3
-        className="mt-4 text-base font-semibold"
-        style={{ color: 'var(--color-text-primary)' }}
-      >
+      <h3 className="mt-4 text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
         {name}
       </h3>
-      <p
-        className="mt-2 text-sm leading-relaxed"
-        style={{ color: 'var(--color-text-secondary)' }}
-      >
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
         {description}
       </p>
     </div>
-  )
+  );
 }

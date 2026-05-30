@@ -1,5 +1,13 @@
-import { Callout, DocCode, DocH1, DocH2, DocLi, DocOl, DocP } from '@/components/docs/MDXComponents'
-import ImagePlaceholder from '@/components/docs/ImagePlaceholder'
+import ImagePlaceholder from '@/components/docs/ImagePlaceholder';
+import {
+  Callout,
+  DocCode,
+  DocH1,
+  DocH2,
+  DocLi,
+  DocOl,
+  DocP,
+} from '@/components/docs/MDXComponents';
 
 export default function QuickStartPage() {
   return (
@@ -11,15 +19,17 @@ export default function QuickStartPage() {
       </DocP>
 
       <Callout type="info">
-        Before starting, make sure you have configured an LLM provider in Settings. See the
-        First Launch & Setup page for instructions.
+        Before starting, make sure you have configured an LLM provider in Settings. See the First
+        Launch & Setup page for instructions.
       </Callout>
 
       <DocH2>Step 1: Upload a File</DocH2>
       <DocP>
-        Navigate to the Data Sources page from the sidebar. Drag and drop your <DocCode>.xlsx</DocCode> or
-        <DocCode>.xls</DocCode> file into the upload zone, or click Browse to select a file. SheetMind
-        will import the file into its local DuckDB database. You will see a progress bar during import.
+        Navigate to the Data Sources page from the sidebar. Drag and drop your{' '}
+        <DocCode>.xlsx</DocCode> or
+        <DocCode>.xls</DocCode> file into the upload zone, or click Browse to select a file.
+        SheetMind will import the file into its local DuckDB database. You will see a progress bar
+        during import.
       </DocP>
       <ImagePlaceholder label="Data Sources — File Upload Zone" />
 
@@ -54,8 +64,8 @@ export default function QuickStartPage() {
       <DocH2>Step 5: View in Saved Queries</DocH2>
       <DocP>
         Open the Saved Queries drawer from the sidebar. You will see your saved query with its
-        label, the original natural language text, usage count, and last used timestamp. Click
-        the query card to run it again instantly and see the latest results.
+        label, the original natural language text, usage count, and last used timestamp. Click the
+        query card to run it again instantly and see the latest results.
       </DocP>
       <ImagePlaceholder label="Saved Queries Drawer" />
 
@@ -67,5 +77,5 @@ export default function QuickStartPage() {
         <DocLi>Explore the Debug Info panel to understand query confidence</DocLi>
       </DocOl>
     </div>
-  )
+  );
 }

@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-
 import { motion } from 'framer-motion';
+import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface BorderTrailProps {
   children: React.ReactNode;
   size?: number;
-  transition?: object;
+  transition?: { duration?: number; repeat?: number; ease?: string };
   style?: React.CSSProperties;
   className?: string;
   gradientId?: string;
@@ -14,7 +14,7 @@ interface BorderTrailProps {
 export default function BorderTrail({
   children,
   size = 120,
-  transition = { duration: 8, repeat: Infinity, ease: 'linear' },
+  transition = { duration: 8 },
   style,
   className = '',
   gradientId = 'trail-gradient',
@@ -53,12 +53,11 @@ export default function BorderTrail({
                 V ${rx} 
                 A ${rx} ${rx} 0 0 1 ${rx} 0 Z`;
 
+  const pathLength = width * 2 + height * 2;
+  const duration = transition?.duration || 8;
+
   return (
-    <div
-      ref={containerRef}
-      className={`relative ${className}`}
-      style={{ overflow: 'visible' }}
-    >
+    <div ref={containerRef} className={`relative ${className}`} style={{ overflow: 'visible' }}>
       {width > 0 && height > 0 && (
         <svg
           className="absolute inset-0 w-full h-full pointer-events-none"
@@ -77,10 +76,15 @@ export default function BorderTrail({
             stroke={`url(#${gradientId})`}
             strokeWidth="2"
             strokeLinecap="round"
-            strokeDasharray={`${size} ${width * 2 + height * 2}`}
-            initial={{ strokeDashoffset: 0 }}
-            animate={{ strokeDashoffset: -(width * 2 + height * 2) }}
-            transition={transition}
+            strokeDasharray={`${size} ${pathLength}`}
+            animate={{
+              strokeDashoffset: [0, -pathLength],
+            }}
+            transition={{
+              duration: duration,
+              ease: 'linear',
+              repeat: Infinity,
+            }}
           />
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -93,9 +97,7 @@ export default function BorderTrail({
         </svg>
       )}
 
-      <div className="relative z-10 w-full h-full">
-        {children}
-      </div>
+      <div className="relative z-10 w-full h-full">{children}</div>
     </div>
   );
 }

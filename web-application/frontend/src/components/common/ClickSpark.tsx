@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import type React from 'react';
+import { useEffect, useRef } from 'react';
 
 interface ClickSparkProps {
   sparkColor?: string;
@@ -78,11 +79,9 @@ export default function ClickSpark({
 
       let easeProgress = progress;
       if (easing === 'ease-out') {
-        easeProgress = 1 - Math.pow(1 - progress, 2);
+        easeProgress = 1 - (1 - progress) ** 2;
       } else if (easing === 'ease-in-out') {
-        easeProgress = progress < 0.5
-          ? 2 * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2;
       }
 
       spark.distance = easeProgress * spark.maxDistance * extraScale;
@@ -162,15 +161,8 @@ export default function ClickSpark({
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      onMouseDown={handleMouseDown}
-      className="relative w-full h-full"
-    >
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 pointer-events-none z-50 w-full h-full"
-      />
+    <div ref={containerRef} onMouseDown={handleMouseDown} className="relative w-full h-full">
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-50 w-full h-full" />
       {children}
     </div>
   );

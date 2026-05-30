@@ -1,8 +1,8 @@
-import { Image as ImageIcon } from 'lucide-react'
+import { Image as ImageIcon } from 'lucide-react';
 
 interface ImagePlaceholderProps {
-  label: string
-  aspectRatio?: string
+  label: string;
+  aspectRatio?: string;
 }
 
 export default function ImagePlaceholder({ label, aspectRatio = '16/9' }: ImagePlaceholderProps) {
@@ -27,5 +27,5 @@ export default function ImagePlaceholder({ label, aspectRatio = '16/9' }: ImageP
         {label}
       </span>
     </div>
-  )
+  );
 }

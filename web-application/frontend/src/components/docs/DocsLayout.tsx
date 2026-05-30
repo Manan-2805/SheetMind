@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
 import { Menu, Search, X } from 'lucide-react';
+import { useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 
 import ClickSpark from '@/components/common/ClickSpark';
@@ -10,15 +9,8 @@ export default function DocsLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <ClickSpark
-      sparkColor="#8B5CF6"
-      sparkSize={20}
-      sparkRadius={30}
-      sparkCount={9}
-      duration={500}
-    >
+    <ClickSpark sparkColor="#8B5CF6" sparkSize={20} sparkRadius={30} sparkCount={9} duration={500}>
       <div className="relative min-h-screen bg-[#0c0c0c] text-white flex flex-col">
-        
         {/* Global background video (fixed, behind everything) */}
         <div className="fixed inset-0 z-0 pointer-events-none">
           <video
@@ -48,33 +40,25 @@ export default function DocsLayout() {
               <div className="h-5 w-5 rounded bg-brand flex items-center justify-center">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               </div>
-              <span className="text-sm font-bold text-white tracking-wide">
-                SheetMind
-              </span>
+              <span className="text-sm font-bold text-white tracking-wide">SheetMind</span>
             </Link>
           </div>
 
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md max-w-[260px] flex-1 mx-8 bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-text">
             <Search size={14} className="text-white/40" />
-            <span className="text-xs flex-1 text-white/40">
-              Search docs...
-            </span>
+            <span className="text-xs flex-1 text-white/40">Search docs...</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-white/5 text-white/40">
               Cmd+K
             </span>
           </div>
 
-          <Link
-            to="/"
-            className="text-xs text-white/60 hover:text-white transition-colors"
-          >
+          <Link to="/" className="text-xs text-white/60 hover:text-white transition-colors">
             Back to App
           </Link>
         </header>
 
         {/* Body content with sidebar and glassy pages */}
         <div className="flex flex-1 relative z-10">
-          
           {/* Desktop Sidebar */}
           <aside className="hidden lg:block w-[280px] flex-shrink-0 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto">
             <DocsSidebar />
@@ -99,7 +83,6 @@ export default function DocsLayout() {
               <Outlet />
             </div>
           </main>
-
         </div>
       </div>
     </ClickSpark>
