@@ -182,6 +182,24 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
       }
     });
 
+    let activePinnedIndex = -1;
+    cardsRef.current.forEach((_card, i) => {
+      const cardTop = cardOffsetsRef.current[i] ?? 0;
+      const { containerHeight } = getScrollData();
+      const pinStart =
+        cardTop - parsePercentage(stackPosition, containerHeight) - itemStackDistance * i;
+      if (scrollTop >= pinStart) {
+        activePinnedIndex = i;
+      }
+    });
+    cardsRef.current.forEach((card, i) => {
+      if (i === activePinnedIndex) {
+        card.setAttribute('data-active', 'true');
+      } else {
+        card.removeAttribute('data-active');
+      }
+    });
+
     isUpdatingRef.current = false;
   }, [
     itemScale,
