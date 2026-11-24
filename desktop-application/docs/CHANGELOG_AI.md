@@ -9,3 +9,4 @@
 - F7: Keep colliding sheet names distinct, normalize raw column headers, and import all workbook sheets in one transaction with sheet-specific errors.
 - F8: Apply validated settings imports without credentials, clear imported files and backup history, and remove chart images and prompt logs when clearing chats.
 - F9: Scope datasource and chat WebSocket notifications to their user, including notifications from background imports and when the desktop client switches users.
+- F10: Make prompt diagnostics opt-in and content-free with seven-day retention, replace silent failures and print calls with logger messages, and expose actionable dashboard parse errors.

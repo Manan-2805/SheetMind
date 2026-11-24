@@ -10,6 +10,7 @@ from schemas.artifact_schemas import (
     ArtifactsResponse,
 )
 from services.duckdb_service import get_connection
+from services.logging_service import get_logger
 
 
 def _now() -> datetime:
@@ -152,8 +153,8 @@ def delete(artifact_id: str) -> bool:
     if file_path and os.path.exists(file_path):
         try:
             os.remove(file_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Could not delete an artifact file: %s", type(exc).__name__)
     conn.execute("DELETE FROM artifacts WHERE id = ?", [artifact_id])
     return True
 

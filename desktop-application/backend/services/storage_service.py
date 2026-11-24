@@ -1,6 +1,7 @@
 """Module containing storage_service functionality."""
 
 import json
+import logging
 import os
 import sys
 from datetime import UTC, datetime
@@ -125,8 +126,10 @@ def _load_accounts() -> dict:
     if p.exists():
         try:
             return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.getLogger("sheetmind").warning(
+                "Could not read saved accounts: %s", type(exc).__name__
+            )
     return {}
 
 

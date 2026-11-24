@@ -3,6 +3,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import ValidationError
 
 from schemas.common_schemas import SuccessResponse
 from schemas.dashboard import (
@@ -116,19 +117,19 @@ async def generate_dashboard_name(data: AINameGenRequest):
 
         title = await llm_service.generate_dashboard_name(widgets_with_rich_context)
         return AINameGenResponse(title=title)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except llm_service.LLMResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/generate-layout", response_model=AIDashboardGenResponse)
 async def generate_dashboard_layout(data: AIDashboardGenRequest):
-    """Execute the generate_dashboard_layout operation."""
+    """Generate a layout or report invalid provider output."""
     try:
         res = await llm_service.generate_dashboard_layout(data.description)
-        if not res or "title" not in res:
-            raise HTTPException(status_code=500, detail="Failed to generate valid layout")
-        return AIDashboardGenResponse(**res)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        return AIDashboardGenResponse.model_validate(res)
+    except llm_service.LLMResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=502, detail="The LLM returned an invalid dashboard layout."
+        ) from exc

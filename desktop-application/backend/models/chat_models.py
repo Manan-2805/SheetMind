@@ -6,7 +6,6 @@ import re
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -26,11 +25,11 @@ from schemas.chat_schemas import (
 from services.chart_service import generate_chart
 from services.duckdb_service import get_connection
 from services.logging_service import get_logger
+from services.prompt_debug_service import append_debug_response, write_debug_prompt
 from services.query_service import get_result_row_limit
 from services.sql_guard import run_user_query
 from services.storage_service import (
     get_charts_dir,
-    get_debug_prompts_dir,
     get_exports_dir,
     remove_chat_charts,
 )
@@ -263,8 +262,8 @@ def get_messages(session_id: str) -> list[ChatMessageResponse]:
         if row[15]:
             try:
                 res_data = ResultTable(**json.loads(row[15]))
-            except Exception:
-                pass
+            except Exception as exc:
+                get_logger().warning("Could not decode stored chat result: %s", type(exc).__name__)
 
         messages.append(
             ChatMessageResponse(
@@ -681,52 +680,6 @@ def _extract_json_sql(raw: str) -> dict[str, Any]:
         raise ValueError("Invalid JSON response from LLM") from exc
 
 
-def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
-    """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir and return the path."""
-    debug_dir = get_debug_prompts_dir()
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
-    safe_label = label.replace(" ", "_").replace("[", "").replace("]", "")[:60]
-    filename = debug_dir / f"{timestamp}_{safe_label}.txt"
-    try:
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
-            f.write("=" * 80 + "\n\n")
-            if isinstance(messages_or_prompt, list):
-                for i, msg in enumerate(messages_or_prompt):
-                    role = msg.get("role", "unknown").upper()
-                    content = msg.get("content", "")
-                    f.write(f"--- [{i + 1}] {role} ---\n")
-                    f.write(content)
-                    f.write("\n\n")
-            else:
-                f.write(str(messages_or_prompt))
-                f.write("\n")
-        return filename
-    except Exception as e:
-        print(f"Failed to write debug prompt: {e}")
-        return None
-
-
-def _append_debug_response(
-    filepath: Path | None, response_content: Any, label: str = "RESPONSE"
-) -> None:
-    """Append the LLM response content to the existing debug prompt file."""
-    if not filepath or not filepath.exists():
-        return
-    try:
-        with open(filepath, "a", encoding="utf-8") as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
-            f.write("=" * 80 + "\n\n")
-            if isinstance(response_content, (dict, list)):
-                f.write(json.dumps(response_content, indent=2))
-            else:
-                f.write(str(response_content))
-            f.write("\n")
-    except Exception as e:
-        print(f"Failed to append debug response: {e}")
-
-
 def _split_reference(value: str) -> tuple[str, str | None]:
     """Execute the _split_reference operation."""
     if "::" in value:
@@ -870,8 +823,8 @@ def _build_schema_info(conn, tables: list[dict[str, str]]) -> str:
                 f"DuckDB Table Name: {table_name}\n"
                 f"Columns: {col_defs}\n\n"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Could not describe imported table: %s", type(exc).__name__)
 
     return schema_info or "No completed tables available yet."
 
@@ -998,11 +951,10 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
             return res
 
         except Exception as e:
-            print(f"SQL Generation Attempt {attempt + 1} failed: {e!s}")
+            get_logger().warning(
+                "SQL generation attempt %s failed: %s", attempt + 1, type(e).__name__
+            )
             if attempt == 1:
-                print(
-                    f"Final failure. Raw output: {content_out if 'content_out' in locals() else 'N/A'}"
-                )
                 fallback_res.update({"model": model_name})
                 return fallback_res
 
@@ -1022,7 +974,7 @@ First 5 rows: {result_rows[:5]}
 Total rows: {len(result_rows)}
 
 Respond with only the summary sentence. No JSON."""
-    debug_path = _write_debug_prompt(prompt, "NL SUMMARY")
+    debug_path = write_debug_prompt(prompt, "NL SUMMARY")
 
     settings = get_settings()
     input_tokens = 0
@@ -1045,7 +997,7 @@ Respond with only the summary sentence. No JSON."""
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
         }
-        _append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
+        append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
         return res
     else:
         url = settings.ollama.url.rstrip("/")
@@ -1069,7 +1021,7 @@ Respond with only the summary sentence. No JSON."""
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
             }
-            _append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
+            append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
             return res
 
 
@@ -1127,14 +1079,14 @@ Row count: {len(result_rows)}"""
                     return val[:3]
         return []
     except Exception as e:
-        print(f"Silent follow-up failure: {e}")
+        get_logger().warning("Follow-up generation failed: %s", type(e).__name__)
         return []
 
 
 async def generate_title(content: str) -> str:
     """Execute the generate_title operation."""
     prompt = f'Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: "{content}". Do not use quotes or prefixes, just the title text.'
-    debug_path = _write_debug_prompt(prompt, "TITLE GENERATION")
+    debug_path = write_debug_prompt(prompt, "TITLE GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -1144,7 +1096,7 @@ async def generate_title(content: str) -> str:
             temperature=0.7,
         )
         res = response.choices[0].message.content.strip()
-        _append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
+        append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
         return res
     else:
         url = settings.ollama.url.rstrip("/")
@@ -1156,14 +1108,14 @@ async def generate_title(content: str) -> str:
             )
             resp.raise_for_status()
             res = resp.json()["response"].strip()
-            _append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
+            append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
             return res
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
     """Execute the generate_query_label operation."""
     prompt = f'Create a short, human-readable label (max 6 words) for a saved SQL query.\nThe user asked: "{nl_query}"\nThe SQL generated: {sql_query[:200]}\nReturn ONLY the label text, no quotes, no punctuation at end.'
-    debug_path = _write_debug_prompt(prompt, "QUERY LABEL GENERATION")
+    debug_path = write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = get_settings()
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -1173,7 +1125,7 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
             temperature=0.7,
         )
         res = response.choices[0].message.content.strip()
-        _append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
+        append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
         return res
     else:
         url = settings.ollama.url.rstrip("/")
@@ -1185,7 +1137,7 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
             )
             resp.raise_for_status()
             res = resp.json()["response"].strip()
-            _append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
+            append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
             return res
 
 
@@ -1326,7 +1278,8 @@ Respond ONLY with this JSON (no markdown, no prose):
             "input_tokens": in_tok,
             "output_tokens": out_tok,
         }
-    except Exception:
+    except Exception as exc:
+        get_logger().warning("Could not generate query summary: %s", type(exc).__name__)
         return {
             "summary": "",
             "followups": [],
@@ -1388,7 +1341,7 @@ async def _auto_generate_chart(
         chart_path.write_bytes(buf.read())
         return f"/api/chat/charts/static/{chart_filename}"
     except Exception as e:
-        print(f"Failed inside generate_chart during auto plot: {e}")
+        get_logger().warning("Automatic plot failed: %s", type(e).__name__)
         return None
 
 
@@ -1440,7 +1393,7 @@ async def create_message(
     # 2. Preparing prompt
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
-    debug_path = _write_debug_prompt(messages, f"SQL_GENERATION [{session_id}]")
+    debug_path = write_debug_prompt(messages, "SQL_GENERATION")
 
     msg_count = conn.execute(
         "SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]
@@ -1463,7 +1416,7 @@ async def create_message(
     else:
         sql_res = await generate_sql(messages)
 
-    _append_debug_response(debug_path, sql_res, f"SQL_GENERATION RESPONSE [{session_id}]")
+    append_debug_response(debug_path, sql_res, "SQL_GENERATION RESPONSE")
 
     sql = sql_res.get("sql") or ""
     llm_message = sql_res.get("message") or ""
@@ -1540,11 +1493,11 @@ async def create_message(
                     retry_messages = build_sql_prompt(
                         retry_content, schema_info, turns, max_input_tokens
                     )
-                    retry_debug_path = _write_debug_prompt(
-                        retry_messages, f"SQL_RETRY_{retry_count} [{session_id}]"
+                    retry_debug_path = write_debug_prompt(
+                        retry_messages, f"SQL_RETRY_{retry_count}"
                     )
                     retry_res = await generate_sql(retry_messages)
-                    _append_debug_response(
+                    append_debug_response(
                         retry_debug_path, retry_res, f"SQL_RETRY_{retry_count} RESPONSE"
                     )
                     current_sql = retry_res.get("sql") or ""
@@ -1591,7 +1544,7 @@ async def create_message(
                 chart_config=chart_config_from_combined,
             )
         except Exception as e:
-            print(f"Auto chart generation failed: {e}")
+            get_logger().warning("Automatic chart generation failed: %s", type(e).__name__)
 
     total_ms = int((time.time() - t0) * 1000)
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-a"
@@ -1716,12 +1669,12 @@ async def regenerate_response(
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "preparing_prompt"})
     messages = build_sql_prompt(effective_content, schema_info, turns, max_input_tokens)
-    debug_path = _write_debug_prompt(messages, f"SQL_REGENERATE [{session_id}]")
+    debug_path = write_debug_prompt(messages, "SQL_REGENERATE")
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     t0 = time.time()
     sql_res = await generate_sql(messages)
-    _append_debug_response(debug_path, sql_res, f"SQL_REGENERATE RESPONSE [{session_id}]")
+    append_debug_response(debug_path, sql_res, "SQL_REGENERATE RESPONSE")
     sql = sql_res.get("sql") or ""
     llm_message = sql_res.get("message") or ""
     model_name = sql_res.get("model") or "unknown"
@@ -1788,7 +1741,7 @@ async def regenerate_response(
                 chart_config=chart_config_from_combined,
             )
         except Exception as e:
-            print(f"Auto chart generation failed: {e}")
+            get_logger().warning("Automatic chart generation failed: %s", type(e).__name__)
 
     total_ms = int((time.time() - t0) * 1000)
     now2 = _now()

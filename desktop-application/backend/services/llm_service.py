@@ -7,6 +7,11 @@ import httpx
 from openai import AsyncOpenAI
 
 from models.settings_models import get_settings
+from services.logging_service import get_logger
+
+
+class LLMResponseError(ValueError):
+    """An LLM response that cannot be used by the dashboard."""
 
 
 async def generate_dashboard_layout(description: str) -> dict[str, Any]:
@@ -47,7 +52,7 @@ async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
         if w.get("sql_query"):
             line += f", SQL Query: '{w['sql_query']}'"
         widgets_lines.append(line)
-        
+
     widgets_text = "\n".join(widgets_lines)
 
     system_prompt = (
@@ -66,7 +71,10 @@ async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
     ]
 
     res = await _call_llm_json(settings, prompt_msgs)
-    return res.get("title", "Untitled Dashboard")
+    title = res.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise LLMResponseError("The LLM did not return a dashboard title.")
+    return title
 
 
 async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> dict[str, Any]:
@@ -100,6 +108,9 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
 
     try:
         data = json.loads(llm_response_text)
-        return data
-    except Exception:
-        return {}
+        if not isinstance(data, dict) or not data:
+            raise ValueError("Expected a nonempty JSON object")
+    except (ValueError, TypeError) as exc:
+        get_logger().warning("The LLM returned invalid JSON for a dashboard request")
+        raise LLMResponseError("The LLM returned invalid JSON. Try again.") from exc
+    return data

@@ -4,7 +4,6 @@ import asyncio
 import hmac
 import os
 import sys
-import traceback
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -27,6 +26,7 @@ from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
 from services.background_tasks import queue_worker, resume_pending_tasks
 from services.logging_service import get_logger
+from services.prompt_debug_service import prune_debug_prompts
 from services.storage_service import is_valid_username, resolve_chart_file
 
 TOKEN_HEADER = "X-SheetMind-Token"
@@ -72,6 +72,7 @@ async def lifespan(_app: FastAPI):
     if not os.environ.get("SHEETMIND_API_TOKEN"):
         logger.warning("Local API token is unset. Running in standalone development mode.")
 
+    await asyncio.to_thread(prune_debug_prompts)
     await resume_pending_tasks()
     worker_task = asyncio.create_task(queue_worker())
 
@@ -108,12 +109,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    logger.error(
-        "Unhandled global exception occurred on %s: %s\n%s",
-        request.url.path,
-        str(exc),
-        traceback.format_exc(),
-    )
+    route = getattr(request.scope.get("route"), "path", "")
+    logger.error("Unhandled %s in %s", type(exc).__name__, route)
 
     return JSONResponse(
         status_code=500, content={"detail": "An internal error occurred. Please try again."}
@@ -137,6 +134,8 @@ async def extract_username_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
         return response
+    except Exception as exc:
+        return await global_exception_handler(request, exc)
     finally:
         current_username.reset(token)
 

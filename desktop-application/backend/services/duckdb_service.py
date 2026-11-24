@@ -9,6 +9,7 @@ from services.storage_service import get_user_db_path
 
 _conns: dict[str, duckdb.DuckDBPyConnection] = {}
 _conn_lock = threading.Lock()
+from services.logging_service import get_logger
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -37,8 +38,8 @@ def close_connection(username: str) -> None:
     if conn:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Could not close a user database: %s", type(exc).__name__)
 
 
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:

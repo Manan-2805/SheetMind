@@ -26,6 +26,7 @@ from services.storage_service import list_account_users
 # The queue stores tuples of (username, file_id, file_path)
 task_queue = asyncio.Queue()
 active_tasks = set()
+from services.logging_service import get_logger
 
 
 def _import_sheets(
@@ -149,8 +150,8 @@ async def queue_worker():
             task_queue.task_done()
         except asyncio.CancelledError:
             break
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Background import worker failed: %s", type(exc).__name__)
 
 
 async def resume_pending_tasks():
@@ -168,7 +169,7 @@ async def resume_pending_tasks():
                 file_id, file_path = row
                 conn.execute("UPDATE excel_files SET status = 'pending' WHERE id = ?", [file_id])
                 task_queue.put_nowait((username, file_id, file_path))
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Could not resume queued imports: %s", type(exc).__name__)
         finally:
             current_username.reset(token)

@@ -1,10 +1,6 @@
 """Module containing excel_editor_router functionality."""
 
 import asyncio
-import json
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -40,54 +36,8 @@ from services.excel_mutation_service import (
     build_mutation_prompt,
     dry_run_mutation,
 )
-from services.storage_service import get_debug_prompts_dir
-
-
-def _write_debug_prompt(messages_or_prompt: str | list, label: str = "PROMPT") -> Path | None:
-    """Write each LLM prompt call to a separate timestamped .txt file in the debug_prompts dir."""
-    debug_dir = get_debug_prompts_dir()
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
-    safe_label = label.replace(" ", "_").replace("[", "").replace("]", "")[:60]
-    filename = debug_dir / f"{timestamp}_{safe_label}.txt"
-    try:
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
-            f.write("=" * 80 + "\n\n")
-            if isinstance(messages_or_prompt, list):
-                for i, msg in enumerate(messages_or_prompt):
-                    role = msg.get("role", "unknown").upper()
-                    content = msg.get("content", "")
-                    f.write(f"--- [{i + 1}] {role} ---\n")
-                    f.write(content)
-                    f.write("\n\n")
-            else:
-                f.write(str(messages_or_prompt))
-                f.write("\n")
-        return filename
-    except Exception as e:
-        print(f"Failed to write debug prompt: {e}")
-        return None
-
-
-def _append_debug_response(
-    filepath: Path | None, response_content: Any, label: str = "RESPONSE"
-) -> None:
-    """Append the LLM response content to the existing debug prompt file."""
-    if not filepath or not filepath.exists():
-        return
-    try:
-        with open(filepath, "a", encoding="utf-8") as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write(f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}] {label}\n")
-            f.write("=" * 80 + "\n\n")
-            if isinstance(response_content, (dict, list)):
-                f.write(json.dumps(response_content, indent=2))
-            else:
-                f.write(str(response_content))
-            f.write("\n")
-    except Exception as e:
-        print(f"Failed to append debug response: {e}")
-
+from services.logging_service import get_logger
+from services.prompt_debug_service import append_debug_response, write_debug_prompt
 
 router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
 
@@ -144,7 +94,7 @@ async def mutate_file(body: MutationRequest):
         sample_rows=sample_rows,
         row_count=len(df),
     )
-    debug_path = _write_debug_prompt(prompt_msgs, f"EXCEL_MUTATION [{body.fileId}]")
+    debug_path = write_debug_prompt(prompt_msgs, "EXCEL_MUTATION")
 
     # 2. Call LLM
     settings = get_settings()
@@ -178,11 +128,10 @@ async def mutate_file(body: MutationRequest):
     try:
         plan = MutationPlan.model_validate_json(llm_response_text)
     except ValidationError as exc:
+        get_logger().warning("The LLM returned an invalid spreadsheet edit plan")
         raise HTTPException(status_code=502, detail="LLM returned an invalid editing plan") from exc
 
-    _append_debug_response(
-        debug_path, plan.model_dump(), f"EXCEL_MUTATION RESPONSE [{body.fileId}]"
-    )
+    append_debug_response(debug_path, plan.model_dump(), "EXCEL_MUTATION RESPONSE")
     try:
         diff_rows, _modified = await asyncio.to_thread(dry_run_mutation, df, plan.operations)
     except ValueError as exc:
