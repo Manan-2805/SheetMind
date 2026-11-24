@@ -1,10 +1,11 @@
 """Module containing settings_router functionality."""
 
+import asyncio
 import json
 import time
 
 import httpx
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 from models.settings_models import (
     clear_chat_history_db,
     delete_all_files_db,
-    update_settings_db,
+    merge_settings,
 )
 from models.settings_models import (
     get_settings as db_get_settings,
@@ -67,28 +68,7 @@ async def get_settings() -> PublicSettingsResponse:
 @router.put("", response_model=PublicSettingsResponse)
 async def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse:
     """Execute the update_settings operation."""
-    current_settings = db_get_settings()
-    if body.theme is not None:
-        current_settings.theme = body.theme
-    if body.llm_provider is not None:
-        current_settings.llm_provider = body.llm_provider
-    if body.openai is not None:
-        if not body.openai.api_key:
-            body.openai.api_key = current_settings.openai.api_key
-        current_settings.openai = body.openai
-    if body.ollama is not None:
-        current_settings.ollama = body.ollama
-    if body.result_row_limit is not None:
-        current_settings.result_row_limit = body.result_row_limit
-    if body.auto_sql_retry is not None:
-        current_settings.auto_sql_retry = body.auto_sql_retry
-    if body.auto_sql_retry_max is not None:
-        current_settings.auto_sql_retry_max = body.auto_sql_retry_max
-    if body.auto_chart_display is not None:
-        current_settings.auto_chart_display = body.auto_chart_display
-
-    update_settings_db(current_settings)
-    return PublicSettingsResponse.from_stored(current_settings)
+    return PublicSettingsResponse.from_stored(merge_settings(body))
 
 
 @router.post("/test-llm", response_model=TestLLMResponse)
@@ -219,7 +199,19 @@ async def export_settings() -> Response:
     )
 
 
-@router.post("/import")
-async def import_settings(file: UploadFile = File(...)) -> JSONResponse:
-    """Execute the import_settings operation."""
-    return JSONResponse({"success": True})
+@router.post("/import", response_model=PublicSettingsResponse)
+async def import_settings(file: UploadFile = File(...)) -> PublicSettingsResponse:
+    """Validate and apply an exported settings file, preserving local credentials."""
+    limit = 1024 * 1024
+    contents = await file.read(limit + 1)
+    if len(contents) > limit:
+        raise HTTPException(413, "Settings file is too large.")
+    try:
+        data = json.loads(contents)
+        if isinstance(data, dict) and isinstance(data.get("openai"), dict):
+            data["openai"].pop("api_key", None)
+        body = UpdateSettingsRequest.model_validate(data)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid settings file.") from exc
+    settings = await asyncio.to_thread(merge_settings, body)
+    return PublicSettingsResponse.from_stored(settings)

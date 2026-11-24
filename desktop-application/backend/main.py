@@ -6,7 +6,6 @@ import os
 import sys
 import traceback
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -29,7 +28,7 @@ from routers.settings_router import router as settings_router
 from services.background_tasks import queue_worker, resume_pending_tasks
 from services.duckdb_service import get_connection
 from services.logging_service import get_logger
-from services.storage_service import get_charts_dir, is_valid_username
+from services.storage_service import is_valid_username, resolve_chart_file
 
 TOKEN_HEADER = "X-SheetMind-Token"
 DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -170,14 +169,8 @@ async def health_check():
 @app.get("/api/chat/charts/static/{filename}")
 async def serve_chart_static(filename: str):
     """Serve auto-generated chart images from the user's charts dir."""
-    if filename != Path(filename).name or "\\" in filename or not filename.endswith(".png"):
-        raise HTTPException(status_code=404, detail="Chart not found")
-    root = get_charts_dir().resolve()
-    try:
-        chart_path = (root / filename).resolve()
-    except (OSError, RuntimeError) as exc:
-        raise HTTPException(status_code=404, detail="Chart not found") from exc
-    if not chart_path.is_relative_to(root) or not chart_path.is_file():
+    chart_path = resolve_chart_file(filename)
+    if chart_path is None:
         raise HTTPException(status_code=404, detail="Chart not found")
     return FileResponse(str(chart_path), media_type="image/png")
 

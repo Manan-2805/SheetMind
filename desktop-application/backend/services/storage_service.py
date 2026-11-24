@@ -75,6 +75,26 @@ def get_charts_dir() -> Path:
     return path
 
 
+def resolve_chart_file(filename: str) -> Path | None:
+    """Resolve a generated PNG without following paths outside the chart directory."""
+    if filename != Path(filename).name or "\\" in filename or not filename.endswith(".png"):
+        return None
+    root = get_charts_dir().resolve()
+    try:
+        path = (root / filename).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return path if path.is_relative_to(root) and path.is_file() else None
+
+
+def remove_chat_charts(chart_urls: list[str]) -> None:
+    """Delete generated PNG files referenced by stored chat messages."""
+    prefix = "/api/chat/charts/static/"
+    for url in set(chart_urls):
+        if url.startswith(prefix) and (path := resolve_chart_file(url.removeprefix(prefix))):
+            path.unlink(missing_ok=True)
+
+
 def get_backups_dir(username: str | None = None) -> Path:
     """Per-user backups: ~/.sheetmind/users/{username}/backups"""
     path = get_user_dir(username) / "backups"
@@ -83,8 +103,8 @@ def get_backups_dir(username: str | None = None) -> Path:
 
 
 def get_debug_prompts_dir() -> Path:
-    """Debug prompts dir inside .sheetmind (not per-user)."""
-    path = get_app_root() / "debug_prompts"
+    """Return the current user's prompt diagnostics directory."""
+    path = get_user_dir() / "debug_prompts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

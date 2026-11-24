@@ -109,7 +109,7 @@ export async function exportSettings(): Promise<void> {
   }
 }
 
-export async function importSettings(file: File): Promise<{ success: boolean }> {
+export async function importSettings(file: File): Promise<Settings> {
   try {
     const form = new FormData();
     form.append("file", file);

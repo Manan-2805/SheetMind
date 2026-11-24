@@ -30,6 +30,7 @@ from services.storage_service import (
     get_charts_dir,
     get_debug_prompts_dir,
     get_exports_dir,
+    remove_chat_charts,
 )
 
 
@@ -346,10 +347,17 @@ def update_session(
 
 
 def delete_session(session_id: str):
-    """Execute the delete_session operation."""
-    conn = get_connection()
-    conn.execute("DELETE FROM chat_messages WHERE session_id = ?", [session_id])
-    conn.execute("DELETE FROM chat_sessions WHERE id = ?", [session_id])
+    """Delete a chat session and remove the PNGs generated for it."""
+    with get_connection() as conn:
+        conn.begin()
+        charts = conn.execute(
+            "SELECT chart_url FROM chat_messages WHERE session_id = ? AND chart_url IS NOT NULL",
+            [session_id],
+        ).fetchall()
+        conn.execute("DELETE FROM chat_messages WHERE session_id = ?", [session_id])
+        conn.execute("DELETE FROM chat_sessions WHERE id = ?", [session_id])
+        conn.commit()
+    remove_chat_charts([url for (url,) in charts])
 
 
 def estimate_tokens(text: str) -> int:

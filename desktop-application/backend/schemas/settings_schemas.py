@@ -1,5 +1,7 @@
 """Module containing settings_schemas functionality."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -54,16 +56,32 @@ class PublicSettingsResponse(SettingsResponse):
         return cls.model_validate(data)
 
 
-class UpdateSettingsRequest(BaseModel):
-    """Schema or class representation for UpdateSettingsRequest."""
+class OpenAISettingsUpdate(BaseModel):
+    """Fields that may change on an OpenAI settings update."""
 
-    theme: str | None = None
-    llm_provider: str | None = None
-    openai: OpenAISettingsSchema | None = None
-    ollama: OllamaSettingsSchema | None = None
-    result_row_limit: int | None = None
+    api_key: str | None = None
+    model: str | None = None
+    max_input_tokens: int | None = Field(default=None, ge=1)
+
+
+class OllamaSettingsUpdate(BaseModel):
+    """Fields that may change on an Ollama settings update."""
+
+    url: str | None = None
+    model: str | None = None
+    max_input_tokens: int | None = Field(default=None, ge=1)
+
+
+class UpdateSettingsRequest(BaseModel):
+    """Apply only the editable fields supplied by the client."""
+
+    theme: Literal["dark", "light", "system"] | None = None
+    llm_provider: Literal["openai", "ollama"] | None = None
+    openai: OpenAISettingsUpdate | None = None
+    ollama: OllamaSettingsUpdate | None = None
+    result_row_limit: int | None = Field(default=None, ge=1)
     auto_sql_retry: bool | None = None
-    auto_sql_retry_max: int | None = None
+    auto_sql_retry_max: int | None = Field(default=None, ge=0)
     auto_chart_display: bool | None = None
 
 
