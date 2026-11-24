@@ -11,7 +11,8 @@
 - F5 (`f2bce90`): seven workbook regressions failed on the previous implementation and pass after the changes. Tests use disposable workbooks and data. TypeScript reports no errors.
 - F6 (`43f8d56`): four upload and chart path tests pass. The locked backend has neither xlrd nor odfpy, so new XLS and ODS uploads return 415.
 - F7 (`84006ce`): four tests failed on the old importer and pass with collision-safe sheet names, original headers, and transaction rollback on sheet errors.
-- F8: three tests failed before implementation and pass afterward. Settings import persists allowed fields, and cleanup removes the associated files and rows.
-- Next item: F9 username-scoped WebSocket broadcasts.
+- F8 (`ba4164f`): three tests failed before implementation and pass afterward. Settings import persists allowed fields, and cleanup removes the associated files and rows.
+- F9: the two-user regression reproduced cross-user sends and passes with username-scoped subscriptions.
+- Next item: F10 logging privacy and provider error handling.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

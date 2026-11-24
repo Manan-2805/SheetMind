@@ -127,12 +127,16 @@ async def queue_worker():
 
     async def worker_task(username, file_id, file_path):
         """Execute the worker_task operation."""
-        async with sem:
-            task = asyncio.create_task(_process_wrapper(username, file_id, file_path))
-            await asyncio.sleep(0.05)
-            await broadcast_datasource_status()
-            await task
-            await broadcast_datasource_status()
+        token = current_username.set(username)
+        try:
+            async with sem:
+                task = asyncio.create_task(_process_wrapper(username, file_id, file_path))
+                await asyncio.sleep(0.05)
+                await broadcast_datasource_status()
+                await task
+                await broadcast_datasource_status()
+        finally:
+            current_username.reset(token)
 
     while True:
         try:

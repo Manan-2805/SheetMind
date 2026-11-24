@@ -11,8 +11,10 @@ from typing import Any
 
 import httpx
 import pandas as pd
+from fastapi import WebSocket
 from openai import AsyncOpenAI
 
+from dependencies import current_username
 from models import artifact_models
 from models.settings_models import get_settings
 from schemas.chat_schemas import (
@@ -1187,53 +1189,66 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
             return res
 
 
-_ws_clients: set = set()
+_ws_clients: dict[str, set[WebSocket]] = {}
+
+
+def register_ws_client(username: str, websocket: WebSocket) -> None:
+    """Subscribe a connection to the authenticated user's events."""
+    _ws_clients.setdefault(username, set()).add(websocket)
+
+
+def unregister_ws_client(username: str, websocket: WebSocket) -> None:
+    """Remove a closed connection and discard empty buckets."""
+    sockets = _ws_clients.get(username)
+    if sockets is not None:
+        sockets.discard(websocket)
+        if not sockets:
+            _ws_clients.pop(username, None)
+
+
+async def _send_user_event(payload: dict) -> None:
+    username = current_username.get()
+    for websocket in tuple(_ws_clients.get(username, ())):
+        try:
+            await websocket.send_json(payload)
+        except Exception as exc:
+            unregister_ws_client(username, websocket)
+            get_logger().warning("Removed unavailable WebSocket: %s", type(exc).__name__)
 
 
 async def _broadcast_ws_event(session_id: str, payload: dict) -> None:
-    """Broadcast an event to all connected WebSocket clients."""
-    payload_copy = dict(payload)
-    payload_copy["session_id"] = session_id
-    logger = get_logger()
-    logger.info("WebSocket Broadcast (chat/sql): session_id=%s, data=%s", session_id, payload)
-    dead = set()
-    for ws in list(_ws_clients):
-        try:
-            await ws.send_json(payload_copy)
-        except Exception:
-            dead.add(ws)
-    _ws_clients.difference_update(dead)
+    """Send an event for a chat session to its user's connections."""
+    await _send_user_event({**payload, "session_id": session_id})
 
 
-async def broadcast_datasource_status() -> None:
-    """Broadcast current datasource status list to all connected WebSocket clients."""
-    logger = get_logger()
-    try:
-        conn = get_connection()
+def datasource_status_payload() -> dict:
+    """Read the active user's datasource status for a WebSocket event."""
+    with get_connection() as conn:
         rows = conn.execute(
             "SELECT id, status, error_message, row_count, column_count FROM excel_files"
         ).fetchall()
-        updates = [
-            {
-                "id": r[0],
-                "status": r[1],
-                "error_message": r[2],
-                "row_count": r[3],
-                "column_count": r[4],
-            }
-            for r in rows
-        ]
-        logger.info("WebSocket Broadcast (status_update): data_sources_count=%d", len(updates))
+    updates = [
+        {
+            "id": identifier,
+            "status": status,
+            "error_message": error,
+            "row_count": rows,
+            "column_count": columns,
+        }
+        for identifier, status, error, rows, columns in rows
+    ]
+    return {"type": "status_update", "data": updates}
 
-        dead = set()
-        for ws in list(_ws_clients):
-            try:
-                await ws.send_json({"type": "status_update", "data": updates})
-            except Exception:
-                dead.add(ws)
-        _ws_clients.difference_update(dead)
-    except Exception as e:
-        logger.error("Failed to broadcast datasource status: %s", e)
+
+async def broadcast_datasource_status() -> None:
+    """Send datasource status only to connections belonging to the current user."""
+    if current_username.get() not in _ws_clients:
+        return
+    try:
+        payload = await asyncio.to_thread(datasource_status_payload)
+        await _send_user_event(payload)
+    except Exception as exc:
+        get_logger().warning("Could not broadcast datasource status: %s", type(exc).__name__)
 
 
 async def _generate_combined_second_call(

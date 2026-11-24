@@ -8,3 +8,4 @@
 - F6: Cap and stream local and HTTP uploads, accept CSV and XLSX, and constrain chart downloads to PNG files in the chart directory.
 - F7: Keep colliding sheet names distinct, normalize raw column headers, and import all workbook sheets in one transaction with sheet-specific errors.
 - F8: Apply validated settings imports without credentials, clear imported files and backup history, and remove chart images and prompt logs when clearing chats.
+- F9: Scope datasource and chat WebSocket notifications to their user, including notifications from background imports and when the desktop client switches users.

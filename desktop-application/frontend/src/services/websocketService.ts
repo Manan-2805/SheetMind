@@ -9,6 +9,7 @@ class WebSocketService {
   private isConnecting: boolean = false;
 
   public connect(username: string = "default") {
+    if (username !== this.username) this.disconnect();
     this.username = username;
     if (
       this.socket &&
@@ -95,6 +96,9 @@ class WebSocketService {
     }
     if (this.socket) {
       this.socket.onclose = null;
+      this.socket.onmessage = null;
+      this.socket.onopen = null;
+      this.socket.onerror = null;
       this.socket.close();
       this.socket = null;
     }

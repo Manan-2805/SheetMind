@@ -16,7 +16,7 @@ from starlette.datastructures import Headers
 from starlette.types import Receive, Scope, Send
 
 from dependencies import current_username
-from models.chat_models import _ws_clients
+from models.chat_models import datasource_status_payload, register_ws_client, unregister_ws_client
 from routers.artifacts_router import router as artifacts_router
 from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
@@ -26,7 +26,6 @@ from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
 from services.background_tasks import queue_worker, resume_pending_tasks
-from services.duckdb_service import get_connection
 from services.logging_service import get_logger
 from services.storage_service import is_valid_username, resolve_chart_file
 
@@ -196,29 +195,14 @@ async def websocket_datasources(websocket: WebSocket):
         await websocket.send_denial_response(JSONResponse({"detail": "Invalid username"}, 400))
         return
     await websocket.accept()
-    _ws_clients.add(websocket)
+    register_ws_client(username, websocket)
 
     token = current_username.set(username)
     logger = get_logger()
     logger.info("WebSocket Connected: username=%s", username)
 
     try:
-        # Broadcast initial status update on connection
-        conn = get_connection()
-        rows = conn.execute(
-            "SELECT id, status, error_message, row_count, column_count FROM excel_files"
-        ).fetchall()
-        updates = [
-            {
-                "id": r[0],
-                "status": r[1],
-                "error_message": r[2],
-                "row_count": r[3],
-                "column_count": r[4],
-            }
-            for r in rows
-        ]
-        await websocket.send_json({"type": "status_update", "data": updates})
+        await websocket.send_json(await asyncio.to_thread(datasource_status_payload))
 
         # Keep connection alive without polling, wait for close/disconnection
         while True:
@@ -228,7 +212,7 @@ async def websocket_datasources(websocket: WebSocket):
     except Exception as e:
         logger.error("WebSocket connection error: %s", e)
     finally:
-        _ws_clients.discard(websocket)
+        unregister_ws_client(username, websocket)
         logger.info("WebSocket Disconnected: username=%s", username)
         current_username.reset(token)
 
