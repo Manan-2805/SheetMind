@@ -15,7 +15,9 @@
 - F9 (`ec2cee5`): the two-user regression reproduced cross-user sends and passes with username-scoped subscriptions.
 - F10 (`fbaf96c`): two privacy tests pass. Replaced 11 backend print calls and seven remaining silent generic catches. Prompt files contain metadata and expire after seven days.
 - P1 (`06cb0b0`): 43 tests pass. The health regression measured 418 ms before the fix and passed the 200 ms budget while the slow request was still pending. Concurrent users kept separate databases.
-- P2: the fake-client test verifies per-key OpenAI reuse, one Ollama pool, and closure at shutdown. No package changes.
-- Next item: P3 lazy frontend routes and removal of two unused dependencies.
+- P2 (`55410b7`): the fake-client test verifies per-key OpenAI reuse, one Ollama pool, and closure at shutdown.
+- P3: lazy Excel and Dashboards routes build successfully. Vite's duplicate chat API import warning is gone. Dependency removals are recorded in `DEPENDENCY_CHANGES.md`.
+- P4: skipped after a 500,000-row comparison showed different account-code and date types. Pandas took 0.183 s and DuckDB auto-detect took 0.072 s. Both produced 500,000 rows.
+- Next item: Part C focused lint fixes and Electron navigation controls.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.
