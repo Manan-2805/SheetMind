@@ -6,6 +6,7 @@ import os
 import sys
 import traceback
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -169,8 +170,14 @@ async def health_check():
 @app.get("/api/chat/charts/static/{filename}")
 async def serve_chart_static(filename: str):
     """Serve auto-generated chart images from the user's charts dir."""
-    chart_path = get_charts_dir() / filename
-    if not chart_path.exists():
+    if filename != Path(filename).name or "\\" in filename or not filename.endswith(".png"):
+        raise HTTPException(status_code=404, detail="Chart not found")
+    root = get_charts_dir().resolve()
+    try:
+        chart_path = (root / filename).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(status_code=404, detail="Chart not found") from exc
+    if not chart_path.is_relative_to(root) or not chart_path.is_file():
         raise HTTPException(status_code=404, detail="Chart not found")
     return FileResponse(str(chart_path), media_type="image/png")
 

@@ -30,6 +30,8 @@ python -B main.py
 ```
 *(Ensure the virtual environment is activated before running).*
 
+Uploads accept `.csv` and `.xlsx` files up to 200 MiB. Set `MAX_UPLOAD_BYTES` to override the limit. URL uploads require HTTP or HTTPS.
+
 ## Technologies Used
 - Python
 - FastAPI
