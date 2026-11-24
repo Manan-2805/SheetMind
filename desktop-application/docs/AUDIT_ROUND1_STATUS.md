@@ -13,7 +13,8 @@
 - F7 (`84006ce`): four tests failed on the old importer and pass with collision-safe sheet names, original headers, and transaction rollback on sheet errors.
 - F8 (`ba4164f`): three tests failed before implementation and pass afterward. Settings import persists allowed fields, and cleanup removes the associated files and rows.
 - F9 (`ec2cee5`): the two-user regression reproduced cross-user sends and passes with username-scoped subscriptions.
-- F10: two privacy tests pass. Replaced 11 backend print calls and seven remaining silent generic catches. Prompt files contain metadata and expire after seven days.
-- Next item: P1 move synchronous DB work off the event loop.
+- F10 (`fbaf96c`): two privacy tests pass. Replaced 11 backend print calls and seven remaining silent generic catches. Prompt files contain metadata and expire after seven days.
+- P1: 43 tests pass. The health regression measured 418 ms before the fix and passed the 200 ms budget while the slow request was still pending. Concurrent users kept separate databases.
+- Next item: P2 provider client reuse.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

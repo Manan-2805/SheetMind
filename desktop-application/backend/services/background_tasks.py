@@ -154,8 +154,8 @@ async def queue_worker():
             get_logger().warning("Background import worker failed: %s", type(exc).__name__)
 
 
-async def resume_pending_tasks():
-    """Execute the resume_pending_tasks operation."""
+def _pending_imports() -> list[tuple[str, str, str]]:
+    pending = []
     users = list_account_users()
     for user_info in users:
         username = user_info["username"]
@@ -168,8 +168,15 @@ async def resume_pending_tasks():
             for row in rows:
                 file_id, file_path = row
                 conn.execute("UPDATE excel_files SET status = 'pending' WHERE id = ?", [file_id])
-                task_queue.put_nowait((username, file_id, file_path))
+                pending.append((username, file_id, file_path))
         except Exception as exc:
             get_logger().warning("Could not resume queued imports: %s", type(exc).__name__)
         finally:
             current_username.reset(token)
+    return pending
+
+
+async def resume_pending_tasks() -> None:
+    """Recover queued imports without blocking startup's event loop."""
+    for task in await asyncio.to_thread(_pending_imports):
+        task_queue.put_nowait(task)

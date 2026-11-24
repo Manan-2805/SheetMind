@@ -883,7 +883,7 @@ def export_message(message_id: str):
 
 async def generate_sql(messages: list[dict]) -> dict[str, Any]:
     """Returns a dict with {sql, message, confidence, model, input_tokens, output_tokens}."""
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     model_name = "unknown"
 
     fallback_res = {
@@ -976,7 +976,7 @@ Total rows: {len(result_rows)}
 Respond with only the summary sentence. No JSON."""
     debug_path = write_debug_prompt(prompt, "NL SUMMARY")
 
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     input_tokens = 0
     output_tokens = 0
 
@@ -1037,7 +1037,7 @@ User asked: {user_question}
 Columns: {columns}
 Row count: {len(result_rows)}"""
 
-        settings = get_settings()
+        settings = await asyncio.to_thread(get_settings)
         if settings.llm_provider == "openai":
             client = AsyncOpenAI(api_key=settings.openai.api_key)
             model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
@@ -1087,7 +1087,7 @@ async def generate_title(content: str) -> str:
     """Execute the generate_title operation."""
     prompt = f'Generate a very short, concise title (max 5 words) for a chat conversation that starts with this message: "{content}". Do not use quotes or prefixes, just the title text.'
     debug_path = write_debug_prompt(prompt, "TITLE GENERATION")
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
         response = await client.chat.completions.create(
@@ -1116,7 +1116,7 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
     """Execute the generate_query_label operation."""
     prompt = f'Create a short, human-readable label (max 6 words) for a saved SQL query.\nThe user asked: "{nl_query}"\nThe SQL generated: {sql_query[:200]}\nReturn ONLY the label text, no quotes, no punctuation at end.'
     debug_path = write_debug_prompt(prompt, "QUERY LABEL GENERATION")
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
         client = AsyncOpenAI(api_key=settings.openai.api_key)
         response = await client.chat.completions.create(
@@ -1233,7 +1233,7 @@ Respond ONLY with this JSON (no markdown, no prose):
   "followups": ["<q1>", "<q2>", "<q3>"]
 }}"""
 
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     try:
         if settings.llm_provider == "openai":
             client = AsyncOpenAI(api_key=settings.openai.api_key)
@@ -1345,6 +1345,23 @@ async def _auto_generate_chart(
         return None
 
 
+def _fetch_one(conn, sql: str, params: list):
+    return conn.execute(sql, params).fetchone()
+
+
+def _prepare_schema_context(
+    conn, referenced_files: list[str], content: str, turns: list[dict[str, Any]]
+) -> tuple[list[str], str]:
+    _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
+    schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
+    schema_tables, _ = _resolve_schema_tables(conn, schema_refs, content)
+    history_table_names = _extract_table_names_from_turns(turns)
+    merged_tables = _merge_table_entries(
+        schema_tables, _resolve_tables_by_name(conn, history_table_names)
+    )
+    return effective_refs, _build_schema_info(conn, merged_tables)
+
+
 async def create_message(
     session_id: str,
     content: str,
@@ -1353,11 +1370,12 @@ async def create_message(
 ) -> ChatMessageResponse:
     """Execute the create_message operation."""
     now = _now()
-    conn = get_connection()
+    conn = await asyncio.to_thread(get_connection)
     user_msg_id = f"msg-{uuid.uuid4().hex[:8]}-u"
 
     # Insert user message
-    conn.execute(
+    await asyncio.to_thread(
+        conn.execute,
         "INSERT INTO chat_messages (id, session_id, role, content, created_at, parent_user_message_id, referenced_files_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
             user_msg_id,
@@ -1370,19 +1388,16 @@ async def create_message(
         ],
     )
 
-    settings = get_settings()
-    turns = _get_recent_turns(conn, session_id, exclude_message_id=user_msg_id, limit_pairs=4)
+    settings = await asyncio.to_thread(get_settings)
+    turns = await asyncio.to_thread(
+        _get_recent_turns, conn, session_id, exclude_message_id=user_msg_id, limit_pairs=4
+    )
 
     # 1. Gathering files
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "gathering_files"})
-    _, effective_refs = _resolve_schema_tables(conn, referenced_files, content)
-    schema_refs = _collect_schema_refs(conn, referenced_files, content, turns)
-    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, content)
-    history_table_names = _extract_table_names_from_turns(turns)
-    schema_tables = _merge_table_entries(
-        schema_tables, _resolve_tables_by_name(conn, history_table_names)
+    effective_refs, schema_info = await asyncio.to_thread(
+        _prepare_schema_context, conn, referenced_files, content, turns
     )
-    schema_info = _build_schema_info(conn, schema_tables)
 
     max_input_tokens = 6000
     if settings.llm_provider == "openai":
@@ -1395,10 +1410,13 @@ async def create_message(
     messages = build_sql_prompt(content, schema_info, turns, max_input_tokens)
     debug_path = write_debug_prompt(messages, "SQL_GENERATION")
 
-    msg_count = conn.execute(
-        "SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]
-    ).fetchone()[0]
-    sess_row = conn.execute("SELECT title FROM chat_sessions WHERE id = ?", [session_id]).fetchone()
+    count_row = await asyncio.to_thread(
+        _fetch_one, conn, "SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", [session_id]
+    )
+    msg_count = count_row[0]
+    sess_row = await asyncio.to_thread(
+        _fetch_one, conn, "SELECT title FROM chat_sessions WHERE id = ?", [session_id]
+    )
     current_title = sess_row[0] if sess_row else ""
     is_first = msg_count == 1 and current_title in ("New conversation", "", None)
 
@@ -1411,7 +1429,9 @@ async def create_message(
         title_task = generate_title(content)
         sql_task = generate_sql(messages)
         title, sql_res = await asyncio.gather(title_task, sql_task)
-        conn.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id])
+        await asyncio.to_thread(
+            conn.execute, "UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id]
+        )
         session_title = title
     else:
         sql_res = await generate_sql(messages)
@@ -1551,7 +1571,8 @@ async def create_message(
     now2 = _now()
 
     res_data_json = json.dumps(result_table.model_dump(), default=str) if result_table else None
-    conn.execute(
+    await asyncio.to_thread(
+        conn.execute,
         """INSERT INTO chat_messages
         (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms,
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
@@ -1580,12 +1601,15 @@ async def create_message(
             chart_url,
         ],
     )
-    conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
+    await asyncio.to_thread(
+        conn.execute, "UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id]
+    )
 
     followups: list[str] = []
     if result_rows and followups_from_combined:
         followups = followups_from_combined
-        conn.execute(
+        await asyncio.to_thread(
+            conn.execute,
             "UPDATE chat_messages SET followups_json = ? WHERE id = ?",
             [json.dumps(followups), assistant_msg_id],
         )
@@ -1625,18 +1649,20 @@ async def regenerate_response(
     parent_user_message_id: str | None = None,
 ) -> ChatMessageResponse:
     """Re-run SQL generation + execution for an existing user query without inserting a new user message."""
-    conn = get_connection()
+    conn = await asyncio.to_thread(get_connection)
 
     # Query and append previous SQL error/query
     prev_sql = None
     prev_error = None
     if parent_user_message_id:
-        prev_row = conn.execute(
+        prev_row = await asyncio.to_thread(
+            _fetch_one,
+            conn,
             """SELECT sql_generated, content FROM chat_messages
                WHERE session_id = ? AND role = 'assistant' AND parent_user_message_id = ?
                ORDER BY version DESC LIMIT 1""",
             [session_id, parent_user_message_id],
-        ).fetchone()
+        )
         if prev_row:
             prev_sql = prev_row[0]
             if prev_row[1] and ("SQL Error:" in prev_row[1] or "error" in prev_row[1].lower()):
@@ -1646,21 +1672,20 @@ async def regenerate_response(
     if prev_sql and prev_error:
         effective_content = f"{content}\n\n[Previous SQL failed: {prev_error}\nSQL attempted: {prev_sql}\nPlease fix and generate a valid SQL query.]"
 
-    turns = _get_recent_turns(
-        conn, session_id, exclude_message_id=parent_user_message_id, limit_pairs=4
+    turns = await asyncio.to_thread(
+        _get_recent_turns,
+        conn,
+        session_id,
+        exclude_message_id=parent_user_message_id,
+        limit_pairs=4,
     )
 
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "gathering_files"})
-    _, effective_refs = _resolve_schema_tables(conn, referenced_files, effective_content)
-    schema_refs = _collect_schema_refs(conn, referenced_files, effective_content, turns)
-    schema_tables, _schema_effective = _resolve_schema_tables(conn, schema_refs, effective_content)
-    history_table_names = _extract_table_names_from_turns(turns)
-    schema_tables = _merge_table_entries(
-        schema_tables, _resolve_tables_by_name(conn, history_table_names)
+    effective_refs, schema_info = await asyncio.to_thread(
+        _prepare_schema_context, conn, referenced_files, effective_content, turns
     )
-    schema_info = _build_schema_info(conn, schema_tables)
 
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     max_input_tokens = 6000
     if settings.llm_provider == "openai":
         max_input_tokens = settings.openai.max_input_tokens
@@ -1747,14 +1772,17 @@ async def regenerate_response(
     now2 = _now()
     assistant_msg_id = f"msg-{uuid.uuid4().hex[:8]}-r"
 
-    v_row = conn.execute(
+    v_row = await asyncio.to_thread(
+        _fetch_one,
+        conn,
         "SELECT MAX(version) FROM chat_messages WHERE parent_user_message_id = ?",
         [parent_user_message_id],
-    ).fetchone()
+    )
     next_version = (v_row[0] or 1) + 1 if v_row and v_row[0] else 1
 
     res_data_json = json.dumps(result_table.model_dump(), default=str) if result_table else None
-    conn.execute(
+    await asyncio.to_thread(
+        conn.execute,
         """INSERT INTO chat_messages
         (id, session_id, role, content, created_at, sql_generated, sql_execution_ms, llm_generation_ms,
          token_count_input, token_count_output, result_row_count, parent_user_message_id, result_data_json, version,
@@ -1783,10 +1811,13 @@ async def regenerate_response(
             chart_url,
         ],
     )
-    conn.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id])
+    await asyncio.to_thread(
+        conn.execute, "UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [now2, session_id]
+    )
 
     if result_rows and followups:
-        conn.execute(
+        await asyncio.to_thread(
+            conn.execute,
             "UPDATE chat_messages SET followups_json = ? WHERE id = ?",
             [json.dumps(followups), assistant_msg_id],
         )
@@ -1837,12 +1868,15 @@ async def edit_user_message(
     session_id: str, message_id: str, new_content: str, referenced_files: list[str]
 ) -> ChatMessageResponse:
     """Edits a user message by deleting it and all subsequent messages, then re-sending."""
-    conn = get_connection()
-    row = conn.execute("SELECT created_at FROM chat_messages WHERE id = ?", [message_id]).fetchone()
+    conn = await asyncio.to_thread(get_connection)
+    row = await asyncio.to_thread(
+        _fetch_one, conn, "SELECT created_at FROM chat_messages WHERE id = ?", [message_id]
+    )
     if not row:
         raise ValueError("Message not found")
     target_time = row[0]
-    conn.execute(
+    await asyncio.to_thread(
+        conn.execute,
         "DELETE FROM chat_messages WHERE session_id = ? AND created_at >= ?",
         [session_id, target_time],
     )

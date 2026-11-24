@@ -48,14 +48,14 @@ class DeleteUserResponse(BaseModel):
 
 
 @router.get("/users", response_model=UsersListResponse)
-async def list_users() -> UsersListResponse:
+def list_users() -> UsersListResponse:
     """Execute the list_users operation."""
     users = list_account_users()
     return UsersListResponse(users=users)
 
 
 @router.post("/setup", response_model=SetupResponse)
-async def setup_user(body: SetupRequest) -> SetupResponse:
+def setup_user(body: SetupRequest) -> SetupResponse:
     """Execute the setup_user operation."""
     safe = body.username
     if not is_valid_username(safe):
@@ -82,7 +82,7 @@ async def setup_user(body: SetupRequest) -> SetupResponse:
 
 
 @router.delete("/users/{username}", response_model=DeleteUserResponse)
-async def delete_user(username: str) -> DeleteUserResponse:
+def delete_user(username: str) -> DeleteUserResponse:
     """Execute the delete_user operation."""
     if not is_valid_username(username):
         raise HTTPException(status_code=400, detail="Invalid username")

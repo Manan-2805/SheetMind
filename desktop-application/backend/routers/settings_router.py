@@ -60,13 +60,13 @@ class DeleteFilesResponse(BaseModel):
 
 
 @router.get("", response_model=PublicSettingsResponse)
-async def get_settings() -> PublicSettingsResponse:
+def get_settings() -> PublicSettingsResponse:
     """Execute the get_settings operation."""
     return PublicSettingsResponse.from_stored(db_get_settings())
 
 
 @router.put("", response_model=PublicSettingsResponse)
-async def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse:
+def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse:
     """Execute the update_settings operation."""
     return PublicSettingsResponse.from_stored(merge_settings(body))
 
@@ -75,7 +75,7 @@ async def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse
 async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
     """Execute the test_llm operation."""
     t0 = time.time()
-    settings = db_get_settings()
+    settings = await asyncio.to_thread(db_get_settings)
 
     if body.provider == "openai":
         api_key = body.api_key or settings.openai.api_key
@@ -139,7 +139,7 @@ async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
 @router.get("/ollama-models")
 async def get_ollama_models():
     """Execute the get_ollama_models operation."""
-    settings = db_get_settings()
+    settings = await asyncio.to_thread(db_get_settings)
     ollama_url = settings.ollama.url.rstrip("/")
     async with httpx.AsyncClient() as client:
         try:
@@ -153,7 +153,7 @@ async def get_ollama_models():
 @router.post("/pull-ollama-model")
 async def pull_ollama_model(body: PullModelRequest):
     """Execute the pull_ollama_model operation."""
-    settings = db_get_settings()
+    settings = await asyncio.to_thread(db_get_settings)
     ollama_url = settings.ollama.url.rstrip("/")
 
     async def stream_pull():
@@ -172,21 +172,21 @@ async def pull_ollama_model(body: PullModelRequest):
 
 
 @router.post("/clear-chat-history", response_model=ClearHistoryResponse)
-async def clear_chat_history() -> ClearHistoryResponse:
+def clear_chat_history() -> ClearHistoryResponse:
     """Execute the clear_chat_history operation."""
     deleted = clear_chat_history_db()
     return ClearHistoryResponse(success=True, deleted_sessions=deleted)
 
 
 @router.post("/delete-all-files", response_model=DeleteFilesResponse)
-async def delete_all_files() -> DeleteFilesResponse:
+def delete_all_files() -> DeleteFilesResponse:
     """Execute the delete_all_files operation."""
     deleted = delete_all_files_db()
     return DeleteFilesResponse(success=True, deleted_files=deleted)
 
 
 @router.get("/export")
-async def export_settings() -> Response:
+def export_settings() -> Response:
     """Execute the export_settings operation."""
     settings = db_get_settings()
     data = settings.model_dump()

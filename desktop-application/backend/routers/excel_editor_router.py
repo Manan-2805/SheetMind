@@ -97,7 +97,7 @@ async def mutate_file(body: MutationRequest):
     debug_path = write_debug_prompt(prompt_msgs, "EXCEL_MUTATION")
 
     # 2. Call LLM
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
     llm_response_text = ""
 
     if settings.llm_provider == "openai":

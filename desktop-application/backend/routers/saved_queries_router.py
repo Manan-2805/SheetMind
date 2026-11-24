@@ -56,7 +56,7 @@ async def generate_label(body: GenerateLabelRequest) -> GenerateLabelResponse:
 
 
 @router.get("", response_model=list[SavedQueryResponse])
-async def get_saved_queries(
+def get_saved_queries(
     q: str | None = None,
     from_: datetime | None = Query(default=None, alias="from"),
     to: datetime | None = Query(default=None, alias="to"),
@@ -67,7 +67,7 @@ async def get_saved_queries(
 
 
 @router.post("", response_model=SavedQueryResponse)
-async def create_saved_query(body: CreateSavedQueryRequest) -> SavedQueryResponse:
+def create_saved_query(body: CreateSavedQueryRequest) -> SavedQueryResponse:
     """Execute the create_saved_query operation."""
     return sq_models.create(
         label=body.label,
@@ -77,7 +77,7 @@ async def create_saved_query(body: CreateSavedQueryRequest) -> SavedQueryRespons
 
 
 @router.put("/{query_id}/favorite", response_model=SavedQueryResponse)
-async def toggle_favorite(query_id: str) -> SavedQueryResponse:
+def toggle_favorite(query_id: str) -> SavedQueryResponse:
     """Execute the toggle_favorite operation."""
     updated = sq_models.toggle_favorite(query_id)
     if not updated:
@@ -86,7 +86,7 @@ async def toggle_favorite(query_id: str) -> SavedQueryResponse:
 
 
 @router.put("/{query_id}", response_model=SavedQueryResponse)
-async def rename_saved_query(query_id: str, body: UpdateSavedQueryRequest) -> SavedQueryResponse:
+def rename_saved_query(query_id: str, body: UpdateSavedQueryRequest) -> SavedQueryResponse:
     """Execute the rename_saved_query operation."""
     updated = sq_models.rename(query_id, body.label)
     if not updated:
@@ -95,7 +95,7 @@ async def rename_saved_query(query_id: str, body: UpdateSavedQueryRequest) -> Sa
 
 
 @router.delete("/{query_id}", response_model=SuccessResponse)
-async def delete_saved_query(query_id: str) -> SuccessResponse:
+def delete_saved_query(query_id: str) -> SuccessResponse:
     """Execute the delete_saved_query operation."""
     sq_models.delete(query_id)
     return SuccessResponse(success=True)

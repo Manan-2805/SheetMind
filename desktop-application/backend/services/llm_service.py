@@ -1,5 +1,6 @@
 """Module containing llm_service functionality."""
 
+import asyncio
 import json
 from typing import Any
 
@@ -16,7 +17,7 @@ class LLMResponseError(ValueError):
 
 async def generate_dashboard_layout(description: str) -> dict[str, Any]:
     """Generates a dashboard layout (title + widgets) based on user description."""
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
 
     system_prompt = (
         "You are a dashboard layout assistant. Based on the user's description, suggest a dashboard layout.\n"
@@ -40,7 +41,7 @@ async def generate_dashboard_layout(description: str) -> dict[str, Any]:
 
 async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
     """Generates a dashboard name based on the widgets it contains and their bound queries."""
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
 
     widgets_lines = []
     for w in widgets:

@@ -55,13 +55,13 @@ async def generate_chart_endpoint(body: ChartGenerateRequest):
 
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])
-async def get_chat_sessions() -> list[ChatSessionResponse]:
+def get_chat_sessions() -> list[ChatSessionResponse]:
     """Execute the get_chat_sessions operation."""
     return chat_models.get_sessions()
 
 
 @router.post("/sessions", response_model=ChatSessionResponse)
-async def create_chat_session(
+def create_chat_session(
     body: ChatSessionCreate = ChatSessionCreate(),
 ) -> ChatSessionResponse:
     """Execute the create_chat_session operation."""
@@ -72,7 +72,7 @@ async def create_chat_session(
     "/sessions/{session_id}/messages",
     response_model=list[ChatMessageResponse],
 )
-async def get_session_messages(session_id: str) -> list[ChatMessageResponse]:
+def get_session_messages(session_id: str) -> list[ChatMessageResponse]:
     """Execute the get_session_messages operation."""
     return chat_models.get_messages(session_id)
 
@@ -100,13 +100,13 @@ async def create_message(
 
 
 @router.put("/sessions/{session_id}", response_model=ChatSessionResponse)
-async def update_session(session_id: str, body: ChatSessionUpdate) -> ChatSessionResponse:
+def update_session(session_id: str, body: ChatSessionUpdate) -> ChatSessionResponse:
     """Execute the update_session operation."""
     return chat_models.update_session(session_id, title=body.title, is_favorite=body.is_favorite)
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+def delete_session(session_id: str):
     """Execute the delete_session operation."""
     chat_models.delete_session(session_id)
     return {"status": "success"}
@@ -142,7 +142,7 @@ def export_message(message_id: str) -> ArtifactExportResponse:
 
 
 @router.put("/messages/{message_id}/feedback")
-async def set_message_feedback(message_id: str, body: FeedbackRequest):
+def set_message_feedback(message_id: str, body: FeedbackRequest):
     """Execute the set_message_feedback operation."""
     chat_models.set_message_feedback(message_id, body.feedback, body.reason)
     return {
@@ -215,7 +215,7 @@ async def edit_message(
 
 
 @router.delete("/sessions/{session_id}/messages/{message_id}")
-async def delete_message_branch(session_id: str, message_id: str):
+def delete_message_branch(session_id: str, message_id: str):
     """Execute the delete_message_branch operation."""
     try:
         chat_models.delete_message_branch(session_id, message_id)

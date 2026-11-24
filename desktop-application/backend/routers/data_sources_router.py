@@ -103,8 +103,26 @@ async def _store_upload(
                 if size > limit:
                     raise HTTPException(413, f"Upload exceeds the {limit}-byte limit.")
                 await output.write(chunk)
-        _register_upload(file_id, name, path, uploaded_at, size)
+    except FileExistsError:
+        raise
     except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+    registration = asyncio.create_task(
+        asyncio.to_thread(_register_upload, file_id, name, path, uploaded_at, size)
+    )
+    try:
+        await asyncio.shield(registration)
+    except asyncio.CancelledError:
+        try:
+            await registration
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        task_queue.put_nowait((username, file_id, str(path)))
+        raise
+    except Exception:
         path.unlink(missing_ok=True)
         raise
 
@@ -123,13 +141,13 @@ async def _store_upload(
 
 
 @router.get("/list-for-autocomplete", response_model=AutocompleteResponse)
-async def list_for_autocomplete() -> AutocompleteResponse:
+def list_for_autocomplete() -> AutocompleteResponse:
     """Execute the list_for_autocomplete operation."""
     return ds_models.list_for_autocomplete()
 
 
 @router.get("", response_model=list[DataSourceResponse])
-async def get_data_sources() -> list[DataSourceResponse]:
+def get_data_sources() -> list[DataSourceResponse]:
     """Execute the get_data_sources operation."""
     return ds_models.get_all()
 
@@ -204,13 +222,13 @@ async def upload_from_url(body: UrlUploadRequest) -> DataSourceResponse:
 @router.delete("/{source_id}", response_model=SuccessResponse)
 async def delete_data_source(source_id: str) -> SuccessResponse:
     """Execute the delete_data_source operation."""
-    ds_models.delete(source_id)
+    await asyncio.to_thread(ds_models.delete, source_id)
     await broadcast_datasource_status()
     return SuccessResponse(success=True)
 
 
 @router.get("/{source_id}/preview", response_model=PreviewResponse)
-async def preview_data_source(
+def preview_data_source(
     source_id: str,
     sheet: str | None = Query(default=None),
 ) -> PreviewResponse:
