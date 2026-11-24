@@ -26,7 +26,14 @@ def clean_columns(df: pd.DataFrame) -> pd.DataFrame:
 def import_df_to_duckdb(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame, table_name: str):
     """Execute the import_df_to_duckdb operation."""
     df = clean_columns(df)
-    conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+    identifier = table_name.replace('"', '""')
+    conn.register("sheetmind_import_frame", df)
+    try:
+        conn.execute(
+            f'CREATE OR REPLACE TABLE "{identifier}" AS SELECT * FROM sheetmind_import_frame'
+        )
+    finally:
+        conn.unregister("sheetmind_import_frame")
 
 
 def now_utc() -> datetime:

@@ -85,7 +85,7 @@ async def delete_dashboard(dashboard_id: str):
 
 
 @router.get("/{dashboard_id}/refresh", response_model=dict[str, Any])
-async def refresh_dashboard(dashboard_id: str):
+def refresh_dashboard(dashboard_id: str):
     """Execute the refresh_dashboard operation."""
     try:
         results = dashboard_service.refresh_dashboard(dashboard_id)
@@ -106,14 +106,14 @@ async def generate_dashboard_name(data: AINameGenRequest):
                 # Query saved_queries for details
                 sq_row = conn.execute(
                     "SELECT label, sql_query, natural_query FROM saved_queries WHERE id = ?",
-                    [w.saved_query_id]
+                    [w.saved_query_id],
                 ).fetchone()
                 if sq_row:
                     widget_dict["query_name"] = sq_row[0]
                     widget_dict["sql_query"] = sq_row[1]
                     widget_dict["natural_query"] = sq_row[2]
             widgets_with_rich_context.append(widget_dict)
-            
+
         title = await llm_service.generate_dashboard_name(widgets_with_rich_context)
         return AINameGenResponse(title=title)
     except Exception as e:

@@ -21,7 +21,8 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
     with _conn_lock:
         if db_path not in _conns:
-            conn = duckdb.connect(db_path)
+            conn = duckdb.connect(db_path, config={"enable_external_access": "false"})
+            conn.execute("SET lock_configuration = true")
             init_schema(conn)
             _conns[db_path] = conn
 

@@ -120,9 +120,7 @@ class FeedbackRequest(BaseModel):
 
 
 @router.get("/messages/{message_id}/data", response_model=ResultTable)
-async def get_message_data(
-    message_id: str, page: int = 1, page_size: int | None = None
-) -> ResultTable:
+def get_message_data(message_id: str, page: int = 1, page_size: int | None = None) -> ResultTable:
     """Execute the get_message_data operation."""
     try:
         return chat_models.get_message_data(message_id, page=page, page_size=page_size)
@@ -133,7 +131,7 @@ async def get_message_data(
 
 
 @router.post("/messages/{message_id}/export", response_model=ArtifactExportResponse)
-async def export_message(message_id: str) -> ArtifactExportResponse:
+def export_message(message_id: str) -> ArtifactExportResponse:
     """Execute the export_message operation."""
     try:
         return chat_models.export_message(message_id)

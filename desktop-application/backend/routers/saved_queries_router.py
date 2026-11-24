@@ -3,12 +3,12 @@
 import re
 from datetime import UTC, datetime
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 import models.saved_query_models as sq_models
 from models import artifact_models, chat_models
-from models.settings_models import get_settings
 from schemas.artifact_schemas import ArtifactExportResponse
 from schemas.chat_schemas import ResultTable
 from schemas.common_schemas import SuccessResponse
@@ -18,7 +18,8 @@ from schemas.saved_query_schemas import (
     UpdateSavedQueryRequest,
 )
 from services.duckdb_service import get_connection
-from services.query_service import dataframe_to_result_table
+from services.query_service import get_result_row_limit
+from services.sql_guard import run_user_query
 from services.storage_service import get_exports_dir
 
 router = APIRouter(prefix="/saved-queries", tags=["saved-queries"])
@@ -100,18 +101,8 @@ async def delete_saved_query(query_id: str) -> SuccessResponse:
     return SuccessResponse(success=True)
 
 
-def _get_row_limit() -> int:
-    """Execute the _get_row_limit operation."""
-    settings = get_settings()
-    try:
-        limit = int(settings.result_row_limit)
-    except Exception:
-        limit = 500
-    return max(1, limit)
-
-
 @router.post("/{query_id}/run", response_model=RunSavedQueryResponse)
-async def run_saved_query(
+def run_saved_query(
     query_id: str,
     page: int = Query(default=1),
     page_size: int = Query(default=10),
@@ -123,13 +114,14 @@ async def run_saved_query(
 
     conn = get_connection()
     try:
-        df = conn.execute(saved_query.sql_query).fetchdf()
+        result_table = run_user_query(
+            conn, saved_query.sql_query, get_result_row_limit(), page, page_size
+        )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {exc!s}") from exc
 
     sq_models.mark_used(query_id)
 
-    result_table = dataframe_to_result_table(df, row_limit=500, page=page, page_size=page_size)
     return RunSavedQueryResponse(
         id=saved_query.id,
         label=saved_query.label,
@@ -140,7 +132,7 @@ async def run_saved_query(
 
 
 @router.post("/{query_id}/export", response_model=ArtifactExportResponse)
-async def export_saved_query(query_id: str) -> ArtifactExportResponse:
+def export_saved_query(query_id: str) -> ArtifactExportResponse:
     """Execute the export_saved_query operation."""
     saved_query = sq_models.get_by_id(query_id)
     if not saved_query:
@@ -148,7 +140,7 @@ async def export_saved_query(query_id: str) -> ArtifactExportResponse:
 
     conn = get_connection()
     try:
-        df = conn.execute(saved_query.sql_query).fetchdf()
+        result_table = run_user_query(conn, saved_query.sql_query, get_result_row_limit())
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"SQL Execution Failed: {exc!s}") from exc
 
@@ -159,7 +151,9 @@ async def export_saved_query(query_id: str) -> ArtifactExportResponse:
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_label}_{timestamp}.xlsx"
     file_path = exports_dir / filename
-    df.to_excel(file_path, index=False)
+    pd.DataFrame(
+        result_table.rows, columns=[column.key for column in result_table.columns]
+    ).to_excel(file_path, index=False)
     file_size = file_path.stat().st_size
 
     return artifact_models.create_export(

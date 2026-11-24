@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import math
 import re
 import time
 import uuid
@@ -25,7 +24,8 @@ from schemas.chat_schemas import (
 from services.chart_service import generate_chart
 from services.duckdb_service import get_connection
 from services.logging_service import get_logger
-from services.query_service import dataframe_to_result_table
+from services.query_service import get_result_row_limit
+from services.sql_guard import run_user_query
 from services.storage_service import (
     get_charts_dir,
     get_debug_prompts_dir,
@@ -866,17 +866,6 @@ def _build_schema_info(conn, tables: list[dict[str, str]]) -> str:
     return schema_info or "No completed tables available yet."
 
 
-def _get_result_row_limit() -> int:
-    """Execute the _get_result_row_limit operation."""
-    settings = get_settings()
-    limit = settings.result_row_limit if hasattr(settings, "result_row_limit") else 500
-    try:
-        limit = int(limit)
-    except Exception:
-        limit = 500
-    return max(1, limit)
-
-
 def _get_message_sql(conn, message_id: str) -> tuple[str, str]:
     """Execute the _get_message_sql operation."""
     row = conn.execute(
@@ -896,22 +885,14 @@ def get_message_data(message_id: str, page: int = 1, page_size: int | None = Non
     """Execute the get_message_data operation."""
     conn = get_connection()
     sql, _session_id = _get_message_sql(conn, message_id)
-    try:
-        df = conn.execute(sql).fetchdf()
-    except Exception as exc:
-        raise ValueError(f"SQL Execution Failed: {exc!s}") from exc
-    return dataframe_to_result_table(df, _get_result_row_limit(), page=page, page_size=page_size)
+    return run_user_query(conn, sql, get_result_row_limit(), page, page_size)
 
 
 def export_message(message_id: str):
     """Execute the export_message operation."""
     conn = get_connection()
     sql, session_id = _get_message_sql(conn, message_id)
-    try:
-        df = conn.execute(sql).fetchdf()
-    except Exception as exc:
-        raise ValueError(f"SQL Execution Failed: {exc!s}") from exc
-
+    table = run_user_query(conn, sql, get_result_row_limit())
     session_row = conn.execute(
         "SELECT title FROM chat_sessions WHERE id = ?",
         [session_id],
@@ -923,7 +904,9 @@ def export_message(message_id: str):
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"{safe_title}_{timestamp}.xlsx"
     file_path = exports_dir / filename
-    df.to_excel(file_path, index=False)
+    pd.DataFrame(table.rows, columns=[column.key for column in table.columns]).to_excel(
+        file_path, index=False
+    )
     file_size = file_path.stat().st_size
 
     return artifact_models.create_export(
@@ -1232,10 +1215,8 @@ async def broadcast_datasource_status() -> None:
             }
             for r in rows
         ]
-        logger.info(
-            "WebSocket Broadcast (status_update): data_sources_count=%d", len(updates)
-        )
-        
+        logger.info("WebSocket Broadcast (status_update): data_sources_count=%d", len(updates))
+
         dead = set()
         for ws in list(_ws_clients):
             try:
@@ -1251,6 +1232,7 @@ async def _generate_combined_second_call(
     result_rows: list,
     columns: list,
     user_question: str,
+    total_rows: int,
 ) -> dict:
     """Single second LLM call returning summary, chart config, and followups JSON."""
     prompt = f"""You are a data analysis assistant. Based on the query result below, provide:
@@ -1261,7 +1243,7 @@ async def _generate_combined_second_call(
 User asked: {user_question}
 Columns: {columns}
 First 5 rows: {result_rows[:5]}
-Total rows: {len(result_rows)}
+Total rows: {total_rows}
 
 Respond ONLY with this JSON (no markdown, no prose):
 {{
@@ -1471,6 +1453,8 @@ async def create_message(
     sql_exec_ms = 0
     summary_gen_ms = 0
     result_table = None
+    row_limit = max(1, settings.result_row_limit)
+    total_db_rows = 0
     result_rows: list[dict] = []
     columns: list[ResultColumn] = []
     nl_summary = llm_message or "I'm sorry, I couldn't process that request."
@@ -1492,14 +1476,11 @@ async def create_message(
                 await _broadcast_ws_event(
                     session_id, {"type": "chat_status", "status": "executing_sql"}
                 )
-                df = conn.execute(current_sql).fetchdf()
+                result_table = await asyncio.to_thread(run_user_query, conn, current_sql, row_limit)
                 sql_exec_ms = int((time.time() - t2) * 1000)
-                columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
-                rows_raw = df.to_dict("records")
-                clean_rows = [
-                    {k: (None if pd.isna(v) else v) for k, v in r.items()} for r in rows_raw
-                ]
-                result_rows = clean_rows
+                columns = result_table.columns
+                result_rows = result_table.rows
+                total_db_rows = result_table.total_rows
                 sql = current_sql
                 sql_exec_succeeded = True
                 break
@@ -1559,6 +1540,7 @@ async def create_message(
                 combined_res = await _generate_combined_second_call(
                     result_rows=result_rows,
                     columns=[c.key for c in columns],
+                    total_rows=total_db_rows,
                     user_question=content,
                 )
                 nl_summary = combined_res.get("summary") or llm_message or "Query completed."
@@ -1571,21 +1553,6 @@ async def create_message(
             summary_gen_ms = int((time.time() - t3) * 1000)
         else:
             nl_summary = f"SQL Error: {sql_error}"
-
-    row_limit = _get_result_row_limit()
-    total_db_rows = len(result_rows)
-    if result_rows:
-        page = 1
-        page_size = row_limit
-        total_pages = max(1, math.ceil(total_db_rows / page_size))
-        result_table = ResultTable(
-            columns=columns,
-            rows=result_rows[:row_limit],
-            total_rows=total_db_rows,
-            page=page,
-            page_size=page_size,
-            total_pages=total_pages,
-        )
 
     chart_url = None
     if result_rows and settings.auto_chart_display:
@@ -1625,7 +1592,7 @@ async def create_message(
             sql_gen_ms + summary_gen_ms,
             total_input_tokens,
             total_output_tokens,
-            len(result_rows),
+            total_db_rows,
             user_msg_id,
             res_data_json,
             1,
@@ -1660,7 +1627,7 @@ async def create_message(
         llm_generation_ms=sql_gen_ms + summary_gen_ms,
         token_count_input=total_input_tokens,
         token_count_output=total_output_tokens,
-        result_row_count=len(result_rows),
+        result_row_count=total_db_rows,
         result_data=result_table,
         referenced_files=effective_refs,
         session_title=session_title,
@@ -1743,6 +1710,8 @@ async def regenerate_response(
     sql_exec_ms = 0
     summary_gen_ms = 0
     result_table = None
+    row_limit = max(1, settings.result_row_limit)
+    total_db_rows = 0
     result_rows = []
     nl_summary = llm_message or "I'm sorry, I couldn't process that request."
     chart_config_from_combined = None
@@ -1752,25 +1721,11 @@ async def regenerate_response(
         await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "executing_sql"})
         t2 = time.time()
         try:
-            df = conn.execute(sql).fetchdf()
+            result_table = await asyncio.to_thread(run_user_query, conn, sql, row_limit)
             sql_exec_ms = int((time.time() - t2) * 1000)
-            columns = [ResultColumn(key=str(c), label=str(c)) for c in df.columns]
-            rows = df.to_dict("records")
-            clean_rows = [{k: (None if pd.isna(v) else v) for k, v in r.items()} for r in rows]
-            total_rows = len(clean_rows)
-            row_limit = _get_result_row_limit()
-            page = 1
-            page_size = row_limit
-            total_pages = max(1, math.ceil(total_rows / page_size))
-            result_table = ResultTable(
-                columns=columns,
-                rows=clean_rows[:row_limit],
-                total_rows=total_rows,
-                page=page,
-                page_size=page_size,
-                total_pages=total_pages,
-            )
-            result_rows = clean_rows
+            columns = result_table.columns
+            result_rows = result_table.rows
+            total_db_rows = result_table.total_rows
 
             await _broadcast_ws_event(
                 session_id, {"type": "chat_status", "status": "generating_summary"}
@@ -1781,6 +1736,7 @@ async def regenerate_response(
                 combined_res = await _generate_combined_second_call(
                     result_rows=result_rows,
                     columns=[c.key for c in columns],
+                    total_rows=total_db_rows,
                     user_question=effective_content,
                 )
                 nl_summary = combined_res.get("summary") or "Query completed."
@@ -1839,7 +1795,7 @@ async def regenerate_response(
             sql_gen_ms + summary_gen_ms,
             total_input_tokens,
             total_output_tokens,
-            len(result_rows),
+            total_db_rows,
             parent_user_message_id,
             res_data_json,
             next_version,
@@ -1872,7 +1828,7 @@ async def regenerate_response(
         llm_generation_ms=sql_gen_ms + summary_gen_ms,
         token_count_input=total_input_tokens,
         token_count_output=total_output_tokens,
-        result_row_count=len(result_rows),
+        result_row_count=total_db_rows,
         result_data=result_table,
         referenced_files=effective_refs,
         parent_user_message_id=parent_user_message_id,
