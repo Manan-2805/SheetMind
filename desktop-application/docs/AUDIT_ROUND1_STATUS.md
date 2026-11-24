@@ -18,7 +18,8 @@
 - P2 (`55410b7`): the fake-client test verifies per-key OpenAI reuse, one Ollama pool, and closure at shutdown.
 - P3 (`430d97e`): lazy Excel and Dashboards routes build successfully. Vite's duplicate chat API import warning is gone. Dependency removals are recorded in `DEPENDENCY_CHANGES.md`.
 - P4: skipped after a 500,000-row comparison showed different account-code and date types. Pandas took 0.183 s and DuckDB auto-detect took 0.072 s. Both produced 500,000 rows.
-- Part C lint: Ruff is clean, unused chat fixtures are gone, and Biome parses both Tailwind stylesheets. Biome reported 275 errors, 59 warnings, and 16 infos after formatting, with no added errors by rule and file.
-- Next item: commit and verify Electron navigation and quit handling.
+- Part C lint (`b0a729a`): Ruff is clean, unused chat fixtures are gone, and Biome parses both Tailwind stylesheets. Biome reported 275 errors, 59 warnings, and 16 infos, with no added errors by rule and file.
+- Part C Electron: Node syntax checks and a simulated dev and packaged navigation and quit lifecycle passed. The native packaged smoke test remains blocked by missing shared libraries.
+- Next item: final gates, Part D findings, and the audit report.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

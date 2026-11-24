@@ -1,15 +1,17 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
-const path = require("path");
-const { spawn } = require("child_process");
+const { spawn } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
-const net = require("net");
-const fs = require("fs");
+const fs = require("node:fs");
+const net = require("node:net");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 
 let mainWindow = null;
 let backendProcess = null;
-let backendPort = null;
 let backendApiUrl = "";
+let isQuitting = false;
 const backendApiToken = randomBytes(32).toString("hex");
+const devAppUrl = "http://localhost:5173";
 
 // Helper to find a free port
 function findFreePort() {
@@ -36,7 +38,8 @@ ipcMain.on("get-backend-api-config", (event) => {
 });
 
 async function startBackend() {
-  backendPort = await findFreePort();
+  const backendPort = await findFreePort();
+  if (isQuitting) return;
   backendApiUrl = `http://127.0.0.1:${backendPort}/api`;
   console.log(`[Electron] Starting backend on port ${backendPort}...`);
 
@@ -89,21 +92,47 @@ async function startBackend() {
     console.error(`[Backend STDERR] ${data.toString().trim()}`);
   });
 
-  backendProcess.on("close", (code) => {
+  const child = backendProcess;
+  child.on("error", (error) => {
+    console.error("[Electron] Backend process error:", error.code);
+    app.quit();
+  });
+  child.on("close", (code) => {
+    if (backendProcess === child) backendProcess = null;
     console.log(`[Electron] Backend process exited with code ${code}`);
   });
 }
 
 function stopBackend() {
-  if (backendProcess) {
-    console.log("[Electron] Stopping backend process...");
-    if (process.platform === "win32") {
-      // On Windows, taskkill ensures the process tree is killed cleanly
-      spawn("taskkill", ["/pid", backendProcess.pid, "/f", "/t"]);
-    } else {
-      backendProcess.kill("SIGTERM");
-    }
-    backendProcess = null;
+  const child = backendProcess;
+  backendProcess = null;
+  if (!child?.pid) return;
+  console.log("[Electron] Stopping backend process...");
+  if (process.platform === "win32") {
+    const killer = spawn("taskkill", ["/pid", String(child.pid), "/f", "/t"]);
+    killer.on("error", () => child.kill());
+  } else {
+    child.kill("SIGTERM");
+  }
+}
+
+function isAppNavigation(url, entry) {
+  if (!URL.canParse(url)) return false;
+  const target = new URL(url);
+  if (entry.protocol === "file:") {
+    return target.protocol === "file:" && target.host === entry.host &&
+      target.pathname === entry.pathname;
+  }
+  return target.origin === entry.origin;
+}
+
+function openExternalLink(url) {
+  if (!URL.canParse(url)) return;
+  const target = new URL(url);
+  if (target.protocol === "https:" || target.protocol === "http:") {
+    void shell.openExternal(target.href).catch(() => {
+      console.error("[Electron] Could not open browser link");
+    });
   }
 }
 
@@ -126,14 +155,30 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
 
   const isPackaged = app.isPackaged;
+  const indexPath = isPackaged
+    ? path.join(process.resourcesPath, "frontend", "index.html")
+    : null;
+  const entry = indexPath ? pathToFileURL(indexPath) : new URL(devAppUrl);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalLink(url);
+    return { action: "deny" };
+  });
+  const blockExternalNavigation = (event, url) => {
+    if (isAppNavigation(url, entry)) return;
+    event.preventDefault();
+    openExternalLink(url);
+  };
+  mainWindow.webContents.on("will-navigate", blockExternalNavigation);
+  mainWindow.webContents.on("will-redirect", blockExternalNavigation);
+  mainWindow.on("session-end", stopBackend);
+
   if (!isPackaged) {
     // Development mode: load Vite dev server
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.loadURL(devAppUrl);
     // Open devtools in dev mode
     mainWindow.webContents.openDevTools();
   } else {
     // Production mode: load static files from resource frontend
-    const indexPath = path.join(process.resourcesPath, "frontend", "index.html");
     mainWindow.loadFile(indexPath);
   }
 
@@ -146,6 +191,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   try {
     await startBackend();
+    if (isQuitting) return;
     
     // Set up React DevTools in development mode
     if (!app.isPackaged) {
@@ -163,7 +209,7 @@ app.whenReady().then(async () => {
     
     // Give backend 1.5 seconds to start up uvicorn completely
     setTimeout(() => {
-      createWindow();
+      if (!isQuitting) createWindow();
     }, 1500);
 
   } catch (err) {
@@ -177,6 +223,12 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on("will-quit", () => {
+app.on("before-quit", () => {
+  isQuitting = true;
   stopBackend();
 });
+
+app.on("will-quit", stopBackend);
+process.once("SIGINT", () => app.quit());
+process.once("SIGTERM", () => app.quit());
+process.once("exit", stopBackend);
