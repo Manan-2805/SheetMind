@@ -37,12 +37,6 @@ if (-not $isAdmin) {
     Write-Host ""
 }
 
-# Kill any running instances of SheetMind or its backend to unlock files
-Write-Host "Closing any active processes to release file locks..." -ForegroundColor DarkGray
-Stop-Process -Name "sheetmind-backend" -Force -ErrorAction SilentlyContinue
-Stop-Process -Name "electron" -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
-
 # Set Nuitka Cache Dir environment variable to use local directory
 $NuitkaCacheDir = "$ROOT\backend\.nuitka-cache"
 if (-not (Test-Path $NuitkaCacheDir)) {
@@ -97,8 +91,10 @@ Write-Host "`n[2/5] Building Frontend (React + Vite)..." -ForegroundColor Yellow
 Set-Location "$ROOT\frontend"
 Write-Host "Running npm ci..." -ForegroundColor DarkGray
 npm ci
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Running npm run build..." -ForegroundColor DarkGray
 npm run build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "Copying built frontend assets..." -ForegroundColor DarkGray
 Copy-Item -Recurse -Force "dist\*" $FrontendBuildDir
 Write-Host "Frontend build completed." -ForegroundColor Green
@@ -106,23 +102,6 @@ Write-Host "Frontend build completed." -ForegroundColor Green
 # Step 3: Compile Backend with Nuitka
 Write-Host "`n[3/5] Compiling Backend with Nuitka..." -ForegroundColor Yellow
 Set-Location "$ROOT\backend"
-
-# Activate Virtual Environment or Create if missing
-$VenvActivate = "$ROOT\backend\.venv\Scripts\Activate.ps1"
-if (-not (Test-Path $VenvActivate)) {
-    Write-Host "Virtual environment not found. Creating a new one using uv..." -ForegroundColor Yellow
-    uv venv "$ROOT\backend\.venv"
-    . $VenvActivate
-    Write-Host "Installing dependencies using uv..." -ForegroundColor DarkGray
-    uv pip install -r pyproject.toml
-} else {
-    Write-Host "Activating python virtual environment..." -ForegroundColor DarkGray
-    . $VenvActivate
-}
-
-# Install Nuitka using uv if not already installed
-Write-Host "Checking build dependencies with uv..." -ForegroundColor DarkGray
-uv pip install nuitka ordered-set zstandard
 
 # Execute Nuitka Compile with heavy optimizations:
 # - '--jobs=8': Speeds up compilation heavily using 8 threads on R7 CPU
@@ -178,7 +157,7 @@ if ($Clean) {
 
 $nuitkaArgs += "main.py"
 
-python -B -m nuitka @nuitkaArgs
+uv run --locked --with nuitka --with ordered-set --with zstandard python -B -m nuitka @nuitkaArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Nuitka backend compilation failed with exit code $LASTEXITCODE"
@@ -189,30 +168,20 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# Deactivate Venv
-if (Get-Command deactivate -ErrorAction SilentlyContinue) {
-    deactivate
-}
-
 Write-Host "Backend compilation completed successfully." -ForegroundColor Green
 
 # Step 4: Package Desktop Application with Electron Builder
 Write-Host "`n[4/5] Packaging Desktop Application with Electron Builder..." -ForegroundColor Yellow
 Set-Location "$ROOT\electron"
 
-# Update package.json version
-Write-Host "Updating package.json version to $Version..." -ForegroundColor DarkGray
-$PkgPath = "$ROOT\electron\package.json"
-$Pkg = Get-Content $PkgPath | ConvertFrom-Json
-$Pkg.version = $Version
-$Pkg | ConvertTo-Json -Depth 100 | Set-Content $PkgPath
-
 Write-Host "Running npm ci for Electron..." -ForegroundColor DarkGray
 npm ci
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Building final desktop installer..." -ForegroundColor DarkGray
 # Use standard electron-builder to build for host OS (Windows installer)
-npm run dist
+npm run dist -- "-c.extraMetadata.version=$Version"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Electron packaging completed." -ForegroundColor Green
 

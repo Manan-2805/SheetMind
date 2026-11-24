@@ -16,3 +16,5 @@
 - P3 follow-up: Let Vite split the workbook dependencies with the lazy editor route so the entry HTML does not preload Univer.
 - Part C: Remove unused chat fixtures, resolve Ruff findings, and enable Biome parsing for Tailwind directives.
 - Part C: Block off-app Electron navigation and windows, open HTTP links in the default browser, and stop the backend on normal quit and shutdown signals.
+- Added root and app-specific Make targets for setup, development, tests, checks, and builds. The desktop launcher closes Vite with Electron, and native packaging passes the version to Electron Builder without rewriting dependency manifests.
+- Enabled installation of the locked native Vite binding in the web image builder so development and production images can build.

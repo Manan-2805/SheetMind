@@ -8,40 +8,19 @@ The cloud-based web version of SheetMind. It features a React frontend and a rob
 - **[Backend](./backend/README.md)**: Built with FastAPI, utilizing PostgreSQL for robust data management and Alembic for migrations.
 - **Docker**: Containerized setup with `docker-compose`.
 
-## Getting Started
+## Development and production
 
-### Prerequisites
-- Node.js (v18+)
-- Python (v3.10+)
-- `uv` (Python package manager)
-- Docker Desktop (for running PostgreSQL and containerized services)
+Use Docker with the Compose plugin. Create `web-application/.env` using the repository template and set the values for your local stack.
 
-### Running Locally with Docker (Recommended)
+From the repository root, run:
 
-To spin up the entire web application (frontend, backend, database) using Docker:
-```powershell
-docker-compose up --build
+```sh
+make web-setup
+make web
 ```
 
-### Running Locally for Development (Manual)
+Open `http://localhost`. Use `make web-logs` to follow logs, `make web-ps` for status, and `make web-stop` to stop services while preserving the database volume.
 
-**1. Database**
-Ensure you have a PostgreSQL instance running or start one via Docker. Set the environment variables in `.env` based on `.env.example`.
+Use `make web-build` to build production images and `make web-prod` to start them. Use separate Compose project names when isolating dev and production data. Both configurations use host port 80, so stop one before starting the other on the same host.
 
-**2. Start the Backend**
-```powershell
-cd backend
-uv venv
-.\.venv\Scripts\activate
-uv pip install -e .
-alembic upgrade head
-# Start server using the standard uvicorn command
-uvicorn app.main:app --reload
-```
-
-**3. Start the Frontend**
-```powershell
-cd frontend
-npm install
-npm run dev
-```
+For local code checks or a standalone frontend build, run `make web-setup-local`, then `make web-check` or `make web-build-ui`. Use `make web-migrate` to apply Alembic migrations to the running development stack.

@@ -8,38 +8,17 @@ The desktop version of SheetMind, offering a zero-setup local experience. It bun
 - **[Backend](./backend/README.md)**: Built with FastAPI, utilizing DuckDB for local Excel querying and data generation.
 - **Electron**: Used to package the frontend and backend into a single executable.
 
-## Getting Started
+## Development and packaging
 
-### Prerequisites
-- Node.js (v18+)
-- Python (v3.10+)
-- `uv` (Python package manager)
+Install GNU Make, uv, and Node.js 20.19+ or 22.12+. On Windows, use a POSIX shell such as Git Bash for Make. [Vite Node.js requirements](https://vite.dev/guide/#scaffolding-your-first-vite-project)
 
-### Running the Application Locally
+Run from the repository root:
 
-You can run the frontend and backend separately during development.
-
-**1. Start the Backend**
-```powershell
-cd backend
-# Create and activate virtual environment if not present
-uv venv
-.\.venv\Scripts\activate
-# Install dependencies
-uv pip install -e .
-# Run the server
-python -B main.py
+```sh
+make desktop-setup
+make desktop
 ```
 
-**2. Start the Frontend**
-```powershell
-cd frontend
-npm install
-npm run dev
-```
+The development launcher waits for Vite before opening Electron. Closing Electron stops Vite. Use `make desktop-api` and `make desktop-ui` for browser-only development in separate terminals.
 
-### Building the Application
-To build the complete desktop executable, run the build script:
-```powershell
-.\build.ps1
-```
+Run `make desktop-package VERSION=1.2.3` on the target OS to build an installer into `desktop-application/electron/dist`. Native builds use the existing Nuitka and Electron Builder toolchains. Close SheetMind before packaging if the OS holds its build files open.
