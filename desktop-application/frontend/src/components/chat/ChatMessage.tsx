@@ -412,12 +412,12 @@ export function ChatMessage({
             </span>
             <img
               src={chartImageUrl(chartUrl)}
+              referrerPolicy="no-referrer"
               alt="Auto Generated Chart"
               className="max-h-[300px] w-auto object-contain rounded-lg shadow-lg border"
               style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
               onError={(e) => {
-                console.error("Failed to load chart image:", e);
-                (e.currentTarget as HTMLImageElement).style.display = "none";
+                e.currentTarget.style.display = "none";
               }}
             />
           </div>

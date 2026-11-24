@@ -10,6 +10,7 @@ from dependencies import current_username
 from services.duckdb_service import close_connection, get_connection
 from services.storage_service import (
     get_user_dir,
+    is_valid_username,
     list_account_users,
     register_login,
     remove_account,
@@ -56,9 +57,9 @@ async def list_users() -> UsersListResponse:
 @router.post("/setup", response_model=SetupResponse)
 async def setup_user(body: SetupRequest) -> SetupResponse:
     """Execute the setup_user operation."""
-    safe = body.username.strip()
-    if not safe:
-        raise HTTPException(status_code=400, detail="Username cannot be empty")
+    safe = body.username
+    if not is_valid_username(safe):
+        raise HTTPException(status_code=400, detail="Invalid username")
 
     token = current_username.set(safe)
     try:
@@ -83,13 +84,12 @@ async def setup_user(body: SetupRequest) -> SetupResponse:
 @router.delete("/users/{username}", response_model=DeleteUserResponse)
 async def delete_user(username: str) -> DeleteUserResponse:
     """Execute the delete_user operation."""
-    safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
-    if not safe:
+    if not is_valid_username(username):
         raise HTTPException(status_code=400, detail="Invalid username")
 
-    close_connection(safe)
+    close_connection(username)
 
-    user_dir = get_user_dir(safe)
+    user_dir = get_user_dir(username)
     if user_dir.exists():
         try:
             shutil.rmtree(str(user_dir))
@@ -98,6 +98,6 @@ async def delete_user(username: str) -> DeleteUserResponse:
                 status_code=500, detail=f"Failed to delete user directory: {e}"
             ) from e
 
-    remove_account(safe)
+    remove_account(username)
 
-    return DeleteUserResponse(success=True, username=safe)
+    return DeleteUserResponse(success=True, username=username)

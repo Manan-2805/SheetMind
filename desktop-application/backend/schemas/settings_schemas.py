@@ -1,6 +1,6 @@
 """Module containing settings_schemas functionality."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OpenAISettingsSchema(BaseModel):
@@ -9,6 +9,13 @@ class OpenAISettingsSchema(BaseModel):
     api_key: str = ""
     model: str = "gpt-4o"
     max_input_tokens: int = 6000
+
+
+class PublicOpenAISettings(OpenAISettingsSchema):
+    """Public OpenAI settings with a key-presence indicator."""
+
+    api_key: str = Field(default="", exclude=True)
+    api_key_set: bool = False
 
 
 class OllamaSettingsSchema(BaseModel):
@@ -32,6 +39,19 @@ class SettingsResponse(BaseModel):
     auto_sql_retry: bool = True
     auto_sql_retry_max: int = 3
     auto_chart_display: bool = False
+
+
+class PublicSettingsResponse(SettingsResponse):
+    """Settings response that serializes OpenAI configuration without its key."""
+
+    openai: PublicOpenAISettings = PublicOpenAISettings()
+
+    @classmethod
+    def from_stored(cls, settings: SettingsResponse) -> "PublicSettingsResponse":
+        """Construct public settings without copying the stored secret."""
+        data = settings.model_dump(exclude={"openai": {"api_key"}})
+        data["openai"]["api_key_set"] = bool(settings.openai.api_key)
+        return cls.model_validate(data)
 
 
 class UpdateSettingsRequest(BaseModel):

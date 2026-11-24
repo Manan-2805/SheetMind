@@ -18,8 +18,8 @@ from models.settings_models import (
     get_settings as db_get_settings,
 )
 from schemas.settings_schemas import (
+    PublicSettingsResponse,
     PullModelRequest,
-    SettingsResponse,
     TestLLMRequest,
     UpdateSettingsRequest,
 )
@@ -58,14 +58,14 @@ class DeleteFilesResponse(BaseModel):
     deleted_files: int
 
 
-@router.get("", response_model=SettingsResponse)
-async def get_settings() -> SettingsResponse:
+@router.get("", response_model=PublicSettingsResponse)
+async def get_settings() -> PublicSettingsResponse:
     """Execute the get_settings operation."""
-    return db_get_settings()
+    return PublicSettingsResponse.from_stored(db_get_settings())
 
 
-@router.put("", response_model=SettingsResponse)
-async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
+@router.put("", response_model=PublicSettingsResponse)
+async def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse:
     """Execute the update_settings operation."""
     current_settings = db_get_settings()
     if body.theme is not None:
@@ -73,6 +73,8 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
     if body.llm_provider is not None:
         current_settings.llm_provider = body.llm_provider
     if body.openai is not None:
+        if not body.openai.api_key:
+            body.openai.api_key = current_settings.openai.api_key
         current_settings.openai = body.openai
     if body.ollama is not None:
         current_settings.ollama = body.ollama
@@ -86,7 +88,7 @@ async def update_settings(body: UpdateSettingsRequest) -> SettingsResponse:
         current_settings.auto_chart_display = body.auto_chart_display
 
     update_settings_db(current_settings)
-    return current_settings
+    return PublicSettingsResponse.from_stored(current_settings)
 
 
 @router.post("/test-llm", response_model=TestLLMResponse)

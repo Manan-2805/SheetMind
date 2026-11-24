@@ -106,6 +106,7 @@ export function SettingsPage() {
 
   const [llmProvider, setLlmProvider] = useState<LLMProvider>("openai");
   const [apiKey, setApiKey] = useState("");
+  const [apiKeySet, setApiKeySet] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
   const [openaiModels, setOpenaiModels] = useState<string[]>([
@@ -150,7 +151,7 @@ export function SettingsPage() {
     getSettings()
       .then((s) => {
         setLlmProvider(s.llm_provider as LLMProvider);
-        setApiKey(s.openai.api_key);
+        setApiKeySet(s.openai.api_key_set);
         setOpenaiModel(s.openai.model);
         setOllamaUrl(s.ollama.url);
         setOllamaSelectedModel(s.ollama.model || "");
@@ -202,7 +203,7 @@ export function SettingsPage() {
   const handleSaveAll = async () => {
     setIsSaving(true);
     try {
-      await updateSettings({
+      const saved = await updateSettings({
         theme,
         llm_provider: llmProvider,
         openai: { api_key: apiKey, model: openaiModel, max_input_tokens: openaiMaxTokens },
@@ -212,6 +213,8 @@ export function SettingsPage() {
         auto_sql_retry_max: autoSqlRetryMax,
         auto_chart_display: autoChartDisplay,
       });
+      setApiKey("");
+      setApiKeySet(saved.openai.api_key_set);
       addToast({
         type: "success",
         title: "Settings Saved",
@@ -363,7 +366,7 @@ export function SettingsPage() {
                         type={showApiKey ? "text" : "password"}
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="sk-..."
+                        placeholder={apiKeySet ? "Key saved. Enter a new key to replace it." : "sk-..."}
                         className="w-full rounded-xl px-4 py-2.5 pr-12 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
                         style={{
                           backgroundColor: "var(--color-bg-hover)",

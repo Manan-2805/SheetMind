@@ -1,8 +1,9 @@
 import axios from "axios";
-import { apiBaseUrl } from "./apiUrl";
+import { apiBaseUrl, apiToken } from "./apiUrl";
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
+  allowAbsoluteUrls: false,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -10,5 +11,6 @@ apiClient.interceptors.request.use((config) => {
   if (username) {
     config.headers["X-Username"] = username;
   }
+  if (apiToken) config.headers["X-SheetMind-Token"] = apiToken;
   return config;
 });

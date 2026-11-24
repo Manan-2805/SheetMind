@@ -11,6 +11,12 @@ from dependencies import current_username
 
 def get_app_root() -> Path:
     """Root app dir: ~/.sheetmind in production, or backend/.sheetmind in development"""
+    override = os.environ.get("SHEETMIND_DATA_DIR")
+    if override:
+        base = Path(override)
+        base.mkdir(parents=True, exist_ok=True)
+        return base
+
     is_dev = (
         os.environ.get("SHEETMIND_ENV") == "development"
         or os.environ.get("NODE_ENV") == "development"
@@ -26,6 +32,11 @@ def get_app_root() -> Path:
 
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def is_valid_username(username: str) -> bool:
+    """Check that a username can be used unchanged as a user directory name."""
+    return 0 < len(username) <= 32 and all(c.isalnum() or c in "_-" for c in username)
 
 
 def get_user_dir(username: str | None = None) -> Path:

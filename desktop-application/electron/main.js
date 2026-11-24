@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
+const { randomBytes } = require("node:crypto");
 const net = require("net");
 const fs = require("fs");
 
@@ -8,6 +9,7 @@ let mainWindow = null;
 let backendProcess = null;
 let backendPort = null;
 let backendApiUrl = "";
+const backendApiToken = randomBytes(32).toString("hex");
 
 // Helper to find a free port
 function findFreePort() {
@@ -26,8 +28,11 @@ function findFreePort() {
 }
 
 // IPC handler to return the API URL synchronously to preload
-ipcMain.on("get-backend-api-url", (event) => {
-  event.returnValue = backendApiUrl;
+ipcMain.on("get-backend-api-config", (event) => {
+  event.returnValue =
+    mainWindow && event.senderFrame === mainWindow.webContents.mainFrame
+      ? { apiUrl: backendApiUrl, apiToken: backendApiToken }
+      : null;
 });
 
 async function startBackend() {
@@ -46,7 +51,11 @@ async function startBackend() {
 
     backendProcess = spawn(venvPython, ["-B", "main.py", String(backendPort)], {
       cwd: backendDir,
-      env: { ...process.env, SHEETMIND_ENV: "development" }
+      env: {
+        ...process.env,
+        SHEETMIND_ENV: "development",
+        SHEETMIND_API_TOKEN: backendApiToken
+      }
     });
   } else {
     // Production mode: run the compiled native binary
@@ -64,7 +73,11 @@ async function startBackend() {
 
     backendProcess = spawn(binaryPath, [String(backendPort)], {
       cwd: path.dirname(binaryPath),
-      env: { ...process.env, SHEETMIND_ENV: "production" }
+      env: {
+        ...process.env,
+        SHEETMIND_ENV: "production",
+        SHEETMIND_API_TOKEN: backendApiToken
+      }
     });
   }
 
