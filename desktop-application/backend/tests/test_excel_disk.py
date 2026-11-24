@@ -138,14 +138,16 @@ class ExcelDiskTests(TestCase):
         """Leave the live workbook and no partial file after a replace error."""
         original = self.path.read_bytes()
         operation = SetValue(type="value_update", column="label", value=ConstantValue(const="new"))
-        with patch("services.excel_editor_service.os.replace", side_effect=OSError("test failure")):
-            with self.assertRaisesRegex(OSError, "test failure"):
-                apply_mutation_to_disk(
-                    "synthetic",
-                    "Sheet",
-                    [operation],
-                    [[None] * 3] * 2,
-                    ["label", "amount", "notes"],
-                )
+        with (
+            patch("services.excel_editor_service.os.replace", side_effect=OSError("test failure")),
+            self.assertRaisesRegex(OSError, "test failure"),
+        ):
+            apply_mutation_to_disk(
+                "synthetic",
+                "Sheet",
+                [operation],
+                [[None] * 3] * 2,
+                ["label", "amount", "notes"],
+            )
         self.assertEqual(self.path.read_bytes(), original)
         self.assertEqual(list(self.path.parent.glob("*.xlsx")), [self.path])

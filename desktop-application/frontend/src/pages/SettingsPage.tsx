@@ -366,7 +366,9 @@ export function SettingsPage() {
                         type={showApiKey ? "text" : "password"}
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={apiKeySet ? "Key saved. Enter a new key to replace it." : "sk-..."}
+                        placeholder={
+                          apiKeySet ? "Key saved. Enter a new key to replace it." : "sk-..."
+                        }
                         className="w-full rounded-xl px-4 py-2.5 pr-12 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
                         style={{
                           backgroundColor: "var(--color-bg-hover)",

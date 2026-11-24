@@ -16,8 +16,9 @@
 - F10 (`fbaf96c`): two privacy tests pass. Replaced 11 backend print calls and seven remaining silent generic catches. Prompt files contain metadata and expire after seven days.
 - P1 (`06cb0b0`): 43 tests pass. The health regression measured 418 ms before the fix and passed the 200 ms budget while the slow request was still pending. Concurrent users kept separate databases.
 - P2 (`55410b7`): the fake-client test verifies per-key OpenAI reuse, one Ollama pool, and closure at shutdown.
-- P3: lazy Excel and Dashboards routes build successfully. Vite's duplicate chat API import warning is gone. Dependency removals are recorded in `DEPENDENCY_CHANGES.md`.
+- P3 (`430d97e`): lazy Excel and Dashboards routes build successfully. Vite's duplicate chat API import warning is gone. Dependency removals are recorded in `DEPENDENCY_CHANGES.md`.
 - P4: skipped after a 500,000-row comparison showed different account-code and date types. Pandas took 0.183 s and DuckDB auto-detect took 0.072 s. Both produced 500,000 rows.
-- Next item: Part C focused lint fixes and Electron navigation controls.
+- Part C lint: Ruff is clean, unused chat fixtures are gone, and Biome parses both Tailwind stylesheets. Biome reported 275 errors, 59 warnings, and 16 infos after formatting, with no added errors by rule and file.
+- Next item: commit and verify Electron navigation and quit handling.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

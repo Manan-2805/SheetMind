@@ -22,9 +22,9 @@ from schemas.settings_schemas import (
     TestLLMRequest,
     UpdateSettingsRequest,
 )
+from services.llm_client import llm_clients
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-from services.llm_client import llm_clients
 
 
 class TestLLMResponse(BaseModel):

@@ -21,12 +21,12 @@ from services.excel_import_service import (
 from services.excel_import_service import (
     now_utc as _now,
 )
+from services.logging_service import get_logger
 from services.storage_service import list_account_users
 
 # The queue stores tuples of (username, file_id, file_path)
 task_queue = asyncio.Queue()
 active_tasks = set()
-from services.logging_service import get_logger
 
 
 def _import_sheets(

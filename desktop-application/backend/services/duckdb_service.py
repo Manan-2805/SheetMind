@@ -5,16 +5,15 @@ import threading
 import duckdb
 
 from dependencies import current_username
+from services.logging_service import get_logger
 from services.storage_service import get_user_db_path
 
 _conns: dict[str, duckdb.DuckDBPyConnection] = {}
 _conn_lock = threading.Lock()
-from services.logging_service import get_logger
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
     """Execute the get_connection operation."""
-    global _conns
     username = current_username.get("default")
     safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-")) or "default"
 

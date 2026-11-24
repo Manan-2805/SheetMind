@@ -318,6 +318,7 @@ def _publish(
     file_id: str,
     path: Path,
     write: Callable[[Path], None],
+    *,
     sheets: list[str],
     operation_type: str,
     rows_affected: int,
@@ -389,9 +390,9 @@ def apply_mutation_to_disk(
                 file_id,
                 path,
                 workbook.save,
-                [sheet_name],
-                "ai_mutation",
-                len({row["rowIndex"] for row in diffs}),
+                sheets=[sheet_name],
+                operation_type="ai_mutation",
+                rows_affected=len({row["rowIndex"] for row in diffs}),
             )
 
 
@@ -452,7 +453,8 @@ def save_manual_edits(
                     row_origins = infer_origins(rows, incoming, 2)
                 except TypeError as exc:
                     raise EditorError(400, "Unsupported worksheet cell value") from exc
-                column_origins = infer_origins(original.columns or [], data.columns, 1)
+                old_columns = original.columns or []
+                column_origins = infer_origins(old_columns, data.columns, 1)
                 reshape(
                     sheet,
                     AxisEdit(original.rowCount + 1, [1, *row_origins]),
@@ -461,7 +463,7 @@ def save_manual_edits(
                 for col, (name, old) in enumerate(
                     zip(data.columns, column_origins, strict=True), 1
                 ):
-                    if old is None or name != original.columns[old - 1]:
+                    if old is None or name != old_columns[old - 1]:
                         update_cell(sheet, 1, col, name)
                 for row, cells in enumerate(values, 2):
                     for col, value in enumerate(cells, 1):
@@ -475,7 +477,15 @@ def save_manual_edits(
                 apply_cell_formatting(cell, formatting)
 
             if modified or formatting_map:
-                _publish(conn, file_id, path, workbook.save, modified, "manual", 0)
+                _publish(
+                    conn,
+                    file_id,
+                    path,
+                    workbook.save,
+                    sheets=modified,
+                    operation_type="manual",
+                    rows_affected=0,
+                )
 
 
 def refresh_duckdb_sheet(
@@ -553,7 +563,7 @@ def restore_backup(file_id: str, history_id: str):
                 file_id,
                 path,
                 lambda staged: shutil.copy2(backup, staged),
-                [name for (name,) in sheets],
-                "restore",
-                0,
+                sheets=[name for (name,) in sheets],
+                operation_type="restore",
+                rows_affected=0,
             )

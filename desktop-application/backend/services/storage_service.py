@@ -26,10 +26,7 @@ def get_app_root() -> Path:
             and (Path(__file__).parent.parent.parent / ".git").exists()
         )
     )
-    if is_dev:
-        base = Path(__file__).parent.parent / ".sheetmind"
-    else:
-        base = Path.home() / ".sheetmind"
+    base = (Path(__file__).parent.parent if is_dev else Path.home()) / ".sheetmind"
 
     base.mkdir(parents=True, exist_ok=True)
     return base

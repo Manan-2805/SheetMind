@@ -47,7 +47,7 @@ def append_debug_response(path: Path | None, response: Any, label: str) -> None:
             if isinstance(response, dict):
                 for field in ("input_tokens", "output_tokens"):
                     count = response.get(field)
-                    if type(count) is int:
+                    if isinstance(count, int) and not isinstance(count, bool):
                         stream.write(f"{field}: {count}\n")
     except OSError as exc:
         get_logger().warning("Could not append prompt diagnostics: %s", type(exc).__name__)

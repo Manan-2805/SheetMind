@@ -13,3 +13,4 @@
 - P1: Move synchronous database work to threaded endpoints and workers while preserving each request's username context.
 - P2: Reuse OpenAI clients by key and a common Ollama HTTP pool, with provider connection cleanup at shutdown.
 - P3: Load the Excel editor and Dashboards on demand and use one static chat API import in the history drawer. Remove unused Handsontable dependencies.
+- Part C: Remove unused chat fixtures, resolve Ruff findings, and enable Biome parsing for Tailwind directives.

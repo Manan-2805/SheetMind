@@ -127,10 +127,8 @@ def _compute_value(expr: Expression, row: dict[str, Any]) -> Any:
 
 
 def _filter_matches(value: Any, condition: RowFilter) -> bool:
-    if condition.op == "isnull":
-        return value is None
-    if condition.op == "notnull":
-        return value is not None
+    if condition.op in {"isnull", "notnull"}:
+        return (value is None) == (condition.op == "isnull")
     if condition.op in _TEXT_FILTERS:
         return (
             isinstance(value, str)

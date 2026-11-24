@@ -39,8 +39,8 @@ def _has_local_host(scope: Scope) -> bool:
     hosts = Headers(scope=scope).getlist("host")
     if len(hosts) != 1 or server is None:
         return False
-    port = server[1]
-    return hosts[0].lower() in {f"127.0.0.1:{port}", f"localhost:{port}"}
+    listener_port = server[1]
+    return hosts[0].lower() in {f"127.0.0.1:{listener_port}", f"localhost:{listener_port}"}
 
 
 def _has_launch_token(provided: str) -> bool:
@@ -97,7 +97,7 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
     logger.warning("Request validation failed for %s fields", len(exc.errors()))
     errors_summary = []
     for err in exc.errors():
-        loc = " -> ".join(str(l) for l in err.get("loc", []))
+        loc = " -> ".join(str(part) for part in err.get("loc", []))
         msg = err.get("msg", "Value is invalid")
         errors_summary.append(f"{loc}: {msg}")
 

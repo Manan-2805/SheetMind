@@ -15,9 +15,9 @@ from schemas.data_source_schemas import (
     SheetResponse,
 )
 from services.duckdb_service import get_connection
+from services.logging_service import get_logger
 
 logger = logging.getLogger(__name__)
-from services.logging_service import get_logger
 
 
 def _now() -> datetime:
@@ -172,7 +172,7 @@ def list_for_autocomplete() -> AutocompleteResponse:
             files_map[filename].add(sheet_name)
 
     files = [
-        AutocompleteFile(filename=filename, sheets=sorted(list(sheets)))
+        AutocompleteFile(filename=filename, sheets=sorted(sheets))
         for filename, sheets in files_map.items()
     ]
     return AutocompleteResponse(files=files)
