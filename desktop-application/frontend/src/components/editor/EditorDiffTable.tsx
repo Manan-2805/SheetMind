@@ -34,7 +34,9 @@ export function EditorDiffTable({
               Rejected
             </span>
           )}
-          <h4 className="text-[13px] font-medium text-primary line-clamp-1">{change.promptText}</h4>
+          <h4 className="text-[13px] font-medium text-primary line-clamp-1">
+            {change.operationSummary}
+          </h4>
         </div>
 
         <div className="flex items-center gap-2">

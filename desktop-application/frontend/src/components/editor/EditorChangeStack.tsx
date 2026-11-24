@@ -55,7 +55,9 @@ export function EditorChangeStack({ changes, selectedId, onSelect }: EditorChang
                     <span className="text-[9px] text-tertiary">{change.targetSheet}</span>
                   </div>
 
-                  <p className="text-[11px] line-clamp-2 leading-relaxed">{change.promptText}</p>
+                  <p className="text-[11px] line-clamp-2 leading-relaxed">
+                    {change.operationSummary}
+                  </p>
 
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-[10px] text-tertiary font-medium">

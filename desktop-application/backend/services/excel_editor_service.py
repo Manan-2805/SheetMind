@@ -15,8 +15,10 @@ from schemas.excel_editor_schemas import (
     HistoryRecord,
     SheetData,
 )
+from schemas.excel_operations import MutationOperation
 from services.duckdb_service import get_connection
 from services.excel_import_service import import_df_to_duckdb, now_utc
+from services.excel_mutation_service import Formula, dry_run_mutation
 from services.logging_service import get_logger
 from services.storage_service import get_backups_dir
 
@@ -290,7 +292,11 @@ def record_edit_history(
 
 
 def apply_mutation_to_disk(
-    file_id: str, sheet_name: str, pandas_code: str, current_rows: list[list], columns: list[str]
+    file_id: str,
+    sheet_name: str,
+    operations: list[MutationOperation],
+    current_rows: list[list],
+    columns: list[str],
 ):
     """Execute the apply_mutation_to_disk operation."""
     conn = get_connection()
@@ -303,14 +309,9 @@ def apply_mutation_to_disk(
 
     filename, path = file_row
 
-    # 1. Create backup
+    df = pd.DataFrame(current_rows, columns=columns, dtype=object)
+    diffs, df_modified = dry_run_mutation(df, operations)
     backup_path = create_backup(path, filename)
-
-    # 2. Reconstruct DF and apply mutation
-    df = pd.DataFrame(current_rows, columns=columns)
-    local_vars = {"df": df, "pd": pd}
-    exec(pandas_code, {"__builtins__": {}}, local_vars)
-    df_modified = local_vars["df"]
 
     # 3. Write back to disk using openpyxl for the target sheet
     # preserve_all_formatting=True to keep other sheets/formatting
@@ -329,20 +330,19 @@ def apply_mutation_to_disk(
     for c_idx, col_name in enumerate(df_modified.columns, 1):
         ws.cell(row=1, column=c_idx, value=col_name)
 
-    # Write data
-    for r_idx, row in enumerate(df_modified.values, 2):
+    for r_idx, row in enumerate(df_modified.itertuples(index=False, name=None), 2):
         for c_idx, value in enumerate(row, 1):
-            if isinstance(value, str) and value.startswith("="):
-                ws.cell(row=r_idx, column=c_idx, value=value)
-            else:
-                # Handle NaN
-                cell_val = None if pd.isna(value) else value
-                ws.cell(row=r_idx, column=c_idx, value=cell_val)
+            cell = ws.cell(row=r_idx, column=c_idx)
+            cell.value = value
+            if isinstance(value, str) and not isinstance(value, Formula):
+                cell.data_type = "s"
 
     wb.save(path)
 
     # 4. Record history
-    record_edit_history(file_id, sheet_name, "ai_mutation", len(df_modified), backup_path)
+    record_edit_history(
+        file_id, sheet_name, "ai_mutation", len({row["rowIndex"] for row in diffs}), backup_path
+    )
 
     # 5. Refresh DuckDB
     refresh_duckdb_sheet(file_id, sheet_name, path)

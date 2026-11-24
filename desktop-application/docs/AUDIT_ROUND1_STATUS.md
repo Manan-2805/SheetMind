@@ -6,7 +6,8 @@
 - Baseline runtime: generated XLSX upload and fake-LLM question passed through a loopback Uvicorn server. The 500,000-row CSV query took 0.639 s wall time and peaked at 431.1 MiB process RSS.
 - F1 (`24e1a63`): URL wiring passed a Node smoke test with a non-default port. Only the standalone dev fallback contains backend port 8000.
 - F2 (`5a3dca0`): six regression tests failed before the changes and passed afterward. The staged packaged Electron runtime could not start because its native NSS, NSPR, and ALSA libraries are unavailable.
-- F3: guarded all seven untrusted SQL execution paths. The focused suite passed and the same loopback benchmark measured 0.064 s and 246.3 MiB peak RSS.
-- Next item: F4 structured spreadsheet operations.
+- F3 (`7bb6039`): guarded all seven untrusted SQL execution paths. The focused suite passed and the same loopback benchmark measured 0.064 s and 246.3 MiB peak RSS.
+- F4: structured editing plans replace executable strings. Nine operation and safety tests pass, and TypeScript reports no errors.
+- Next item: F5 workbook integrity and restore.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

@@ -3,6 +3,7 @@ import type {
   CellValue,
   DiffRow,
   ExcelEditorFile,
+  MutationOperation,
   MutationOperationType,
   SheetData,
 } from "@/types/ExcelEditor";
@@ -36,7 +37,7 @@ export const getSheetData = async (fileId: string, sheetName: string): Promise<S
 
 export interface MutationResponse {
   operationType: MutationOperationType;
-  pandasCode: string;
+  operations: MutationOperation[];
   operationSummary: string;
   confidence: number;
   diffRows: DiffRow[];
@@ -58,7 +59,7 @@ export const mutateFile = async (params: {
 export const applyMutation = async (params: {
   fileId: string;
   sheetName: string;
-  pandasCode: string;
+  operations: MutationOperation[];
   currentRows: CellValue[][];
   columns: string[];
 }): Promise<{ success: boolean }> => {

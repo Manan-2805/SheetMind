@@ -19,6 +19,7 @@ export function useExcelEditor() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
+  const [workbookVersion, setWorkbookVersion] = useState(0);
 
   const univerRef = useRef<FUniver | null>(null);
   const failedFileIdRef = useRef<string | null>(null);
@@ -371,7 +372,8 @@ export function useExcelEditor() {
           affectedRowCount: result.affectedRowCount,
           diffRows: result.diffRows,
           status: "pending",
-          generatedCode: result.pandasCode,
+          operations: result.operations,
+          operationSummary: result.operationSummary,
         };
 
         setSession((prev) =>
@@ -400,56 +402,60 @@ export function useExcelEditor() {
   const acceptChange = useCallback(
     async (changeId: string) => {
       const change = session?.changeStack.find((c) => c.changeId === changeId);
-      if (!change || !session || !univerRef.current) return;
+      if (!change || !session || !univerRef.current || change.operations.length === 0) return;
+      if (session.isDirty) {
+        addToast({
+          type: "error",
+          title: "Apply failed",
+          description: "Save your manual edits first",
+        });
+        return;
+      }
 
       setIsLoading(true);
       try {
-        const workbook = univerRef.current.getActiveWorkbook();
-        const activeSheet = workbook?.getActiveSheet();
-        if (!activeSheet) return;
+        const targetIndex = session.sheets.findIndex(
+          (sheet) => sheet.sheetName === change.targetSheet
+        );
+        const target = session.sheets[targetIndex];
+        if (!target) return;
 
-        const currentSheetData = session.sheets[session.activeSheetIndex];
-
-        const result = await api.applyMutation({
+        await api.applyMutation({
           fileId: session.fileId,
           sheetName: change.targetSheet,
-          pandasCode: change.generatedCode || "",
-          currentRows: currentSheetData.rows || [],
-          columns: currentSheetData.columns || [],
+          operations: change.operations,
+          currentRows: target.rows || [],
+          columns: target.columns || [],
         });
 
-        if (result.success) {
-          // Apply each diff row directly to the Univer canvas
-          change.diffRows.forEach((diff) => {
-            const colIndex = (currentSheetData.columns || []).indexOf(diff.columnName);
-            if (colIndex === -1) return;
-            const range = activeSheet.getRange(diff.rowIndex + 1, colIndex, 1, 1);
-            if (diff.isFormula && typeof diff.newValue === "string") {
-              range.setFormula(diff.newValue);
-            } else {
-              range.setValue(diff.newValue as never);
-            }
-          });
-
-          setSession((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              isDirty: true,
-              changeStack: prev.changeStack.map((c) =>
-                c.changeId === changeId
-                  ? { ...c, status: "accepted" as const, appliedAt: new Date().toISOString() }
-                  : c
-              ),
-            };
-          });
-
-          addToast({
-            type: "success",
-            title: "Change applied",
-            description: `${change.affectedRowCount} rows updated.`,
-          });
+        const data = await api.openFile(session.fileId);
+        const activeIndex = session.activeSheetIndex;
+        if (activeIndex > 0) {
+          data.sheets[activeIndex] = await api.getSheetData(
+            session.fileId,
+            data.sheets[activeIndex].sheetName
+          );
         }
+        setSession((prev) => {
+          if (!prev || prev.fileId !== session.fileId) return prev;
+          return {
+            ...prev,
+            sheets: data.sheets,
+            formattingMap: data.formattingMap || {},
+            isDirty: false,
+            changeStack: prev.changeStack.map((item) =>
+              item.changeId === changeId
+                ? { ...item, status: "accepted" as const, appliedAt: new Date().toISOString() }
+                : item
+            ),
+          };
+        });
+        setWorkbookVersion((version) => version + 1);
+        addToast({
+          type: "success",
+          title: "Change applied",
+          description: `${change.affectedRowCount} rows updated.`,
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         addToast({ type: "error", title: "Apply failed", description: msg });
@@ -532,6 +538,7 @@ export function useExcelEditor() {
     closeFile,
     session,
     isLoading,
+    workbookVersion,
     activeSheetIndex: session?.activeSheetIndex ?? 0,
     setActiveSheet,
     univerRef,

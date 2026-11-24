@@ -9,6 +9,7 @@ import httpx
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 
 from models.settings_models import get_settings
 from schemas.common_schemas import SuccessResponse
@@ -22,6 +23,7 @@ from schemas.excel_editor_schemas import (
     SaveRequest,
     SheetData,
 )
+from schemas.excel_operations import MutationPlan
 from services.excel_editor_service import (
     apply_mutation_to_disk,
     get_available_files,
@@ -34,7 +36,6 @@ from services.excel_editor_service import (
 from services.excel_mutation_service import (
     build_mutation_prompt,
     dry_run_mutation,
-    validate_pandas_expression,
 )
 from services.storage_service import get_debug_prompts_dir
 
@@ -168,73 +169,44 @@ async def mutate_file(body: MutationRequest):
             resp.raise_for_status()
             llm_response_text = resp.json()["response"]
 
-    # 3. Parse and Validate
     try:
-        data = json.loads(llm_response_text)
-        _append_debug_response(debug_path, data, f"EXCEL_MUTATION RESPONSE [{body.fileId}]")
-    except Exception as exc:
-        _append_debug_response(
-            debug_path,
-            llm_response_text,
-            f"EXCEL_MUTATION RESPONSE RAW (FAILED PARSE) [{body.fileId}]",
-        )
-        # Simple retry once if parsing fails (Ollama sometimes misses JSON wrapper)
-        raise HTTPException(status_code=500, detail="LLM returned invalid JSON") from exc
+        plan = MutationPlan.model_validate_json(llm_response_text)
+    except ValidationError as exc:
+        raise HTTPException(status_code=502, detail="LLM returned an invalid editing plan") from exc
 
-    pandas_code = data.get("pandas_code", "")
-    if not pandas_code:
-        return MutationResponse(
-            operationType=data.get("operation_type", "unknown"),
-            pandasCode="",
-            operationSummary=data.get("operation_summary", "No operation generated."),
-            confidence=data.get("confidence", 1),
-            diffRows=[],
-            affectedRowCount=0,
-            followupSuggestions=data.get("followup_suggestions", []),
-        )
-
-    is_safe, reason = validate_pandas_expression(pandas_code)
-    if not is_safe:
-        raise HTTPException(status_code=400, detail=f"Safety validation failed: {reason}")
-
-    # 4. Dry run
+    _append_debug_response(
+        debug_path, plan.model_dump(), f"EXCEL_MUTATION RESPONSE [{body.fileId}]"
+    )
     try:
-        diff_rows, _df_modified = dry_run_mutation(
-            df=df, pandas_code=pandas_code, affected_columns=data.get("affected_columns", [])
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Mutation execution failed: {e!s}") from e
+        diff_rows, _modified = dry_run_mutation(df, plan.operations)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return MutationResponse(
-        operationType=data.get("operation_type"),
-        pandasCode=pandas_code,
-        operationSummary=data.get("operation_summary"),
-        confidence=data.get("confidence"),
+        operationType=plan.operation_type,
+        operations=plan.operations,
+        operationSummary=plan.operation_summary,
+        confidence=plan.confidence,
         diffRows=diff_rows,
-        affectedRowCount=len(diff_rows),
-        followupSuggestions=data.get("followup_suggestions", []),
+        affectedRowCount=len({row["rowIndex"] for row in diff_rows}),
+        followupSuggestions=plan.followup_suggestions,
     )
 
 
 @router.post("/apply", response_model=SuccessResponse)
-async def apply_mutation(body: ApplyRequest):
-    # Re-validate for safety
-    """Execute the apply_mutation operation."""
-    is_safe, reason = validate_pandas_expression(body.pandasCode)
-    if not is_safe:
-        raise HTTPException(status_code=400, detail=f"Safety validation failed: {reason}")
-
+def apply_mutation(body: ApplyRequest):
+    """Revalidate and apply the proposed operations."""
     try:
         apply_mutation_to_disk(
             file_id=body.fileId,
             sheet_name=body.sheetName,
-            pandas_code=body.pandasCode,
+            operations=body.operations,
             current_rows=body.currentRows,
             columns=body.columns,
         )
-        return SuccessResponse(success=True)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SuccessResponse(success=True)
 
 
 @router.post("/save", response_model=SuccessResponse)

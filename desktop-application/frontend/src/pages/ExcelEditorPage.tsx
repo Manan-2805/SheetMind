@@ -22,6 +22,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     closeFile,
     session,
     isLoading,
+    workbookVersion,
     activeSheetIndex,
     univerRef,
     onWorkbookReady,
@@ -172,6 +173,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           <div className="flex flex-col h-full min-h-0 bg-bg-base">
             <div className="flex-1 relative min-h-0 h-full w-full">
               <EditorGrid
+                key={workbookVersion}
                 sheets={session.sheets}
                 activeSheetIndex={activeSheetIndex}
                 formattingMap={session.formattingMap}

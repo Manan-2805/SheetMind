@@ -1,11 +1,13 @@
 """Module containing excel_editor_schemas functionality."""
 
 from datetime import datetime
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-CellValue = Union[str, int, float, bool, Any, None]
+from schemas.excel_operations import Operations, OperationType
+
+CellValue = str | int | float | bool | Any | None
 
 
 class SheetData(BaseModel):
@@ -66,8 +68,8 @@ class MutationRequest(BaseModel):
 class MutationResponse(BaseModel):
     """Schema or class representation for MutationResponse."""
 
-    operationType: str
-    pandasCode: str
+    operationType: OperationType
+    operations: Operations
     operationSummary: str
     confidence: int
     diffRows: list[DiffRow]
@@ -80,7 +82,7 @@ class ApplyRequest(BaseModel):
 
     fileId: str
     sheetName: str
-    pandasCode: str
+    operations: Operations
     currentRows: list[list[CellValue]]
     columns: list[str]
 
