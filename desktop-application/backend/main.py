@@ -4,7 +4,7 @@ import asyncio
 import hmac
 import os
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -25,6 +25,7 @@ from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
 from services.background_tasks import queue_worker, resume_pending_tasks
+from services.llm_client import llm_clients
 from services.logging_service import get_logger
 from services.prompt_debug_service import prune_debug_prompts
 from services.storage_service import is_valid_username, resolve_chart_file
@@ -76,10 +77,14 @@ async def lifespan(_app: FastAPI):
     await resume_pending_tasks()
     worker_task = asyncio.create_task(queue_worker())
 
-    yield
-
-    logger.info("Application shutting down...")
-    worker_task.cancel()
+    try:
+        yield
+    finally:
+        logger.info("Application shutting down...")
+        worker_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker_task
+        await llm_clients.close()
 
 
 app = FastAPI(title="SheetMind API", version="1.0.0", lifespan=lifespan)

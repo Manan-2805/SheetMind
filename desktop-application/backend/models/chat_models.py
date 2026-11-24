@@ -8,10 +8,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
 import pandas as pd
 from fastapi import WebSocket
-from openai import AsyncOpenAI
 
 from dependencies import current_username
 from models import artifact_models
@@ -24,6 +22,7 @@ from schemas.chat_schemas import (
 )
 from services.chart_service import generate_chart
 from services.duckdb_service import get_connection
+from services.llm_client import llm_clients
 from services.logging_service import get_logger
 from services.prompt_debug_service import append_debug_response, write_debug_prompt
 from services.query_service import get_result_row_limit
@@ -902,7 +901,7 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
             content_out = ""
 
             if settings.llm_provider == "openai":
-                client = AsyncOpenAI(api_key=settings.openai.api_key)
+                client = llm_clients.openai(settings.openai.api_key)
                 model_name = settings.openai.model
                 response = await client.chat.completions.create(
                     model=model_name,
@@ -924,25 +923,25 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
             else:
                 url = settings.ollama.url.rstrip("/")
                 model_name = settings.ollama.model
-                async with httpx.AsyncClient() as client:
-                    resp = await client.post(
-                        f"{url}/api/generate",
-                        json={
-                            "model": model_name,
-                            "prompt": "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-                            if attempt == 0
-                            else "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-                            + "\nuser: Your last response was not valid JSON. Respond ONLY with the JSON object.",
-                            "stream": False,
-                            "format": "json",
-                        },
-                        timeout=60.0,
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                    content_out = data["response"]
-                    input_tokens = data.get("prompt_eval_count", 0)
-                    output_tokens = data.get("eval_count", 0)
+                client = llm_clients.ollama()
+                resp = await client.post(
+                    f"{url}/api/generate",
+                    json={
+                        "model": model_name,
+                        "prompt": "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+                        if attempt == 0
+                        else "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+                        + "\nuser: Your last response was not valid JSON. Respond ONLY with the JSON object.",
+                        "stream": False,
+                        "format": "json",
+                    },
+                    timeout=60.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                content_out = data["response"]
+                input_tokens = data.get("prompt_eval_count", 0)
+                output_tokens = data.get("eval_count", 0)
 
             res = _extract_json_sql(content_out)
             res.update(
@@ -981,7 +980,7 @@ Respond with only the summary sentence. No JSON."""
     output_tokens = 0
 
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        client = llm_clients.openai(settings.openai.api_key)
         # Use gpt-4o-mini for summary if available, otherwise default
         model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
         response = await client.chat.completions.create(
@@ -1001,28 +1000,28 @@ Respond with only the summary sentence. No JSON."""
         return res
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/generate",
-                json={
-                    "model": settings.ollama.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0, "num_predict": 120},
-                },
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            input_tokens = data.get("prompt_eval_count", 0)
-            output_tokens = data.get("eval_count", 0)
-            res = {
-                "summary": data["response"].strip(),
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            }
-            append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
-            return res
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/generate",
+            json={
+                "model": settings.ollama.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 120},
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        input_tokens = data.get("prompt_eval_count", 0)
+        output_tokens = data.get("eval_count", 0)
+        res = {
+            "summary": data["response"].strip(),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        }
+        append_debug_response(debug_path, res, "NL SUMMARY RESPONSE")
+        return res
 
 
 async def generate_followups(result_rows: list, columns: list, user_question: str) -> list[str]:
@@ -1039,7 +1038,7 @@ Row count: {len(result_rows)}"""
 
         settings = await asyncio.to_thread(get_settings)
         if settings.llm_provider == "openai":
-            client = AsyncOpenAI(api_key=settings.openai.api_key)
+            client = llm_clients.openai(settings.openai.api_key)
             model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
             response = await client.chat.completions.create(
                 model=model,
@@ -1051,19 +1050,19 @@ Row count: {len(result_rows)}"""
             text = response.choices[0].message.content or "[]"
         else:
             url = settings.ollama.url.rstrip("/")
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    f"{url}/api/generate",
-                    json={
-                        "model": settings.ollama.model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "format": "json",
-                    },
-                    timeout=20.0,  # Allow for cold-start latency
-                )
-                resp.raise_for_status()
-                text = resp.json()["response"]
+            client = llm_clients.ollama()
+            resp = await client.post(
+                f"{url}/api/generate",
+                json={
+                    "model": settings.ollama.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json",
+                },
+                timeout=20.0,  # Allow for cold-start latency
+            )
+            resp.raise_for_status()
+            text = resp.json()["response"]
 
         # Simple cleanup if not pure json
         if "[" in text and "]" in text:
@@ -1089,7 +1088,7 @@ async def generate_title(content: str) -> str:
     debug_path = write_debug_prompt(prompt, "TITLE GENERATION")
     settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        client = llm_clients.openai(settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
             messages=[{"role": "user", "content": prompt}],
@@ -1100,16 +1099,16 @@ async def generate_title(content: str) -> str:
         return res
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/generate",
-                json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            res = resp.json()["response"].strip()
-            append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
-            return res
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/generate",
+            json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        res = resp.json()["response"].strip()
+        append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
+        return res
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
@@ -1118,7 +1117,7 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
     debug_path = write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        client = llm_clients.openai(settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
             messages=[{"role": "user", "content": prompt}],
@@ -1129,16 +1128,16 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
         return res
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/generate",
-                json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-            res = resp.json()["response"].strip()
-            append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
-            return res
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/generate",
+            json={"model": settings.ollama.model, "prompt": prompt, "stream": False},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        res = resp.json()["response"].strip()
+        append_debug_response(debug_path, res, "QUERY LABEL GENERATION RESPONSE")
+        return res
 
 
 _ws_clients: dict[str, set[WebSocket]] = {}
@@ -1236,7 +1235,7 @@ Respond ONLY with this JSON (no markdown, no prose):
     settings = await asyncio.to_thread(get_settings)
     try:
         if settings.llm_provider == "openai":
-            client = AsyncOpenAI(api_key=settings.openai.api_key)
+            client = llm_clients.openai(settings.openai.api_key)
             model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
             response = await client.chat.completions.create(
                 model=model,
@@ -1250,23 +1249,23 @@ Respond ONLY with this JSON (no markdown, no prose):
             out_tok = response.usage.completion_tokens if response.usage else 0
         else:
             url = settings.ollama.url.rstrip("/")
-            async with httpx.AsyncClient() as hclient:
-                resp = await hclient.post(
-                    f"{url}/api/generate",
-                    json={
-                        "model": settings.ollama.model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "format": "json",
-                        "options": {"temperature": 0, "num_predict": 300},
-                    },
-                    timeout=60.0,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                text = data.get("response", "{}")
-                in_tok = data.get("prompt_eval_count", 0)
-                out_tok = data.get("eval_count", 0)
+            hclient = llm_clients.ollama()
+            resp = await hclient.post(
+                f"{url}/api/generate",
+                json={
+                    "model": settings.ollama.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json",
+                    "options": {"temperature": 0, "num_predict": 300},
+                },
+                timeout=60.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data.get("response", "{}")
+            in_tok = data.get("prompt_eval_count", 0)
+            out_tok = data.get("eval_count", 0)
 
         if "{" in text and "}" in text:
             text = text[text.find("{") : text.rfind("}") + 1]

@@ -14,7 +14,8 @@
 - F8 (`ba4164f`): three tests failed before implementation and pass afterward. Settings import persists allowed fields, and cleanup removes the associated files and rows.
 - F9 (`ec2cee5`): the two-user regression reproduced cross-user sends and passes with username-scoped subscriptions.
 - F10 (`fbaf96c`): two privacy tests pass. Replaced 11 backend print calls and seven remaining silent generic catches. Prompt files contain metadata and expire after seven days.
-- P1: 43 tests pass. The health regression measured 418 ms before the fix and passed the 200 ms budget while the slow request was still pending. Concurrent users kept separate databases.
-- Next item: P2 provider client reuse.
+- P1 (`06cb0b0`): 43 tests pass. The health regression measured 418 ms before the fix and passed the 200 ms budget while the slow request was still pending. Concurrent users kept separate databases.
+- P2: the fake-client test verifies per-key OpenAI reuse, one Ollama pool, and closure at shutdown. No package changes.
+- Next item: P3 lazy frontend routes and removal of two unused dependencies.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

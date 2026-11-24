@@ -4,10 +4,8 @@ import asyncio
 import json
 import time
 
-import httpx
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from models.settings_models import (
@@ -26,6 +24,7 @@ from schemas.settings_schemas import (
 )
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+from services.llm_client import llm_clients
 
 
 class TestLLMResponse(BaseModel):
@@ -87,7 +86,7 @@ async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
                 message="No API key provided.",
             )
         try:
-            client = AsyncOpenAI(api_key=api_key)
+            client = llm_clients.openai(api_key)
             models_page = await client.models.list()
             model_ids = sorted(
                 [m.id for m in models_page.data if "gpt" in m.id.lower()],
@@ -113,19 +112,19 @@ async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
     else:
         ollama_url = (body.url or settings.ollama.url).rstrip("/")
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{ollama_url}/api/tags")
-                response.raise_for_status()
-                data = response.json()
-                model_names = [m["name"] for m in data.get("models", [])]
-                latency_ms = int((time.time() - t0) * 1000)
-                return TestLLMResponse(
-                    success=True,
-                    provider="ollama",
-                    latency_ms=latency_ms,
-                    message=f"Connected. {len(model_names)} models available.",
-                    models=model_names,
-                )
+            client = llm_clients.ollama()
+            response = await client.get(f"{ollama_url}/api/tags", timeout=10.0)
+            response.raise_for_status()
+            data = response.json()
+            model_names = [m["name"] for m in data.get("models", [])]
+            latency_ms = int((time.time() - t0) * 1000)
+            return TestLLMResponse(
+                success=True,
+                provider="ollama",
+                latency_ms=latency_ms,
+                message=f"Connected. {len(model_names)} models available.",
+                models=model_names,
+            )
         except Exception as e:
             latency_ms = int((time.time() - t0) * 1000)
             return TestLLMResponse(
@@ -141,13 +140,13 @@ async def get_ollama_models():
     """Execute the get_ollama_models operation."""
     settings = await asyncio.to_thread(db_get_settings)
     ollama_url = settings.ollama.url.rstrip("/")
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(f"{ollama_url}/api/tags")
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"detail": str(e)})
+    client = llm_clients.ollama()
+    try:
+        response = await client.get(f"{ollama_url}/api/tags")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"detail": str(e)})
 
 
 @router.post("/pull-ollama-model")
@@ -158,15 +157,15 @@ async def pull_ollama_model(body: PullModelRequest):
 
     async def stream_pull():
         """Execute the stream_pull operation."""
-        async with httpx.AsyncClient() as client:
-            try:
-                async with client.stream(
-                    "POST", f"{ollama_url}/api/pull", json={"name": body.model_name}
-                ) as response:
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
-            except Exception as e:
-                yield json.dumps({"error": str(e)}).encode("utf-8")
+        client = llm_clients.ollama()
+        try:
+            async with client.stream(
+                "POST", f"{ollama_url}/api/pull", json={"name": body.model_name}
+            ) as response:
+                async for chunk in response.aiter_bytes():
+                    yield chunk
+        except Exception as e:
+            yield json.dumps({"error": str(e)}).encode("utf-8")
 
     return StreamingResponse(stream_pull(), media_type="application/x-ndjson")
 

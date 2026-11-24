@@ -4,10 +4,8 @@ import asyncio
 import json
 from typing import Any
 
-import httpx
-from openai import AsyncOpenAI
-
 from models.settings_models import get_settings
+from services.llm_client import llm_clients
 from services.logging_service import get_logger
 
 
@@ -83,7 +81,7 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
     llm_response_text = ""
 
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        client = llm_clients.openai(settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
             messages=prompt_msgs,  # type: ignore
@@ -93,19 +91,19 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
         llm_response_text = response.choices[0].message.content or "{}"
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/chat",
-                json={
-                    "model": settings.ollama.model,
-                    "messages": prompt_msgs,
-                    "stream": False,
-                    "format": "json",
-                },
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-            llm_response_text = resp.json().get("message", {}).get("content", "{}")
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/chat",
+            json={
+                "model": settings.ollama.model,
+                "messages": prompt_msgs,
+                "stream": False,
+                "format": "json",
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        llm_response_text = resp.json().get("message", {}).get("content", "{}")
 
     try:
         data = json.loads(llm_response_text)

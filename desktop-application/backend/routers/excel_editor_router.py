@@ -2,9 +2,7 @@
 
 import asyncio
 
-import httpx
 from fastapi import APIRouter, HTTPException
-from openai import AsyncOpenAI
 from pydantic import ValidationError
 
 from models.settings_models import get_settings
@@ -40,6 +38,7 @@ from services.logging_service import get_logger
 from services.prompt_debug_service import append_debug_response, write_debug_prompt
 
 router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
+from services.llm_client import llm_clients
 
 
 @router.get("/files", response_model=FileListResponse)
@@ -101,7 +100,7 @@ async def mutate_file(body: MutationRequest):
     llm_response_text = ""
 
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
+        client = llm_clients.openai(settings.openai.api_key)
         response = await client.chat.completions.create(
             model=settings.openai.model,
             messages=prompt_msgs,
@@ -111,19 +110,19 @@ async def mutate_file(body: MutationRequest):
         llm_response_text = response.choices[0].message.content
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/generate",
-                json={
-                    "model": settings.ollama.model,
-                    "prompt": "\n".join([m["content"] for m in prompt_msgs]),
-                    "stream": False,
-                    "format": "json",
-                },
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-            llm_response_text = resp.json()["response"]
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/generate",
+            json={
+                "model": settings.ollama.model,
+                "prompt": "\n".join([m["content"] for m in prompt_msgs]),
+                "stream": False,
+                "format": "json",
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        llm_response_text = resp.json()["response"]
 
     try:
         plan = MutationPlan.model_validate_json(llm_response_text)

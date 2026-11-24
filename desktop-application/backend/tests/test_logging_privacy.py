@@ -58,7 +58,7 @@ class LoggingPrivacyTests(IsolatedAsyncioTestCase):
             llm_provider="openai", openai=SimpleNamespace(api_key="", model="fake")
         )
         with (
-            patch("services.llm_service.AsyncOpenAI", return_value=client),
+            patch("services.llm_service.llm_clients.openai", return_value=client),
             self.assertLogs("sheetmind", level="WARNING") as logs,
             self.assertRaisesRegex(ValueError, "invalid JSON"),
         ):
