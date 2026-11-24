@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import type {
   CellFormatting,
   CellValue,
@@ -82,7 +83,6 @@ export interface HistoryRecord {
   operationType: string;
   rowsAffected: number;
   appliedAt: string;
-  backupPath: string;
 }
 
 export const getHistory = async (fileId: string): Promise<HistoryRecord[]> => {
@@ -92,8 +92,15 @@ export const getHistory = async (fileId: string): Promise<HistoryRecord[]> => {
 
 export const restoreBackup = async (
   fileId: string,
-  backupPath: string
+  historyId: string
 ): Promise<{ success: boolean }> => {
-  const resp = await client.post(`${API_BASE}/restore`, { fileId, backupPath });
+  const resp = await client.post(`${API_BASE}/restore`, { fileId, historyId });
   return resp.data;
 };
+
+export function describeEditorError(error: unknown, fallback: string): string {
+  if (isAxiosError(error) && typeof error.response?.data?.detail === "string") {
+    return error.response.data.detail;
+  }
+  return error instanceof Error && !isAxiosError(error) ? error.message : fallback;
+}

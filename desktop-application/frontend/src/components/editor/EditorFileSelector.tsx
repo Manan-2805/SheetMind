@@ -62,7 +62,7 @@ export function EditorFileSelector({
             <TableProperties className="h-6 w-6 text-accent" />
           </div>
           <h2 className="text-lg font-semibold text-primary">Excel Editor</h2>
-          <p className="mt-1 text-sm ">Select an uploaded file to open in the full editor.</p>
+          <p className="mt-1 text-sm ">Select an uploaded .xlsx workbook to edit.</p>
         </div>
 
         <div className="mt-8">
@@ -82,7 +82,8 @@ export function EditorFileSelector({
                 <button
                   key={file.fileId}
                   onClick={() => onSelect(file.fileId)}
-                  className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-bg-hover"
+                  disabled={!file.editable}
+                  className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-bg-hover disabled:opacity-50"
                   style={{ height: "44px" }}
                 >
                   <FileSpreadsheet className="h-5 w-5 text-accent" />
@@ -92,7 +93,7 @@ export function EditorFileSelector({
                     </span>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-bg-base px-1.5 py-0.5 text-[10px] border border-border-default">
-                        {file.sheetCount} sheets
+                        {file.editable ? `${file.sheetCount} sheets` : "Read only"}
                       </span>
                       <ChevronRight className="h-3 w-3 text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
                     </div>

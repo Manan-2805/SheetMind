@@ -6,6 +6,7 @@ import * as api from "@/api/excelEditorApi";
 import { useToast } from "@/hooks/useToast";
 import type {
   CellFormatting,
+  CellFormattingMap,
   CellValue,
   EditorSession,
   ExcelEditorFile,
@@ -20,6 +21,8 @@ export function useExcelEditor() {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   const [workbookVersion, setWorkbookVersion] = useState(0);
+  const [history, setHistory] = useState<api.HistoryRecord[]>([]);
+  const formattingChanges = useRef<CellFormattingMap>({});
 
   const univerRef = useRef<FUniver | null>(null);
   const failedFileIdRef = useRef<string | null>(null);
@@ -70,6 +73,8 @@ export function useExcelEditor() {
             sheetStats,
           });
         }
+        formattingChanges.current = {};
+        setHistory([]);
         setSession({
           fileId: data.fileId,
           filename: data.filename,
@@ -83,11 +88,10 @@ export function useExcelEditor() {
         });
       } catch (error) {
         failedFileIdRef.current = fileId; // set failure flag
-        console.error("Failed to open file:", error);
         addToast({
           type: "error",
           title: "Failed to open file",
-          description: "An error occurred while opening the Excel file. Please try again.",
+          description: api.describeEditorError(error, "Could not open the workbook."),
         });
       } finally {
         setIsLoading(false);
@@ -99,6 +103,8 @@ export function useExcelEditor() {
   const closeFile = useCallback(() => {
     setSession(null);
     setSelectedChangeId(null);
+    setHistory([]);
+    formattingChanges.current = {};
     failedFileIdRef.current = null;
   }, []);
 
@@ -138,11 +144,12 @@ export function useExcelEditor() {
                 });
               }
               if (data.rows) {
+                const formulas = new Set(data.formulaCells);
                 data.rows.forEach((row, rIdx) => {
                   row.forEach((cellValue, colIndex) => {
                     if (cellValue !== null && cellValue !== undefined) {
                       const cellRange = sheet.getRange(rIdx + 1, colIndex, 1, 1);
-                      if (typeof cellValue === "string" && cellValue.startsWith("=")) {
+                      if (typeof cellValue === "string" && formulas.has(`${rIdx}:${colIndex}`)) {
                         cellRange.setFormula(cellValue);
                       } else {
                         cellRange.setValue(cellValue as never);
@@ -161,6 +168,7 @@ export function useExcelEditor() {
               ...updatedSheets[index],
               columns: data.columns,
               rows: data.rows,
+              formulaCells: data.formulaCells,
               rowCount: data.rowCount,
               colCount: data.colCount,
             };
@@ -254,18 +262,14 @@ export function useExcelEditor() {
       const endCol = selection.getLastColumn();
       const sheetName = sheet.getSheetName();
 
-      setSession((prev) => {
-        if (!prev) return null;
-        const newMap = { ...prev.formattingMap };
-        for (let r = startRow; r <= endRow; r++) {
-          if (r === 0) continue; // Skip header row format persistence
-          for (let c = startCol; c <= endCol; c++) {
-            const key = `${sheetName}:${r - 1}:${c}`;
-            newMap[key] = { ...newMap[key], ...formatting };
-          }
+      for (let row = Math.max(1, startRow); row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+          const key = `${sheetName}:${row - 1}:${col}`;
+          const changes = formattingChanges.current;
+          changes[key] = { ...changes[key], ...formatting };
         }
-        return { ...prev, formattingMap: newMap, isDirty: true };
-      });
+      }
+      setSession((prev) => (prev ? { ...prev, isDirty: true } : null));
     },
     [session]
   );
@@ -298,48 +302,64 @@ export function useExcelEditor() {
     setSession((prev) => (prev ? { ...prev, isDirty: true } : null));
   }, []);
 
-  // Extract all sheet rows from the Univer workbook snapshot.
-  // cellData is a sparse object — missing keys mean empty cells.
-  // Must iterate 0..rowCount-1 and 0..columnCount-1 to get full dense rows.
-  const extractRowsFromSnapshot = useCallback(
-    (sheetSnapshot: Record<string, unknown>, colCount: number) => {
-      const cellData = (sheetSnapshot.cellData || {}) as Record<
-        number,
-        Record<number, { v?: CellValue; f?: string } | undefined> | undefined
-      >;
-      const rowCount = (sheetSnapshot.rowCount as number) || 0;
-
-      // Extract columns from row index 0
-      const columns: string[] = [];
-      for (let c = 0; c < colCount; c++) {
-        const cell = cellData[0]?.[c];
-        columns.push(cell?.v ? String(cell.v) : `Column ${c + 1}`);
-      }
-
-      // Extract actual data rows from row index 1 onwards
-      const rows: CellValue[][] = [];
-      for (let r = 1; r < rowCount; r++) {
-        const row: CellValue[] = [];
-        for (let c = 0; c < colCount; c++) {
-          const cell = cellData[r]?.[c];
-          if (!cell) {
-            row.push(null);
-          } else if (cell.f) {
-            row.push(cell.f);
-          } else {
-            row.push(cell.v ?? null);
-          }
+  const extractRowsFromSnapshot = useCallback((sheetSnapshot: Record<string, unknown>) => {
+    const cellData = (sheetSnapshot.cellData || {}) as Record<
+      number,
+      Record<number, { v?: CellValue; f?: string } | undefined> | undefined
+    >;
+    let lastRow = 0;
+    let lastCol = -1;
+    for (const [row, cells] of Object.entries(cellData)) {
+      for (const [col, cell] of Object.entries(cells || {})) {
+        if (cell?.f || (cell?.v !== null && cell?.v !== undefined && cell.v !== "")) {
+          lastRow = Math.max(lastRow, Number(row));
+          lastCol = Math.max(lastCol, Number(col));
         }
-        rows.push(row);
       }
-      return { columns, rows };
-    },
-    []
-  );
+    }
+
+    const columns = Array.from({ length: lastCol + 1 }, (_, col) => {
+      const header = cellData[0]?.[col]?.v;
+      return header === null || header === undefined || header === ""
+        ? `Column ${col + 1}`
+        : String(header);
+    });
+    const formulaCells: string[] = [];
+    const rows = Array.from({ length: lastRow }, (_, row) =>
+      columns.map((_, col) => {
+        const cell = cellData[row + 1]?.[col];
+        if (cell?.f) formulaCells.push(`${row}:${col}`);
+        return cell?.f ?? cell?.v ?? null;
+      })
+    );
+    return { columns, rows, formulaCells };
+  }, []);
+
+  const reloadWorkbook = useCallback(async (fileId: string, activeIndex: number) => {
+    const data = await api.openFile(fileId);
+    if (activeIndex > 0) {
+      data.sheets[activeIndex] = await api.getSheetData(fileId, data.sheets[activeIndex].sheetName);
+    }
+    formattingChanges.current = {};
+    setSession((prev) =>
+      prev?.fileId === fileId
+        ? { ...prev, sheets: data.sheets, formattingMap: data.formattingMap || {}, isDirty: false }
+        : prev
+    );
+    setWorkbookVersion((version) => version + 1);
+  }, []);
 
   const submitMutationPrompt = useCallback(
     async (instruction: string) => {
       if (!session || !univerRef.current) return;
+      if (session.isDirty) {
+        addToast({
+          type: "error",
+          title: "Mutation Failed",
+          description: "Save your manual edits first",
+        });
+        return;
+      }
 
       setIsGenerating(true);
       try {
@@ -351,10 +371,8 @@ export function useExcelEditor() {
         const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
         const sheetId = `sheet_${session.activeSheetIndex}`;
         const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
-        const { columns: extractedCols, rows: currentRows } = extractRowsFromSnapshot(
-          sheetSnapshot,
-          activeSheet.colCount
-        );
+        const { columns: extractedCols, rows: currentRows } =
+          extractRowsFromSnapshot(sheetSnapshot);
 
         const result = await api.mutateFile({
           fileId: session.fileId,
@@ -386,11 +404,10 @@ export function useExcelEditor() {
         );
         setSelectedChangeId(newChange.changeId);
       } catch (error) {
-        console.error("Mutation failed:", error);
         addToast({
           type: "error",
           title: "Mutation Failed",
-          description: "Failed to process AI instructions for editing the Excel sheet.",
+          description: api.describeEditorError(error, "Could not preview the spreadsheet edit."),
         });
       } finally {
         setIsGenerating(false);
@@ -428,21 +445,11 @@ export function useExcelEditor() {
           columns: target.columns || [],
         });
 
-        const data = await api.openFile(session.fileId);
-        const activeIndex = session.activeSheetIndex;
-        if (activeIndex > 0) {
-          data.sheets[activeIndex] = await api.getSheetData(
-            session.fileId,
-            data.sheets[activeIndex].sheetName
-          );
-        }
+        await reloadWorkbook(session.fileId, session.activeSheetIndex);
         setSession((prev) => {
           if (!prev || prev.fileId !== session.fileId) return prev;
           return {
             ...prev,
-            sheets: data.sheets,
-            formattingMap: data.formattingMap || {},
-            isDirty: false,
             changeStack: prev.changeStack.map((item) =>
               item.changeId === changeId
                 ? { ...item, status: "accepted" as const, appliedAt: new Date().toISOString() }
@@ -450,20 +457,61 @@ export function useExcelEditor() {
             ),
           };
         });
-        setWorkbookVersion((version) => version + 1);
         addToast({
           type: "success",
           title: "Change applied",
           description: `${change.affectedRowCount} rows updated.`,
         });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        addToast({ type: "error", title: "Apply failed", description: msg });
+        addToast({
+          type: "error",
+          title: "Apply failed",
+          description: api.describeEditorError(err, "Could not apply the change."),
+        });
       } finally {
         setIsLoading(false);
       }
     },
-    [session, addToast]
+    [session, addToast, reloadWorkbook]
+  );
+
+  const loadHistory = useCallback(async () => {
+    if (!session) return;
+    try {
+      setHistory(await api.getHistory(session.fileId));
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Could not load history",
+        description: api.describeEditorError(error, "Try reopening the workbook."),
+      });
+    }
+  }, [session, addToast]);
+
+  const restoreBackup = useCallback(
+    async (historyId: string) => {
+      if (!session || !historyId || session.isDirty) return;
+      setIsLoading(true);
+      try {
+        await api.restoreBackup(session.fileId, historyId);
+        await reloadWorkbook(session.fileId, session.activeSheetIndex);
+        setHistory(await api.getHistory(session.fileId));
+        setSelectedChangeId(null);
+        setSession((prev) =>
+          prev?.fileId === session.fileId ? { ...prev, changeStack: [] } : prev
+        );
+        addToast({ type: "success", title: "Workbook restored" });
+      } catch (error) {
+        addToast({
+          type: "error",
+          title: "Restore failed",
+          description: api.describeEditorError(error, "Could not restore the workbook."),
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [session, addToast, reloadWorkbook]
   );
 
   const rejectChange = useCallback((changeId: string) => {
@@ -503,25 +551,25 @@ export function useExcelEditor() {
 
         const sheetId = `sheet_${index}`;
         const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
-        const colCount = sessionSheet.colCount || 0;
-        const { columns, rows } = extractRowsFromSnapshot(sheetSnapshot, colCount);
+        const { columns, rows, formulaCells } = extractRowsFromSnapshot(sheetSnapshot);
 
         return {
           sheetName: sessionSheet.sheetName,
           rows,
           columns,
           rowCount: rows.length,
-          colCount,
+          colCount: columns.length,
+          formulaCells,
         };
       });
 
       await api.saveEdits({
         fileId: session.fileId,
         sheets: sheetsForBackend,
-        formattingMap: session.formattingMap,
+        formattingMap: formattingChanges.current,
       });
 
-      setSession((prev) => (prev ? { ...prev, isDirty: false } : null));
+      await reloadWorkbook(session.fileId, session.activeSheetIndex);
       addToast({ type: "success", title: "Saved", description: "File saved successfully." });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -529,7 +577,7 @@ export function useExcelEditor() {
     } finally {
       setIsSaving(false);
     }
-  }, [session, addToast, extractRowsFromSnapshot]);
+  }, [session, addToast, extractRowsFromSnapshot, reloadWorkbook]);
 
   return {
     availableFiles,
@@ -539,6 +587,9 @@ export function useExcelEditor() {
     session,
     isLoading,
     workbookVersion,
+    history,
+    loadHistory,
+    restoreBackup,
     activeSheetIndex: session?.activeSheetIndex ?? 0,
     setActiveSheet,
     univerRef,

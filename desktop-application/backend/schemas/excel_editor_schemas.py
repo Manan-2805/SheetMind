@@ -18,6 +18,7 @@ class SheetData(BaseModel):
     rows: list[list[CellValue]] | None = None
     rowCount: int
     colCount: int
+    formulaCells: list[str] | None = None
 
 
 class ExcelEditorFile(BaseModel):
@@ -26,6 +27,7 @@ class ExcelEditorFile(BaseModel):
     fileId: str
     filename: str
     sheetCount: int
+    editable: bool
     fileSizeBytes: int
     uploadedAt: datetime
 
@@ -95,6 +97,13 @@ class SaveRequest(BaseModel):
     formattingMap: dict[str, CellFormatting]
 
 
+class RestoreRequest(BaseModel):
+    """Restore a workbook revision selected from edit history."""
+
+    fileId: str
+    historyId: str
+
+
 class HistoryRecord(BaseModel):
     """Schema or class representation for HistoryRecord."""
 
@@ -103,7 +112,6 @@ class HistoryRecord(BaseModel):
     operationType: str
     rowsAffected: int
     appliedAt: datetime
-    backupPath: str
 
 
 class HistoryResponse(BaseModel):

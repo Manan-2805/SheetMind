@@ -71,6 +71,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
   sheets.forEach((sheet, sheetIndex) => {
     const sheetId = `sheet_${sheetIndex}`;
     const cellData: Record<number, Record<number, unknown>> = {};
+    const formulas = new Set(sheet.formulaCells);
 
     // 1. Prepend column names as row index 0 in Univer
     cellData[0] = {};
@@ -97,7 +98,7 @@ function buildWorkbookData(sheets: SheetData[], formattingMap: CellFormattingMap
 
         if (cellValue === null || cellValue === undefined) {
           cell.v = null;
-        } else if (typeof cellValue === "string" && cellValue.startsWith("=")) {
+        } else if (formulas.has(`${rowIndex}:${colIndex}`)) {
           cell.f = cellValue;
         } else {
           cell.v = cellValue;

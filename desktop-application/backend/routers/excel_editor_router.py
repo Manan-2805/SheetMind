@@ -1,12 +1,12 @@
 """Module containing excel_editor_router functionality."""
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-import pandas as pd
 from fastapi import APIRouter, HTTPException
 from openai import AsyncOpenAI
 from pydantic import ValidationError
@@ -20,14 +20,17 @@ from schemas.excel_editor_schemas import (
     MutationRequest,
     MutationResponse,
     OpenFileResponse,
+    RestoreRequest,
     SaveRequest,
     SheetData,
 )
 from schemas.excel_operations import MutationPlan
 from services.excel_editor_service import (
+    EditorError,
     apply_mutation_to_disk,
     get_available_files,
     get_edit_history,
+    load_mutation_frame,
     open_excel_file,
     open_excel_sheet,
     restore_backup,
@@ -90,43 +93,46 @@ router = APIRouter(prefix="/excel-editor", tags=["excel-editor"])
 
 
 @router.get("/files", response_model=FileListResponse)
-async def list_files():
+def list_files():
     """Execute the list_files operation."""
     files = get_available_files()
     return FileListResponse(files=files)
 
 
 @router.get("/open", response_model=OpenFileResponse)
-async def open_file(file_id: str):
+def open_file(file_id: str):
     """Execute the open_file operation."""
     if not file_id:
         raise HTTPException(status_code=400, detail="fileId is required")
 
-    data = open_excel_file(file_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return OpenFileResponse(**data)
+    try:
+        return OpenFileResponse(**open_excel_file(file_id))
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.get("/sheet-data", response_model=SheetData)
-async def get_sheet_data(file_id: str, sheet_name: str):
+def get_sheet_data(file_id: str, sheet_name: str):
     """Execute the get_sheet_data operation."""
     if not file_id or not sheet_name:
         raise HTTPException(status_code=400, detail="fileId and sheetName are required")
 
-    data = open_excel_sheet(file_id, sheet_name)
-    if not data:
-        raise HTTPException(status_code=404, detail="Sheet not found")
-
-    return data
+    try:
+        return open_excel_sheet(file_id, sheet_name)
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.post("/mutate", response_model=MutationResponse)
 async def mutate_file(body: MutationRequest):
     # 1. Build prompt
     """Execute the mutate_file operation."""
-    df = pd.DataFrame(body.currentRows, columns=body.columns)
+    try:
+        df = await asyncio.to_thread(
+            load_mutation_frame, body.fileId, body.sheetName, len(body.currentRows), body.columns
+        )
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     col_types = {col: str(df[col].dtype) for col in df.columns}
     sample_rows = df.head(5).values.tolist()
 
@@ -178,7 +184,7 @@ async def mutate_file(body: MutationRequest):
         debug_path, plan.model_dump(), f"EXCEL_MUTATION RESPONSE [{body.fileId}]"
     )
     try:
-        diff_rows, _modified = dry_run_mutation(df, plan.operations)
+        diff_rows, _modified = await asyncio.to_thread(dry_run_mutation, df, plan.operations)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -204,40 +210,39 @@ def apply_mutation(body: ApplyRequest):
             current_rows=body.currentRows,
             columns=body.columns,
         )
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return SuccessResponse(success=True)
 
 
 @router.post("/save", response_model=SuccessResponse)
-async def save_edits(body: SaveRequest):
+def save_edits(body: SaveRequest):
     """Execute the save_edits operation."""
     try:
         save_manual_edits(
             file_id=body.fileId, sheets=body.sheets, formatting_map=body.formattingMap
         )
         return SuccessResponse(success=True)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/history/{file_id}", response_model=HistoryResponse)
-async def get_history(file_id: str):
+def get_history(file_id: str):
     """Execute the get_history operation."""
     history = get_edit_history(file_id)
     return HistoryResponse(history=history)
 
 
 @router.post("/restore", response_model=SuccessResponse)
-async def restore(body: dict):
-    """Execute the restore operation."""
-    file_id = body.get("fileId")
-    backup_path = body.get("backupPath")
-    if not file_id or not backup_path:
-        raise HTTPException(status_code=400, detail="fileId and backupPath are required")
-
+def restore(body: RestoreRequest):
+    """Restore the selected workbook revision."""
     try:
-        restore_backup(file_id, backup_path)
-        return SuccessResponse(success=True)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        restore_backup(body.fileId, body.historyId)
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return SuccessResponse(success=True)

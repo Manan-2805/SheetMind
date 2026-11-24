@@ -4,3 +4,4 @@
 - F2: Enforce the Electron launch token, listener host, permitted origins, and canonical usernames. Hide the OpenAI key in settings responses and retain it on blank updates. Support a temporary data root for tests.
 - F3: Validate analytical SQL against the imported table catalog, lock DuckDB external access, interrupt long-running queries, and fetch capped pages. Spreadsheet import registers its DataFrame explicitly under the locked configuration.
 - F4: Validate AI spreadsheet plans and apply their filters, expressions, and edits as data. The editor displays the plan summary and reloads the sheet after applying a change.
+- F5: Read AI edit input from disk, preserve existing worksheet formatting, publish workbook changes atomically, and retain 20 backups per file. The editor restores by history ID and identifies read-only formats.

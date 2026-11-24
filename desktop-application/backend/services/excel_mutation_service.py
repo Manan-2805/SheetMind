@@ -160,6 +160,7 @@ def _select_rows(frame: pd.DataFrame, filters: list[RowFilter]) -> pd.Index:
 def _mutate_frame(frame: pd.DataFrame, operations: list[MutationOperation]) -> pd.DataFrame:
     result = frame.astype(object).where(frame.notna(), None)
     next_id = len(result)
+    column_origins = {name: name for name in result.columns}
     for operation in operations:
         if isinstance(operation, AddRows):
             for values in operation.rows:
@@ -173,6 +174,7 @@ def _mutate_frame(frame: pd.DataFrame, operations: list[MutationOperation]) -> p
         if isinstance(operation, DeleteColumn):
             _require_column(result.columns, operation.column)
             result = result.drop(columns=operation.column)
+            del column_origins[operation.column]
             continue
 
         selected = _select_rows(result, operation.filters)
@@ -186,6 +188,7 @@ def _mutate_frame(frame: pd.DataFrame, operations: list[MutationOperation]) -> p
                 raise ValueError(f"Column already exists: {name}")
             _check_expression(operation.value, result.columns)
             result[name] = None
+            column_origins[name] = None
         else:
             _require_column(result.columns, name)
 
@@ -209,6 +212,7 @@ def _mutate_frame(frame: pd.DataFrame, operations: list[MutationOperation]) -> p
             raise ValueError("Could not compute arithmetic expression") from exc
         result.loc[selected, name] = values
 
+    result.attrs["column_origins"] = column_origins
     return result
 
 

@@ -6,12 +6,14 @@ export interface SheetData {
   rows?: CellValue[][]; // row-major 2D array
   rowCount: number;
   colCount: number;
+  formulaCells?: string[];
 }
 
 export interface ExcelEditorFile {
   fileId: string; // matches excel_files.id in DuckDB
   filename: string;
   sheetCount: number;
+  editable: boolean;
   fileSizeBytes: number;
   uploadedAt: string;
 }

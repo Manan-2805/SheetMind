@@ -7,7 +7,8 @@
 - F1 (`24e1a63`): URL wiring passed a Node smoke test with a non-default port. Only the standalone dev fallback contains backend port 8000.
 - F2 (`5a3dca0`): six regression tests failed before the changes and passed afterward. The staged packaged Electron runtime could not start because its native NSS, NSPR, and ALSA libraries are unavailable.
 - F3 (`7bb6039`): guarded all seven untrusted SQL execution paths. The focused suite passed and the same loopback benchmark measured 0.064 s and 246.3 MiB peak RSS.
-- F4: structured editing plans replace executable strings. Nine operation and safety tests pass, and TypeScript reports no errors.
-- Next item: F5 workbook integrity and restore.
+- F4 (`301b8bc`): structured editing plans replace executable strings. Nine operation and safety tests pass, and TypeScript reports no errors.
+- F5: seven workbook regressions failed on the previous implementation and pass after the changes. Tests use disposable workbooks and data. TypeScript reports no errors.
+- Next item: F6 streaming uploads and chart path validation.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.
