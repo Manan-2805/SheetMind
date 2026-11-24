@@ -3,17 +3,23 @@
 import asyncio
 import os
 import uuid
+from collections.abc import Iterator
+from pathlib import Path
 
+import duckdb
 import pandas as pd
 
 from dependencies import current_username
 from models.chat_models import broadcast_datasource_status
 from services.duckdb_service import get_connection
 from services.excel_import_service import (
-    clean_columns,
     import_df_to_duckdb,
-    now_utc as _now,
+    read_csv_frame,
+    read_excel_frame,
     safe_table_name,
+)
+from services.excel_import_service import (
+    now_utc as _now,
 )
 from services.storage_service import list_account_users
 
@@ -22,99 +28,89 @@ task_queue = asyncio.Queue()
 active_tasks = set()
 
 
-def process_excel_file_sync(username: str, file_id: str, file_path: str):
-    """Execute the process_excel_file_sync operation."""
-    token = current_username.set(username)
-    try:
-        conn = get_connection()
+def _import_sheets(
+    conn: duckdb.DuckDBPyConnection,
+    file_id: str,
+    sheets: Iterator[tuple[str, pd.DataFrame]],
+    csv_file: bool,
+) -> tuple[int, int, int]:
+    table_names: set[str] = set()
+    total_rows = 0
+    max_cols = 0
+    for name, frame in sheets:
+        base = safe_table_name(file_id, None if csv_file else name)
+        table_name = base
+        suffix = 2
+        while table_name in table_names:
+            table_name = f"{base}_{suffix}"
+            suffix += 1
         try:
-            # Update status to processing
+            import_df_to_duckdb(conn, frame, table_name)
+            conn.execute(
+                "INSERT INTO excel_sheets "
+                "(id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    f"sh-{uuid.uuid4().hex[:8]}",
+                    file_id,
+                    name,
+                    table_name,
+                    len(frame),
+                    len(frame.columns),
+                    _now(),
+                ],
+            )
+        except Exception as exc:
+            raise ValueError(f"Failed to import sheet {name!r}: {exc}") from exc
+        table_names.add(table_name)
+        total_rows += len(frame)
+        max_cols = max(max_cols, len(frame.columns))
+    if not table_names:
+        raise ValueError("No sheets found to import")
+    return total_rows, max_cols, len(table_names)
+
+
+def _read_workbook(workbook: pd.ExcelFile) -> Iterator[tuple[str, pd.DataFrame]]:
+    for name in workbook.sheet_names:
+        try:
+            yield name, read_excel_frame(workbook, name)
+        except Exception as exc:
+            raise ValueError(f"Failed to read sheet {name!r}: {exc}") from exc
+
+
+def process_excel_file_sync(username: str, file_id: str, file_path: str):
+    """Import every sheet transactionally, marking a failed workbook with its error."""
+    token = current_username.set(username)
+    path = Path(file_path)
+    try:
+        with get_connection() as conn:
             conn.execute("UPDATE excel_files SET status = 'processing' WHERE id = ?", [file_id])
-
-            conn.execute("DELETE FROM excel_sheets WHERE excel_file_id = ?", [file_id])
-
-            total_rows = 0
-            max_cols = 0
-            num_sheets = 0
-
-            if file_path.endswith(".csv"):
-                df = clean_columns(pd.read_csv(file_path))
-                table_name = safe_table_name(file_id)
-                import_df_to_duckdb(conn, df, table_name)
-
-                row_count = len(df)
-                col_count = len(df.columns)
-                total_rows += row_count
-                max_cols = max(max_cols, col_count)
-                num_sheets = 1
-
-                conn.execute(
-                    """
-                    INSERT INTO excel_sheets
-                    (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        f"sh-{uuid.uuid4().hex[:8]}",
-                        file_id,
-                        "Sheet1",
-                        table_name,
-                        row_count,
-                        col_count,
-                        _now(),
-                    ],
-                )
-            else:
-                workbook = pd.read_excel(file_path, sheet_name=None)
-                for sheet_name, df in workbook.items():
-                    df = clean_columns(df)
-                    table_name = safe_table_name(file_id, sheet_name)
-                    import_df_to_duckdb(conn, df, table_name)
-
-                    row_count = len(df)
-                    col_count = len(df.columns)
-                    total_rows += row_count
-                    max_cols = max(max_cols, col_count)
-                    num_sheets += 1
-
-                    conn.execute(
-                        """
-                        INSERT INTO excel_sheets
-                        (id, excel_file_id, sheet_name, table_name, row_count, col_count, imported_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        [
-                            f"sh-{uuid.uuid4().hex[:8]}",
-                            file_id,
-                            sheet_name,
-                            table_name,
-                            row_count,
-                            col_count,
-                            _now(),
-                        ],
+            conn.begin()
+            try:
+                conn.execute("DELETE FROM excel_sheets WHERE excel_file_id = ?", [file_id])
+                if path.suffix.lower() == ".csv":
+                    counts = _import_sheets(
+                        conn, file_id, iter([("Sheet1", read_csv_frame(path))]), csv_file=True
                     )
-
-            if num_sheets == 0:
-                raise ValueError("No sheets found to import")
-
-            now = _now()
-            conn.execute(
-                """
-                UPDATE excel_files
-                SET status = 'completed', row_count = ?, column_count = ?, num_sheets = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                [total_rows, max_cols, num_sheets, now, file_id],
-            )
-
-        except Exception as e:
-            # Update status to error
-            error_msg = str(e)
-            now = _now()
-            conn.execute(
-                "UPDATE excel_files SET status = 'error', error_message = ?, updated_at = ? WHERE id = ?",
-                [error_msg, now, file_id],
-            )
+                else:
+                    with pd.ExcelFile(path, engine="openpyxl") as workbook:
+                        counts = _import_sheets(
+                            conn, file_id, _read_workbook(workbook), csv_file=False
+                        )
+                conn.execute(
+                    "UPDATE excel_files SET status = 'completed', row_count = ?, "
+                    "column_count = ?, num_sheets = ?, updated_at = ?, error_message = NULL "
+                    "WHERE id = ?",
+                    [*counts, _now(), file_id],
+                )
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                conn.execute(
+                    "UPDATE excel_files SET status = 'error', error_message = ?, "
+                    "updated_at = ? WHERE id = ?",
+                    [str(exc), _now(), file_id],
+                )
     finally:
         current_username.reset(token)
 

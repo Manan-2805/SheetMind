@@ -9,7 +9,8 @@
 - F3 (`7bb6039`): guarded all seven untrusted SQL execution paths. The focused suite passed and the same loopback benchmark measured 0.064 s and 246.3 MiB peak RSS.
 - F4 (`301b8bc`): structured editing plans replace executable strings. Nine operation and safety tests pass, and TypeScript reports no errors.
 - F5 (`f2bce90`): seven workbook regressions failed on the previous implementation and pass after the changes. Tests use disposable workbooks and data. TypeScript reports no errors.
-- F6: four upload and chart path tests pass. The locked backend has neither xlrd nor odfpy, so new XLS and ODS uploads return 415.
-- Next item: F7 import naming and transactional failure reporting.
+- F6 (`43f8d56`): four upload and chart path tests pass. The locked backend has neither xlrd nor odfpy, so new XLS and ODS uploads return 415.
+- F7: four tests failed on the old importer and pass with collision-safe sheet names, original headers, and transaction rollback on sheet errors.
+- Next item: F8 settings import and data cleanup.
 
 Reports are kept under `desktop-application/docs/` to follow the desktop-only scope.

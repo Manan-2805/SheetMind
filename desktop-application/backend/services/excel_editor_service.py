@@ -25,7 +25,7 @@ from schemas.excel_editor_schemas import (
 )
 from schemas.excel_operations import MutationOperation
 from services.duckdb_service import get_connection
-from services.excel_import_service import import_df_to_duckdb, now_utc
+from services.excel_import_service import import_df_to_duckdb, now_utc, read_excel_frame
 from services.excel_mutation_service import Formula, dry_run_mutation
 from services.excel_workbook_service import (
     AxisEdit,
@@ -494,9 +494,8 @@ def refresh_duckdb_sheet(
     table_name = row[0]
 
     # Import evaluated values (data_only=True)
-    df = pd.read_excel(
-        file_path, sheet_name=sheet_name, engine="openpyxl", engine_kwargs={"data_only": True}
-    )
+    with pd.ExcelFile(file_path, engine="openpyxl") as workbook:
+        df = read_excel_frame(workbook, sheet_name)
     import_df_to_duckdb(conn, df, table_name)
 
     # Update row/col count in excel_sheets
