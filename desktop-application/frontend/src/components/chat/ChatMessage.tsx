@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { chartImageUrl } from "@/api/apiUrl";
 import { getMessageData } from "@/api/chatApi";
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import { useToast } from "@/hooks/useToast";
@@ -55,15 +56,6 @@ export function ChatMessage({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalData(message.result_data || null);
   }, [message.id, message.result_data]);
-
-  const getFullChartUrl = (url: string) => {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
-      return url;
-    }
-    const backendBase = "http://localhost:8000";
-    return `${backendBase}${url.startsWith("/") ? "" : "/"}${url}`;
-  };
 
   const handlePageChange = async (newPage: number) => {
     if (isLoadingData) return;
@@ -419,7 +411,7 @@ export function ChatMessage({
               Auto Generated Chart
             </span>
             <img
-              src={getFullChartUrl(chartUrl)}
+              src={chartImageUrl(chartUrl)}
               alt="Auto Generated Chart"
               className="max-h-[300px] w-auto object-contain rounded-lg shadow-lg border"
               style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}

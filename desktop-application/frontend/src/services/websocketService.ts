@@ -1,3 +1,5 @@
+import { datasourceSocketUrl } from "@/api/apiUrl";
+
 class WebSocketService {
   private socket: WebSocket | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,9 +26,7 @@ class WebSocketService {
     }
 
     try {
-      this.socket = new WebSocket(
-        `ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`
-      );
+      this.socket = new WebSocket(datasourceSocketUrl(username));
 
       this.socket.onopen = () => {
         this.isConnecting = false;

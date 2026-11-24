@@ -1,7 +1,8 @@
 import axios from "axios";
+import { apiBaseUrl } from "./apiUrl";
 
 export const apiClient = axios.create({
-  baseURL: window.__SHEETMIND_API_URL__ || "http://localhost:8000/api",
+  baseURL: apiBaseUrl,
 });
 
 apiClient.interceptors.request.use((config) => {
