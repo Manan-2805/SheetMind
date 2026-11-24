@@ -9,9 +9,8 @@ WORKDIR /app
 # Copy manifests first — Docker cache skips npm ci when unchanged
 COPY package.json package-lock.json ./
 
-# --ci: clean install from lock file (reproducible, fails on mismatch)
-# --omit=optional: skip platform-optional packages
-RUN npm ci --omit=optional
+# Vite uses Rolldown's platform-specific optional dependency.
+RUN npm ci
 
 # Copy only source — exclude node_modules, dist, .env files via .dockerignore
 COPY index.html vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js ./
