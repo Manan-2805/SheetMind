@@ -1,7 +1,9 @@
 import logging
-import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +20,7 @@ from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.maintenance import MaintenanceMiddleware
 from app.middleware.real_ip import RealIPMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import auth, health, user
+from app.routers import health
 from app.utils.response import error_response
 
 logging.basicConfig(
@@ -37,25 +39,16 @@ limiter = Limiter(key_func=get_real_ip, default_limits=["100/minute"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Complete database setup before the API accepts requests."""
     logger.info("Starting SheetMind API...")
     create_database_if_not_exists()
 
-    try:
-        from alembic import command
-        from alembic.config import Config
-
-        alembic_cfg = Config(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
-        )
-        alembic_cfg.set_main_option(
-            "script_location",
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
-        )
-        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully.")
-    except Exception:
-        logger.exception("Failed to run Alembic migrations")
+    backend_dir = Path(__file__).resolve().parents[1]
+    alembic_cfg = Config(str(backend_dir / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    alembic_cfg.attributes["configure_logging"] = False
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Alembic migrations applied successfully.")
 
     yield
     logger.info("Shutting down SheetMind API...")
@@ -90,8 +83,6 @@ app.add_middleware(
     allowed_hosts=["*"],
 )
 
-app.include_router(auth.router, prefix="/api")
-app.include_router(user.router, prefix="/api")
 app.include_router(health.router, prefix="/api")
 
 

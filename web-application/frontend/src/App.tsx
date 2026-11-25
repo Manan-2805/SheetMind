@@ -1,12 +1,8 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-
-import ProtectedRoute from '@/components/common/ProtectedRoute';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
-const AuthCallbackPage = lazy(() => import('@/pages/AuthCallbackPage'));
-const WelcomePage = lazy(() => import('@/pages/WelcomePage'));
+const DownloadPage = lazy(() => import('@/pages/DownloadPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const ServerErrorPage = lazy(() => import('@/pages/ServerErrorPage'));
 const MaintenancePage = lazy(() => import('@/pages/MaintenancePage'));
@@ -75,30 +71,24 @@ const router = createBrowserRouter([
     ),
   },
   {
-    path: '/login',
+    path: '/download',
     element: (
       <Suspense fallback={<LoadingFallback />}>
-        <LoginPage />
+        <DownloadPage />
       </Suspense>
     ),
+  },
+  {
+    path: '/login',
+    element: <Navigate to="/download" replace />,
   },
   {
     path: '/auth/callback',
-    element: (
-      <Suspense fallback={<LoadingFallback />}>
-        <AuthCallbackPage />
-      </Suspense>
-    ),
+    element: <Navigate to="/download" replace />,
   },
   {
     path: '/welcome',
-    element: (
-      <Suspense fallback={<LoadingFallback />}>
-        <ProtectedRoute>
-          <WelcomePage />
-        </ProtectedRoute>
-      </Suspense>
-    ),
+    element: <Navigate to="/download" replace />,
   },
   {
     path: '/docs',

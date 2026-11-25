@@ -3,22 +3,28 @@
 COMPOSE ?= docker compose
 UV ?= uv
 NPM ?= npm
-DEV = $(COMPOSE) -f docker-compose.yml
+VERSION ?= 1.0.0
+ENV_FILES = $(if $(wildcard .env.local),--env-file .env.local) --env-file .env
+DEV = $(COMPOSE) $(ENV_FILES) -f docker-compose.yml
 PROD = $(DEV) -f docker-compose.prod.yml
 
-.PHONY: help setup setup-local dev stop logs ps config migrate test lint format-check typecheck check build-ui build prod prod-stop prod-logs prod-ps
+.PHONY: help setup setup-local dev restart stop logs ps config stage-downloads migrate test lint format-check typecheck check build-ui build prod prod-restart prod-migrate prod-stop prod-logs prod-ps
 
 help:
 	@printf '%s\n' \
 		'Web targets' \
 		'  setup / dev              Build development images / start the development stack' \
+		'  restart                  Apply .env changes and restart development services' \
 		'  stop / logs / ps         Stop services, follow logs, or show status' \
 		'  config                   Validate development and production Compose config' \
+		'  stage-downloads           Copy locally built x64 installers into the public downloads directory' \
 		'  migrate                  Apply migrations to the running development database' \
 		'  setup-local              Install locked dependencies for local checks and UI builds' \
 		'  test / lint / format-check / typecheck / check' \
 		'  build-ui                 Build the frontend into frontend/dist' \
 		'  build / prod             Build production images / start production from them' \
+		'  prod-restart             Apply .env changes and restart production services' \
+		'  prod-migrate             Apply migrations to the running production database' \
 		'  prod-stop / prod-logs / prod-ps'
 
 setup:
@@ -29,7 +35,10 @@ setup-local:
 	$(NPM) --prefix frontend ci
 
 dev:
-	$(DEV) up -d
+	$(DEV) up -d --wait
+
+restart:
+	$(DEV) up -d --wait --force-recreate backend frontend nginx
 
 stop:
 	$(DEV) stop
@@ -43,6 +52,20 @@ ps:
 config:
 	$(DEV) config --quiet
 	$(PROD) config --quiet
+
+stage-downloads:
+	@set -e; found=no; \
+	for suffix in linux-x64.AppImage windows-x64-setup.exe; do \
+		source="../desktop-application/electron/dist/SheetMind-$(VERSION)-$$suffix"; \
+		if test -f "$$source"; then \
+			install -m 0644 "$$source" "downloads/.SheetMind-$$suffix"; \
+			mv -f "downloads/.SheetMind-$$suffix" "downloads/SheetMind-$$suffix"; \
+			printf '%s\n' "Staged $$source"; found=yes; \
+		fi; \
+	done; \
+	if test "$$found" = no; then \
+		printf '%s\n' 'No desktop installers for this version. Run make desktop-package first.' >&2; exit 1; \
+	fi
 
 migrate:
 	$(DEV) exec -T backend alembic upgrade head
@@ -71,10 +94,16 @@ build-ui:
 	$(NPM) --prefix frontend run build
 
 build:
-	$(PROD) build
+	$(PROD) build $(SERVICES)
 
 prod:
-	$(PROD) up -d
+	$(PROD) up -d --wait
+
+prod-restart:
+	$(PROD) up -d --wait --force-recreate backend frontend nginx
+
+prod-migrate:
+	$(PROD) exec -T backend alembic upgrade head
 
 prod-stop:
 	$(PROD) stop
