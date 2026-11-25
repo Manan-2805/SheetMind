@@ -55,7 +55,7 @@ config:
 
 stage-downloads:
 	@set -e; found=no; \
-	for suffix in linux-x64.AppImage windows-x64-setup.exe; do \
+	for suffix in linux-x86_64.AppImage windows-x64-setup.exe; do \
 		source="../desktop-application/electron/dist/SheetMind-$(VERSION)-$$suffix"; \
 		if test -f "$$source"; then \
 			install -m 0644 "$$source" "downloads/.SheetMind-$$suffix"; \

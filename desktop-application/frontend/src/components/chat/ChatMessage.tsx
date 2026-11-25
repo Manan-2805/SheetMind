@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { chartImageUrl } from "@/api/apiUrl";
 import { getMessageData } from "@/api/chatApi";
+import logo from "@/assets/logo.png";
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import { useToast } from "@/hooks/useToast";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
@@ -340,7 +341,7 @@ export function ChatMessage({
   return (
     <div className="group flex gap-3 py-4">
       <img
-        src={`${import.meta.env.BASE_URL}favicon.png`}
+        src={logo}
         alt="SheetMind"
         className="mt-0.5 h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

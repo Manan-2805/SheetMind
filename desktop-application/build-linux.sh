@@ -133,7 +133,8 @@ echo "Running npm ci for Electron..."
 npm ci
 
 echo "Building final desktop installer..."
-npm run dist -- --linux --publish never -c.extraMetadata.version="$VERSION"
+npm run dist -- --linux --publish never -c.extraMetadata.version="$VERSION" \
+    -c.electronDist="$ROOT/electron/node_modules/electron/dist"
 
 echo "Electron packaging completed."
 

@@ -142,6 +142,25 @@ function openExternalLink(url) {
   }
 }
 
+function normalizePackagedWebSocketOrigin(webContents) {
+  const socketUrl = new URL(`${backendApiUrl}/ws/datasources`);
+  socketUrl.protocol = "ws:";
+  const rendererId = webContents.id;
+  webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: [`${socketUrl.href}*`] },
+    ({ url, webContentsId, requestHeaders }, callback) => {
+      if (webContentsId === rendererId && new URL(url).pathname === socketUrl.pathname) {
+        const originHeader = Object.keys(requestHeaders).find((name) => name.toLowerCase() === "origin");
+        // Chromium serializes a packaged file origin differently for WebSocket handshakes.
+        if (originHeader && requestHeaders[originHeader] === "file://") {
+          requestHeaders[originHeader] = "null";
+        }
+      }
+      callback({ requestHeaders });
+    },
+  );
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -185,6 +204,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   } else {
     // Production mode: load static files from resource frontend
+    normalizePackagedWebSocketOrigin(mainWindow.webContents);
     mainWindow.loadFile(indexPath);
   }
 

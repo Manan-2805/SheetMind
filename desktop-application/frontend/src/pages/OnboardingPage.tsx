@@ -2,6 +2,7 @@ import { ChevronRight, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { deleteUser, listUsers, setupUser, type UserInfo } from "@/api/authApi";
+import logo from "@/assets/logo.png";
 import { useToast } from "@/hooks/useToast";
 import { formatAbsoluteDateTime } from "@/utils/formatDate";
 
@@ -123,7 +124,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       >
         <div className="mb-6 flex flex-col items-center">
           <img
-            src={`${import.meta.env.BASE_URL}favicon.png`}
+            src={logo}
             alt="SheetMind"
             className="mb-3 flex h-12 w-12 shrink-0 rounded-sm object-contain shadow-sm"
             aria-hidden="true"

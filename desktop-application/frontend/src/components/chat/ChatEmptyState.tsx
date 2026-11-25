@@ -1,5 +1,7 @@
 import { Database, Sparkles, TrendingUp } from "lucide-react";
 
+import logo from "@/assets/logo.png";
+
 interface ChatEmptyStateProps {
   onSuggestion: (text: string) => void;
 }
@@ -23,7 +25,7 @@ export function ChatEmptyState({ onSuggestion }: ChatEmptyStateProps) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <img
-        src={`${import.meta.env.BASE_URL}favicon.png`}
+        src={logo}
         alt="SheetMind"
         className="mb-4 h-12 w-12 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

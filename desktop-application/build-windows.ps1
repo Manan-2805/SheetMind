@@ -180,7 +180,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Building final desktop installer..." -ForegroundColor DarkGray
 # Use standard electron-builder to build for host OS (Windows installer)
-npm run dist -- --win --publish never "-c.extraMetadata.version=$Version"
+npm run dist -- --win --publish never "-c.extraMetadata.version=$Version" "-c.electronDist=$ROOT\electron\node_modules\electron\dist"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Electron packaging completed." -ForegroundColor Green

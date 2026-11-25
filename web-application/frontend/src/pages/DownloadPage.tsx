@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 
 const installers = [
-  { platform: 'Linux', format: 'AppImage · x64', file: 'SheetMind-linux-x64.AppImage' },
+  { platform: 'Linux', format: 'AppImage · x64', file: 'SheetMind-linux-x86_64.AppImage' },
   {
     platform: 'Windows',
     format: 'Setup executable · x64',

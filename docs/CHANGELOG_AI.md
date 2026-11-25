@@ -4,6 +4,8 @@
 
 - Fixed native Windows Make argument passing, included only the backend executable in installer resources, and gave Linux and Windows artifacts platform-specific names.
 - Added a public download page and a Make target for staging the built Linux and Windows installers on the web host.
+- Matched the staging path to Electron Builder's `x86_64` AppImage filename.
+- Reused the locked Electron runtime already installed by npm during Linux and Windows packaging.
 - Removed Google sign-in from the web frontend and API. Old frontend sign-in URLs redirect to downloads. Desktop startup uses local profiles.
 
 ## Web database startup
