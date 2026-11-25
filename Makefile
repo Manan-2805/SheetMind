@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 DESKTOP_TARGETS := setup setup-backend setup-frontend setup-electron dev api ui electron \
-	test lint format-check typecheck pylint doctor check build package
+	test test-data lint format-check typecheck pylint doctor check build package
 WEB_TARGETS := setup setup-local dev restart stop logs ps config stage-downloads migrate test lint format-check \
 	typecheck check build-ui build prod prod-restart prod-migrate prod-stop prod-logs prod-ps
 
@@ -13,6 +13,7 @@ help:
 		'  make desktop-setup       Install locked desktop dependencies' \
 		'  make desktop             Start Vite, Electron and the desktop backend' \
 		'  make desktop-package VERSION=1.2.3   Build an installer for this OS' \
+		'  make desktop-test-data   Generate linked Excel workbooks and a test guide' \
 		'  make web                 Start the web development stack in Docker' \
 		'  make web-restart         Reload .env and restart the development stack' \
 		'  make web-stage-downloads VERSION=1.0.0    Serve local desktop installers through the website' \

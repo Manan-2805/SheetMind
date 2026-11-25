@@ -10,3 +10,4 @@ electron/node_modules
 log.txt
 build.log
 *.log
+/test-data/

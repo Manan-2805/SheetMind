@@ -16,7 +16,7 @@ else ifeq ($(shell uname -s),Linux)
 PACKAGE_COMMAND = bash build-linux.sh "$$SHEETMIND_BUILD_VERSION"
 endif
 
-.PHONY: help setup setup-backend setup-frontend setup-electron dev api ui electron test lint format-check typecheck pylint doctor check build package
+.PHONY: help setup setup-backend setup-frontend setup-electron dev api ui electron test test-data lint format-check typecheck pylint doctor check build package
 
 help:
 	@printf '%s\n' \
@@ -26,6 +26,7 @@ help:
 		'  api [API_PORT=8000]       Start only the Python API' \
 		'  ui / electron             Start Vite or Electron separately' \
 		'  test                      Run the backend test suite' \
+		'  test-data                 Generate Excel workbooks and a manual test guide' \
 		'  lint / format-check / typecheck / check' \
 		'  pylint / doctor           Run additional backend or React diagnostics' \
 		'  build                     Build the frontend into frontend/dist' \
@@ -56,6 +57,9 @@ electron:
 
 test:
 	cd backend && $(UV) run --locked --no-sync python -B -m unittest discover -s tests -v
+
+test-data:
+	cd backend && $(UV) run --locked python -B scripts/generate_test_data.py
 
 lint:
 	cd backend && $(UV) run --locked --no-sync ruff check .
