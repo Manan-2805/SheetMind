@@ -34,7 +34,7 @@ from services.excel_mutation_service import (
     build_mutation_prompt,
     dry_run_mutation,
 )
-from services.llm_client import llm_clients
+from services.llm_client import complete_openai, llm_clients, unwrap_json_fence
 from services.logging_service import get_logger
 from services.prompt_debug_service import append_debug_response, write_debug_prompt
 
@@ -100,12 +100,11 @@ async def mutate_file(body: MutationRequest):
     llm_response_text = ""
 
     if settings.llm_provider == "openai":
-        client = llm_clients.openai(settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
+        response = await complete_openai(
+            settings.openai,
             messages=prompt_msgs,
             temperature=0.0,
-            response_format={"type": "json_object"},
+            json_object=True,
         )
         llm_response_text = response.choices[0].message.content
     else:
@@ -125,7 +124,7 @@ async def mutate_file(body: MutationRequest):
         llm_response_text = resp.json()["response"]
 
     try:
-        plan = MutationPlan.model_validate_json(llm_response_text)
+        plan = MutationPlan.model_validate_json(unwrap_json_fence(llm_response_text))
     except ValidationError as exc:
         get_logger().warning("The LLM returned an invalid spreadsheet edit plan")
         raise HTTPException(status_code=502, detail="LLM returned an invalid editing plan") from exc

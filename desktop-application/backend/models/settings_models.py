@@ -36,6 +36,8 @@ def merge_settings(body: UpdateSettingsRequest) -> SettingsResponse:
     openai = changes.pop("openai", {})
     if not openai.get("api_key"):
         openai.pop("api_key", None)
+        if openai.get("base_url", current["openai"]["base_url"]) != current["openai"]["base_url"]:
+            current["openai"]["api_key"] = ""
     current["openai"].update(openai)
     current["ollama"].update(changes.pop("ollama", {}))
     current.update(changes)

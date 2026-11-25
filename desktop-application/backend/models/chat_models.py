@@ -22,7 +22,7 @@ from schemas.chat_schemas import (
 )
 from services.chart_service import generate_chart
 from services.duckdb_service import get_connection
-from services.llm_client import llm_clients
+from services.llm_client import complete_openai, llm_clients, unwrap_json_fence
 from services.logging_service import get_logger
 from services.prompt_debug_service import append_debug_response, write_debug_prompt
 from services.query_service import get_result_row_limit
@@ -728,10 +728,9 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
             content_out = ""
 
             if settings.llm_provider == "openai":
-                client = llm_clients.openai(settings.openai.api_key)
                 model_name = settings.openai.model
-                response = await client.chat.completions.create(
-                    model=model_name,
+                response = await complete_openai(
+                    settings.openai,
                     messages=messages
                     if attempt == 0
                     else [
@@ -742,11 +741,11 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
                         },
                     ],
                     temperature=0,
-                    response_format={"type": "json_object"},
+                    json_object=True,
                 )
                 content_out = response.choices[0].message.content or "{}"
-                input_tokens = response.usage.prompt_tokens if response.usage else 0
-                output_tokens = response.usage.completion_tokens if response.usage else 0
+                input_tokens = (response.usage.prompt_tokens or 0) if response.usage else 0
+                output_tokens = (response.usage.completion_tokens or 0) if response.usage else 0
             else:
                 url = settings.ollama.url.rstrip("/")
                 model_name = settings.ollama.model
@@ -807,17 +806,15 @@ Respond with only the summary sentence. No JSON."""
     output_tokens = 0
 
     if settings.llm_provider == "openai":
-        client = llm_clients.openai(settings.openai.api_key)
-        # Use gpt-4o-mini for summary if available, otherwise default
-        model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
-        response = await client.chat.completions.create(
-            model=model,
+        response = await complete_openai(
+            settings.openai,
+            use_mini=True,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             max_tokens=120,
         )
-        input_tokens = response.usage.prompt_tokens if response.usage else 0
-        output_tokens = response.usage.completion_tokens if response.usage else 0
+        input_tokens = (response.usage.prompt_tokens or 0) if response.usage else 0
+        output_tokens = (response.usage.completion_tokens or 0) if response.usage else 0
         res = {
             "summary": response.choices[0].message.content.strip(),
             "input_tokens": input_tokens,
@@ -865,14 +862,12 @@ Row count: {len(result_rows)}"""
 
         settings = await asyncio.to_thread(get_settings)
         if settings.llm_provider == "openai":
-            client = llm_clients.openai(settings.openai.api_key)
-            model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
-            response = await client.chat.completions.create(
-                model=model,
+            response = await complete_openai(
+                settings.openai,
+                use_mini=True,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=150,
-                response_format={"type": "json_object"} if model.startswith("gpt-") else None,
             )
             text = response.choices[0].message.content or "[]"
         else:
@@ -915,9 +910,8 @@ async def generate_title(content: str) -> str:
     debug_path = write_debug_prompt(prompt, "TITLE GENERATION")
     settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
-        client = llm_clients.openai(settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
+        response = await complete_openai(
+            settings.openai,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
@@ -944,9 +938,8 @@ async def generate_query_label(nl_query: str, sql_query: str) -> str:
     debug_path = write_debug_prompt(prompt, "QUERY LABEL GENERATION")
     settings = await asyncio.to_thread(get_settings)
     if settings.llm_provider == "openai":
-        client = llm_clients.openai(settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
+        response = await complete_openai(
+            settings.openai,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
@@ -1062,18 +1055,17 @@ Respond ONLY with this JSON (no markdown, no prose):
     settings = await asyncio.to_thread(get_settings)
     try:
         if settings.llm_provider == "openai":
-            client = llm_clients.openai(settings.openai.api_key)
-            model = "gpt-4o-mini" if settings.openai.model == "gpt-4o" else settings.openai.model
-            response = await client.chat.completions.create(
-                model=model,
+            response = await complete_openai(
+                settings.openai,
+                use_mini=True,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=300,
-                response_format={"type": "json_object"},
+                json_object=True,
             )
             text = response.choices[0].message.content or "{}"
-            in_tok = response.usage.prompt_tokens if response.usage else 0
-            out_tok = response.usage.completion_tokens if response.usage else 0
+            in_tok = (response.usage.prompt_tokens or 0) if response.usage else 0
+            out_tok = (response.usage.completion_tokens or 0) if response.usage else 0
         else:
             url = settings.ollama.url.rstrip("/")
             hclient = llm_clients.ollama()
@@ -1096,7 +1088,7 @@ Respond ONLY with this JSON (no markdown, no prose):
 
         if "{" in text and "}" in text:
             text = text[text.find("{") : text.rfind("}") + 1]
-        parsed = json.loads(text)
+        parsed = json.loads(unwrap_json_fence(text))
         return {
             "summary": parsed.get("summary", ""),
             "followups": parsed.get("followups", [])[:3],

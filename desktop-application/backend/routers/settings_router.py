@@ -6,6 +6,7 @@ import time
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from openai import OpenAIError
 from pydantic import BaseModel
 
 from models.settings_models import (
@@ -21,8 +22,9 @@ from schemas.settings_schemas import (
     PullModelRequest,
     TestLLMRequest,
     UpdateSettingsRequest,
+    normalize_provider_url,
 )
-from services.llm_client import llm_clients
+from services.llm_client import complete_openai, llm_clients, provider_error_message
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -73,66 +75,78 @@ def update_settings(body: UpdateSettingsRequest) -> PublicSettingsResponse:
 @router.post("/test-llm", response_model=TestLLMResponse)
 async def test_llm(body: TestLLMRequest) -> TestLLMResponse:
     """Execute the test_llm operation."""
-    t0 = time.time()
+    t0 = time.perf_counter()
     settings = await asyncio.to_thread(db_get_settings)
 
     if body.provider == "openai":
-        api_key = body.api_key or settings.openai.api_key
-        if not api_key:
-            return TestLLMResponse(
-                success=False,
-                provider="openai",
-                latency_ms=0,
-                message="No API key provided.",
-            )
         try:
-            client = llm_clients.openai(api_key)
-            models_page = await client.models.list()
-            model_ids = sorted(
-                [m.id for m in models_page.data if "gpt" in m.id.lower()],
-                reverse=True,
+            base_url = normalize_provider_url(
+                body.url if body.url is not None else settings.openai.base_url
             )
-            latency_ms = int((time.time() - t0) * 1000)
-            return TestLLMResponse(
-                success=True,
-                provider="openai",
-                latency_ms=latency_ms,
-                message=f"Connected. {len(model_ids)} GPT models available.",
-                models=model_ids,
-            )
-        except Exception as e:
-            latency_ms = int((time.time() - t0) * 1000)
-            return TestLLMResponse(
-                success=False,
-                provider="openai",
-                latency_ms=latency_ms,
-                message=str(e),
-            )
+        except ValueError:
+            message = "Use a valid HTTPS API base URL, or HTTP on localhost."
+        else:
+            model = (body.model if body.model is not None else settings.openai.model).strip()
+            api_key = (body.api_key or "").strip()
+            if not api_key and base_url == settings.openai.base_url:
+                api_key = settings.openai.api_key
+            if not model or not api_key:
+                message = "Enter a model ID and an API key for this provider."
+            else:
+                candidate = settings.openai.model_copy(
+                    update={"api_key": api_key, "base_url": base_url, "model": model}
+                )
+                try:
+                    completion = await complete_openai(
+                        candidate,
+                        [{"role": "user", "content": "Reply with the single word OK."}],
+                        test_connection=True,
+                    )
+                    if (
+                        not completion.choices
+                        or not (completion.choices[0].message.content or "").strip()
+                    ):
+                        raise ValueError("The model did not return text.")
+                except (OpenAIError, ValueError, AttributeError) as error:
+                    message = provider_error_message(error)
+                else:
+                    return TestLLMResponse(
+                        success=True,
+                        provider="openai",
+                        latency_ms=int((time.perf_counter() - t0) * 1000),
+                        message="The selected model returned a chat completion.",
+                        models=[model],
+                    )
+        return TestLLMResponse(
+            success=False,
+            provider="openai",
+            latency_ms=int((time.perf_counter() - t0) * 1000),
+            message=message,
+        )
 
-    else:
-        ollama_url = (body.url or settings.ollama.url).rstrip("/")
-        try:
-            client = llm_clients.ollama()
-            response = await client.get(f"{ollama_url}/api/tags", timeout=10.0)
-            response.raise_for_status()
-            data = response.json()
-            model_names = [m["name"] for m in data.get("models", [])]
-            latency_ms = int((time.time() - t0) * 1000)
-            return TestLLMResponse(
-                success=True,
-                provider="ollama",
-                latency_ms=latency_ms,
-                message=f"Connected. {len(model_names)} models available.",
-                models=model_names,
-            )
-        except Exception as e:
-            latency_ms = int((time.time() - t0) * 1000)
-            return TestLLMResponse(
-                success=False,
-                provider="ollama",
-                latency_ms=latency_ms,
-                message=str(e),
-            )
+    ollama_url = (body.url or settings.ollama.url).rstrip("/")
+    try:
+        client = llm_clients.ollama()
+        response = await client.get(f"{ollama_url}/api/tags", timeout=10.0)
+        response.raise_for_status()
+        data = response.json()
+        model_names = [m["name"] for m in data.get("models", [])]
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        return TestLLMResponse(
+            success=True,
+            provider="ollama",
+            latency_ms=latency_ms,
+            message=f"Connected. {len(model_names)} models available.",
+            models=model_names,
+        )
+    except Exception as e:
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        return TestLLMResponse(
+            success=False,
+            provider="ollama",
+            latency_ms=latency_ms,
+            message=str(e),
+        )
 
 
 @router.get("/ollama-models")

@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from models.settings_models import get_settings
-from services.llm_client import llm_clients
+from services.llm_client import complete_openai, llm_clients, unwrap_json_fence
 from services.logging_service import get_logger
 
 
@@ -81,12 +81,11 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
     llm_response_text = ""
 
     if settings.llm_provider == "openai":
-        client = llm_clients.openai(settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
-            messages=prompt_msgs,  # type: ignore
+        response = await complete_openai(
+            settings.openai,
+            messages=prompt_msgs,
             temperature=0.7,
-            response_format={"type": "json_object"},
+            json_object=True,
         )
         llm_response_text = response.choices[0].message.content or "{}"
     else:
@@ -106,7 +105,7 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
         llm_response_text = resp.json().get("message", {}).get("content", "{}")
 
     try:
-        data = json.loads(llm_response_text)
+        data = json.loads(unwrap_json_fence(llm_response_text))
         if not isinstance(data, dict) or not data:
             raise ValueError("Expected a nonempty JSON object")
     except (ValueError, TypeError) as exc:

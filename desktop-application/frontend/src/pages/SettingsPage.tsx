@@ -107,13 +107,10 @@ export function SettingsPage() {
   const [llmProvider, setLlmProvider] = useState<LLMProvider>("openai");
   const [apiKey, setApiKey] = useState("");
   const [apiKeySet, setApiKeySet] = useState(false);
+  const [providerUrl, setProviderUrl] = useState("https://api.openai.com/v1");
+  const [savedProviderUrl, setSavedProviderUrl] = useState("https://api.openai.com/v1");
   const [showApiKey, setShowApiKey] = useState(false);
   const [openaiModel, setOpenaiModel] = useState("gpt-4o");
-  const [openaiModels, setOpenaiModels] = useState<string[]>([
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4-turbo",
-  ]);
 
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [ollamaModels, setOllamaModels] = useState<{ name: string }[]>([]);
@@ -152,6 +149,8 @@ export function SettingsPage() {
       .then((s) => {
         setLlmProvider(s.llm_provider as LLMProvider);
         setApiKeySet(s.openai.api_key_set);
+        setProviderUrl(s.openai.base_url);
+        setSavedProviderUrl(s.openai.base_url);
         setOpenaiModel(s.openai.model);
         setOllamaUrl(s.ollama.url);
         setOllamaSelectedModel(s.ollama.model || "");
@@ -176,17 +175,13 @@ export function SettingsPage() {
       const res = await testLLM({
         provider: llmProvider,
         api_key: llmProvider === "openai" ? apiKey : undefined,
-        url: llmProvider === "ollama" ? ollamaUrl : undefined,
+        url: llmProvider === "openai" ? providerUrl : ollamaUrl,
+        model: llmProvider === "openai" ? openaiModel : undefined,
       });
 
       if (res.success) {
         setTestStatus({ type: "success", message: res.message || "Connected successfully!" });
-        if (llmProvider === "openai" && res.models && res.models.length > 0) {
-          setOpenaiModels(res.models);
-          if (!res.models.includes(openaiModel)) {
-            setOpenaiModel(res.models[0]);
-          }
-        } else if (llmProvider === "ollama" && res.models) {
+        if (llmProvider === "ollama" && res.models) {
           setOllamaModels(res.models.map((m) => ({ name: m })));
         }
       } else {
@@ -206,7 +201,12 @@ export function SettingsPage() {
       const saved = await updateSettings({
         theme,
         llm_provider: llmProvider,
-        openai: { api_key: apiKey, model: openaiModel, max_input_tokens: openaiMaxTokens },
+        openai: {
+          api_key: apiKey.trim(),
+          base_url: providerUrl,
+          model: openaiModel.trim(),
+          max_input_tokens: openaiMaxTokens,
+        },
         ollama: { url: ollamaUrl, model: ollamaSelectedModel, max_input_tokens: ollamaMaxTokens },
         result_row_limit: resultRowLimit,
         auto_sql_retry: autoSqlRetry,
@@ -215,6 +215,9 @@ export function SettingsPage() {
       });
       setApiKey("");
       setApiKeySet(saved.openai.api_key_set);
+      setProviderUrl(saved.openai.base_url);
+      setSavedProviderUrl(saved.openai.base_url);
+      setOpenaiModel(saved.openai.model);
       addToast({
         type: "success",
         title: "Settings Saved",
@@ -342,7 +345,7 @@ export function SettingsPage() {
                     color: "var(--color-text-primary)",
                   }}
                 >
-                  <option value="openai">OpenAI (Recommended)</option>
+                  <option value="openai">OpenAI-compatible</option>
                   <option value="ollama">Ollama (Local)</option>
                 </select>
               </div>
@@ -355,19 +358,42 @@ export function SettingsPage() {
               {llmProvider === "openai" ? (
                 <div className="space-y-5">
                   <div>
+                    <label htmlFor="provider-url" className="text-ui-label mb-2 block">
+                      API BASE URL
+                    </label>
+                    <input
+                      id="provider-url"
+                      type="url"
+                      value={providerUrl}
+                      onChange={(e) => {
+                        setProviderUrl(e.target.value);
+                        setTestStatus(null);
+                      }}
+                      placeholder="https://api.openai.com/v1"
+                      className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-hover)] px-4 py-2.5 text-body"
+                    />
+                  </div>
+                  <div>
                     <label
+                      htmlFor="provider-key"
                       className="text-ui-label mb-2 block"
                       style={{ color: "var(--color-text-secondary)" }}
                     >
-                      OPENAI API KEY
+                      API KEY
                     </label>
                     <div className="relative">
                       <input
+                        id="provider-key"
                         type={showApiKey ? "text" : "password"}
                         value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
+                        onChange={(e) => {
+                          setApiKey(e.target.value);
+                          setTestStatus(null);
+                        }}
                         placeholder={
-                          apiKeySet ? "Key saved. Enter a new key to replace it." : "sk-..."
+                          apiKeySet && providerUrl.trim().replace(/\/+$/, "") === savedProviderUrl
+                            ? "Key saved for this URL"
+                            : "Enter the key for this provider"
                         }
                         className="w-full rounded-xl px-4 py-2.5 pr-12 text-body outline-none transition-all focus:ring-2 focus:ring-[var(--color-accent)]"
                         style={{
@@ -389,27 +415,26 @@ export function SettingsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label
+                        htmlFor="provider-model"
                         className="text-ui-label mb-2 block"
                         style={{ color: "var(--color-text-secondary)" }}
                       >
                         MODEL
                       </label>
-                      <select
+                      <input
+                        id="provider-model"
                         value={openaiModel}
-                        onChange={(e) => setOpenaiModel(e.target.value)}
+                        onChange={(e) => {
+                          setOpenaiModel(e.target.value);
+                          setTestStatus(null);
+                        }}
                         className="w-full rounded-xl px-4 py-2.5 text-body outline-none"
                         style={{
                           backgroundColor: "var(--color-bg-hover)",
                           border: "1px solid var(--color-border-default)",
                           color: "var(--color-text-primary)",
                         }}
-                      >
-                        {openaiModels.map((m: string) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
                     <div>
                       <label
@@ -523,7 +548,7 @@ export function SettingsPage() {
                       className={testStatus?.type === "success" ? "text-success" : ""}
                     />
                   )}
-                  {isTesting ? "Verifying Connectivity..." : "Test Connection & Fetch Models"}
+                  {isTesting ? "Testing connection..." : "Test connection"}
                 </button>
 
                 {testStatus && (

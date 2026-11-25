@@ -1,14 +1,48 @@
 """Module containing settings_schemas functionality."""
 
-from typing import Literal
+from ipaddress import ip_address
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+
+def normalize_provider_url(value: str) -> str:
+    """Accept HTTPS API roots and HTTP loopback endpoints for local servers."""
+    value = value.strip().rstrip("/")
+    parts = urlsplit(value)
+    host = parts.hostname
+    if not host or parts.username is not None or parts.password is not None or parts.port == 0:
+        raise ValueError("Enter the API base URL without credentials or an invalid port.")
+    if (
+        "?" in value
+        or "#" in value
+        or any(char.isspace() or char == "\\" for char in value)
+        or parts.path.lower().endswith(("/chat/completions", "/models"))
+    ):
+        raise ValueError("Enter the API base URL without credentials or an endpoint suffix.")
+    if parts.scheme == "https":
+        return value
+    if parts.scheme == "http":
+        try:
+            if ip_address(host).is_loopback:
+                return value
+        except ValueError:
+            if host == "localhost":
+                return value
+    raise ValueError("Use HTTPS for a remote provider or HTTP on loopback.")
+
+
+ProviderURL = Annotated[str, AfterValidator(normalize_provider_url)]
 
 
 class OpenAISettingsSchema(BaseModel):
     """Schema or class representation for OpenAISettingsSchema."""
 
     api_key: str = ""
+    base_url: ProviderURL = OPENAI_BASE_URL
     model: str = "gpt-4o"
     max_input_tokens: int = 6000
 
@@ -60,6 +94,7 @@ class OpenAISettingsUpdate(BaseModel):
     """Fields that may change on an OpenAI settings update."""
 
     api_key: str | None = None
+    base_url: ProviderURL | None = None
     model: str | None = None
     max_input_tokens: int | None = Field(default=None, ge=1)
 
@@ -88,9 +123,10 @@ class UpdateSettingsRequest(BaseModel):
 class TestLLMRequest(BaseModel):
     """Schema or class representation for TestLLMRequest."""
 
-    provider: str
+    provider: Literal["openai", "ollama"]
     api_key: str | None = None
     url: str | None = None
+    model: str | None = None
 
 
 class PullModelRequest(BaseModel):

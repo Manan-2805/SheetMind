@@ -55,7 +55,10 @@ class LoggingPrivacyTests(IsolatedAsyncioTestCase):
         )
         client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
         settings = SimpleNamespace(
-            llm_provider="openai", openai=SimpleNamespace(api_key="", model="fake")
+            llm_provider="openai",
+            openai=SimpleNamespace(
+                api_key="synthetic-key", base_url="https://api.openai.com/v1", model="fake"
+            ),
         )
         with (
             patch("services.llm_service.llm_clients.openai", return_value=client),
