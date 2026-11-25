@@ -109,7 +109,7 @@ export function Sidebar({
       }}
     >
       <img
-        src="/favicon.png"
+        src={`${import.meta.env.BASE_URL}favicon.png`}
         alt="SheetMind"
         className="mb-2 flex h-8 w-8 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

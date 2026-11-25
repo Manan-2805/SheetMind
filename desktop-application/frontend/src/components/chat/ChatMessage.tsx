@@ -340,7 +340,7 @@ export function ChatMessage({
   return (
     <div className="group flex gap-3 py-4">
       <img
-        src="/favicon.png"
+        src={`${import.meta.env.BASE_URL}favicon.png`}
         alt="SheetMind"
         className="mt-0.5 h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

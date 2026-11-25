@@ -96,7 +96,7 @@ NUITKA_PACKAGES=(
 NUITKA_ARGS=(
     "--standalone"
     "--onefile"
-    "--jobs=8"
+    "--jobs=${SHEETMIND_BUILD_JOBS:-4}"
     "--lto=no"
     "--no-progressbar"
     "--output-dir=$BACKEND_BUILD_DIR"
@@ -105,6 +105,11 @@ NUITKA_ARGS=(
 
 for pkg in "${NUITKA_PACKAGES[@]}"; do
     NUITKA_ARGS+=("--include-package=$pkg")
+done
+
+# Bundle large Python dependencies as bytecode to avoid generating C for them.
+for pkg in anyio fastapi httpx matplotlib numpy openai openpyxl pandas seaborn starlette; do
+    NUITKA_ARGS+=("--noinclude-custom-mode=$pkg:bytecode")
 done
 
 NUITKA_ARGS+=("--include-package-data=uvicorn")
@@ -128,7 +133,7 @@ echo "Running npm ci for Electron..."
 npm ci
 
 echo "Building final desktop installer..."
-npm run dist -- --linux -c.extraMetadata.version="$VERSION"
+npm run dist -- --linux --publish never -c.extraMetadata.version="$VERSION"
 
 echo "Electron packaging completed."
 

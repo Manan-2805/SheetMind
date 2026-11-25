@@ -21,4 +21,7 @@ make desktop
 
 The development launcher waits for Vite before opening Electron. Closing Electron stops Vite. Use `make desktop-api` and `make desktop-ui` for browser-only development in separate terminals.
 
-Run `make desktop-package VERSION=1.2.3` on the target OS to build an installer into `desktop-application/electron/dist`. Native builds use the existing Nuitka and Electron Builder toolchains. Close SheetMind before packaging if the OS holds its build files open.
+Run `make desktop-package VERSION=1.0.0` on the target OS. This installs the locked frontend and Electron dependencies, builds the Python backend with Nuitka, and writes the installer to `desktop-application/electron/dist`. Close SheetMind before packaging if the OS holds its build files open.
+
+- **Linux** needs GCC, Make, and `patchelf`. If you use Debian's system Python, install its development headers (`python3-dev`). The x64 output is `SheetMind-1.0.0-linux-x64.AppImage`. On the target laptop, run `chmod +x SheetMind-1.0.0-linux-x64.AppImage` and then `./SheetMind-1.0.0-linux-x64.AppImage`. Build on a distribution with a glibc version at least as old as the one where you plan to run it. The repository's Linux build accepts `SHEETMIND_BUILD_JOBS` to limit the compiler's parallelism.
+- **Windows** needs native Node.js, uv, GNU Make, and Visual Studio Build Tools with Desktop development with C++. Open Git Bash on Windows and run `make desktop-package VERSION=1.0.0`. For x64, run `SheetMind-1.0.0-windows-x64-setup.exe` from the output directory. Windows Developer Mode lets Electron Builder extract its helper tools with symbolic links. [Nuitka platform requirements](https://nuitka.net/doc/user-manual.html)

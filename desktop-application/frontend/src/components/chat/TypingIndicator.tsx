@@ -18,7 +18,7 @@ export function TypingIndicator({ status }: TypingIndicatorProps) {
   return (
     <div className="flex gap-3 py-4 animate-in fade-in duration-300">
       <img
-        src="/favicon.png"
+        src={`${import.meta.env.BASE_URL}favicon.png`}
         alt="SheetMind"
         className="mt-0.5 flex h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

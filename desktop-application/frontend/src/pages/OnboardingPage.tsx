@@ -123,7 +123,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
       >
         <div className="mb-6 flex flex-col items-center">
           <img
-            src="/favicon.png"
+            src={`${import.meta.env.BASE_URL}favicon.png`}
             alt="SheetMind"
             className="mb-3 flex h-12 w-12 shrink-0 rounded-sm object-contain shadow-sm"
             aria-hidden="true"

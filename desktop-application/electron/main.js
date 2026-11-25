@@ -1,10 +1,9 @@
 const { spawn } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
-const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 
 let mainWindow = null;
 let backendProcess = null;
@@ -65,15 +64,6 @@ async function startBackend() {
     const binaryName = process.platform === "win32" ? "sheetmind-backend.exe" : "sheetmind-backend";
     const binaryPath = path.join(process.resourcesPath, "backend", binaryName);
 
-    // Ensure the binary is executable on Unix systems
-    if (process.platform !== "win32") {
-      try {
-        fs.chmodSync(binaryPath, "755");
-      } catch (err) {
-        console.error("[Electron] Failed to make backend executable:", err);
-      }
-    }
-
     backendProcess = spawn(binaryPath, [String(backendPort)], {
       cwd: path.dirname(binaryPath),
       env: {
@@ -101,6 +91,22 @@ async function startBackend() {
     if (backendProcess === child) backendProcess = null;
     console.log(`[Electron] Backend process exited with code ${code}`);
   });
+}
+
+async function waitForBackend() {
+  const deadline = Date.now() + 60_000;
+  while (!isQuitting && backendProcess && Date.now() < deadline) {
+    try {
+      const response = await fetch(`${backendApiUrl}/health`, {
+        signal: AbortSignal.timeout(1_000),
+      });
+      if (response.ok) return;
+    } catch {
+      // The process may still be unpacking or opening its listener.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!isQuitting) throw new Error("The local backend did not become ready");
 }
 
 function stopBackend() {
@@ -191,6 +197,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   try {
     await startBackend();
+    await waitForBackend();
     if (isQuitting) return;
     
     // Set up React DevTools in development mode
@@ -207,13 +214,11 @@ app.whenReady().then(async () => {
       }
     }
     
-    // Give backend 1.5 seconds to start up uvicorn completely
-    setTimeout(() => {
-      if (!isQuitting) createWindow();
-    }, 1500);
+    if (!isQuitting) createWindow();
 
   } catch (err) {
     console.error("[Electron] Initialization error:", err);
+    dialog.showErrorBox("SheetMind could not start", "The local backend did not respond.");
     app.quit();
   }
 });

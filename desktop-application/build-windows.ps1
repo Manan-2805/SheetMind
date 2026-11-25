@@ -138,7 +138,7 @@ $nuitkaArgs = @(
     "--lto=no",
     "--no-progressbar",
     "--output-dir=$BackendBuildDir",
-    "--output-filename=sheetmind-backend"
+    "--output-filename=sheetmind-backend.exe"
 )
 
 foreach ($pkg in $nuitkaPackages) {
@@ -180,7 +180,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Building final desktop installer..." -ForegroundColor DarkGray
 # Use standard electron-builder to build for host OS (Windows installer)
-npm run dist -- "-c.extraMetadata.version=$Version"
+npm run dist -- --win --publish never "-c.extraMetadata.version=$Version"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Electron packaging completed." -ForegroundColor Green

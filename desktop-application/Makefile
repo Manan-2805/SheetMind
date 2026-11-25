@@ -9,7 +9,7 @@ API_PORT ?= 8000
 export SHEETMIND_BUILD_VERSION = $(VERSION)
 
 ifeq ($(OS),Windows_NT)
-PACKAGE_COMMAND = $(POWERSHELL) -NoProfile -File build-windows.ps1 -Version "$$SHEETMIND_BUILD_VERSION"
+PACKAGE_COMMAND = $(POWERSHELL) -NoProfile -ExecutionPolicy RemoteSigned -File build-windows.ps1 -Version "$(VERSION)"
 else ifeq ($(shell uname -s),Darwin)
 PACKAGE_COMMAND = bash build-macos.sh "$$SHEETMIND_BUILD_VERSION"
 else ifeq ($(shell uname -s),Linux)
