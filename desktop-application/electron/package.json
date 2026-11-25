@@ -19,7 +19,13 @@
         "win": {
             "target": "nsis",
             "artifactName": "SheetMind-${version}-windows-${arch}-setup.${ext}",
-            "icon": "assets/icon.ico"
+            "icon": "assets/icon.ico",
+            "extraResources": [
+                {
+                    "from": "../build/backend/main.dist",
+                    "to": "backend"
+                }
+            ]
         },
         "mac": {
             "target": "dmg",
@@ -41,7 +47,7 @@
             {
                 "from": "../build/backend",
                 "to": "backend",
-                "filter": ["sheetmind-backend", "sheetmind-backend.exe"]
+                "filter": ["sheetmind-backend"]
             },
             {
                 "from": "../build/frontend",

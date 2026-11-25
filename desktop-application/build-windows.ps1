@@ -103,11 +103,9 @@ Write-Host "Frontend build completed." -ForegroundColor Green
 Write-Host "`n[3/5] Compiling Backend with Nuitka..." -ForegroundColor Yellow
 Set-Location "$ROOT\backend"
 
-# Execute Nuitka Compile with heavy optimizations:
-# - '--jobs=8': Speeds up compilation heavily using 8 threads on R7 CPU
-# - '--lto=no': Disables Link Time Optimization, cutting build time by 50%+
-# - Bundles missing dynamic packages: aiofiles, seaborn, matplotlib, numpy, httpx, jinja2
-Write-Host "Compiling backend to native executable (using 8 parallel jobs)..." -ForegroundColor DarkGray
+$BuildJobs = if ($env:SHEETMIND_BUILD_JOBS) { $env:SHEETMIND_BUILD_JOBS } else { "4" }
+$env:MPLBACKEND = "Agg"
+Write-Host "Compiling the standalone backend (using $BuildJobs parallel jobs)..." -ForegroundColor DarkGray
 
 $nuitkaPackages = @(
     "fastapi",
@@ -133,10 +131,9 @@ $nuitkaPackages = @(
 
 $nuitkaArgs = @(
     "--standalone",
-    "--onefile",
-    "--jobs=8",
+    "--jobs=$BuildJobs",
     "--lto=no",
-    "--no-progressbar",
+    "--disable-cache=bytecode",
     "--output-dir=$BackendBuildDir",
     "--output-filename=sheetmind-backend.exe"
 )
@@ -145,7 +142,13 @@ foreach ($pkg in $nuitkaPackages) {
     $nuitkaArgs += "--include-package=$pkg"
 }
 
+# Keep third-party Python code portable without compiling it to thousands of C files.
+foreach ($pkg in @("anyio", "fastapi", "httpx", "matplotlib", "numpy", "openai", "openpyxl", "pandas", "seaborn", "starlette")) {
+    $nuitkaArgs += "--noinclude-custom-mode=${pkg}:bytecode"
+}
+
 $nuitkaArgs += "--include-package-data=uvicorn"
+$nuitkaArgs += "--enable-plugin=no-qt"
 $nuitkaArgs += "--windows-console-mode=disable"
 
 if ($Clean) {
@@ -169,6 +172,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Backend compilation completed successfully." -ForegroundColor Green
+if (-not (Test-Path -LiteralPath "$BackendBuildDir\main.dist\sheetmind-backend.exe" -PathType Leaf)) {
+    throw "Nuitka did not produce the standalone backend executable."
+}
 
 # Step 4: Package Desktop Application with Electron Builder
 Write-Host "`n[4/5] Packaging Desktop Application with Electron Builder..." -ForegroundColor Yellow

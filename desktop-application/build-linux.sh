@@ -99,6 +99,7 @@ NUITKA_ARGS=(
     "--jobs=${SHEETMIND_BUILD_JOBS:-4}"
     "--lto=no"
     "--no-progressbar"
+    "--disable-cache=bytecode"
     "--output-dir=$BACKEND_BUILD_DIR"
     "--output-filename=sheetmind-backend"
 )
