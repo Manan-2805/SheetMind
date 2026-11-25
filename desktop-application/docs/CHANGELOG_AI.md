@@ -1,5 +1,9 @@
 # AI changelog
 
+- Provider settings: store an OpenAI-compatible base URL and exact model ID, test with a chat completion, and use the endpoint across chat, dashboards, and spreadsheet edits. Clear the previous key when changing endpoints without supplying a new key.
+- Manual testing: generate six related synthetic workbooks, a ZIP, and a guide with expected results through Make.
+- Windows packaging: bundle large dependencies as bytecode and ship the standalone backend inside NSIS so the installer performs compression once.
+
 - Native packaging: pass the requested version to PowerShell, package only the backend executable, and give Linux and Windows installers explicit platform and architecture names. Freeze large Python dependencies as bytecode in Linux builds to limit native compilation overhead.
 - Native startup: wait for the local API to report healthy before opening the window, resolve the logo through Vite, and use bundled fonts on first launch.
 - Native live updates: normalize Electron's packaged WebSocket origin on the local datasource connection while keeping the launch token requirement.
