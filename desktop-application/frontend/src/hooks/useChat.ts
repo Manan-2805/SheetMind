@@ -25,6 +25,10 @@ export function useChat() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendFailure, setSendFailure] = useState<{
+    sessionId: string | null;
+    message: string;
+  } | null>(null);
   const [followups, setFollowups] = useState<string[]>([]);
   const [sqlRetryStatus, setSqlRetryStatus] = useState<{
     attempt: number;
@@ -119,6 +123,7 @@ export function useChat() {
 
   const sendChatMessage = useCallback(
     async (content: string, referencedFiles: string[] = []) => {
+      setSendFailure(null);
       let sessionId = activeSessionId;
       let isNewSession = false;
 
@@ -131,10 +136,9 @@ export function useChat() {
           isNewSession = true;
         } catch (err: unknown) {
           const e = err as { message?: string };
-          addToast({
-            type: "error",
-            title: "Error",
-            description: e?.message ?? "Failed to create session for new message",
+          setSendFailure({
+            sessionId: null,
+            message: e?.message ?? "Could not start a conversation.",
           });
           return;
         }
@@ -199,18 +203,15 @@ export function useChat() {
           )
         );
       } catch (err: unknown) {
+        setSqlRetryStatus(null);
         setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
         const e = err as { message?: string };
-        addToast({
-          type: "error",
-          title: "Error",
-          description: e?.message ?? "Failed to send message",
-        });
+        setSendFailure({ sessionId, message: e?.message ?? "Could not send the message." });
       } finally {
         setIsSending(false);
       }
     },
-    [activeSessionId, addToast, navigate]
+    [activeSessionId, navigate]
   );
 
   const deleteMessageBranchHandler = useCallback(
@@ -368,5 +369,6 @@ export function useChat() {
     followups,
     setFollowups,
     sqlRetryStatus,
+    sendError: sendFailure?.sessionId === activeSessionId ? sendFailure.message : null,
   };
 }

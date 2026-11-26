@@ -63,6 +63,7 @@ export function AppShell() {
     setMessages,
     followups,
     sqlRetryStatus,
+    sendError,
   } = useChat();
 
   // Sync route param with chat session
@@ -145,10 +146,7 @@ export function AppShell() {
 
   return (
     <TooltipProvider delay={300}>
-      <div
-        className="flex h-screen overflow-hidden"
-        style={{ backgroundColor: "var(--color-bg-base)" }}
-      >
+      <div className="desktop-workspace flex h-screen gap-2.5 overflow-hidden p-2.5">
         <Sidebar
           activeView={getActiveView()}
           activeDrawer={activeDrawer}
@@ -164,7 +162,7 @@ export function AppShell() {
           onSelectSession={handleSelectSession}
         />
 
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="desktop-glass desktop-content flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
           <Routes>
             <Route path="/data-sources" element={<DataSourcesPage />} />
             <Route path="/saved-queries" element={<SavedQueriesPage />} />
@@ -196,6 +194,7 @@ export function AppShell() {
                   messages={messages}
                   isLoadingMessages={isLoadingMessages}
                   isSending={isSending}
+                  sendError={sendError}
                   sendChatMessage={handleChatSent}
                   loadSessions={loadSessions}
                   activeSessionId={activeSessionId}
@@ -219,6 +218,7 @@ export function AppShell() {
                   messages={[]}
                   isLoadingMessages={false}
                   isSending={isSending}
+                  sendError={sendError}
                   sendChatMessage={handleChatSent}
                   loadSessions={loadSessions}
                   activeSessionId={null}

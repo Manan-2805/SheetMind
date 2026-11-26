@@ -135,13 +135,7 @@ export function ChatInput({
         </div>
       )}
 
-      <div
-        className="rounded-2xl border shadow-sm focus-within:ring-2 focus-within:ring-[color:var(--color-accent)] focus-within:ring-offset-2 focus-within:ring-offset-[color:var(--color-bg-base)]"
-        style={{
-          backgroundColor: "var(--color-bg-elevated)",
-          borderColor: "var(--color-border-default)",
-        }}
-      >
+      <div className="desktop-glass rounded-2xl focus-within:ring-2 focus-within:ring-[color:var(--color-accent)]">
         <div className="flex items-start gap-2 px-4 py-3">
           <button
             onClick={handleHashButtonClick}

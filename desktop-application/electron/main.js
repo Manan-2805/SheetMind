@@ -168,6 +168,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 768,
     webPreferences: {
+      zoomFactor: app.isPackaged && process.platform === "linux" ? 1.06 : 1,
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,

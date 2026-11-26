@@ -102,13 +102,7 @@ export function Sidebar({
   };
 
   return (
-    <div
-      className="flex h-full w-[52px] shrink-0 flex-col items-center py-3 gap-1"
-      style={{
-        backgroundColor: "var(--color-bg-elevated)",
-        borderRight: "1px solid var(--color-border-default)",
-      }}
-    >
+    <div className="desktop-glass flex h-full w-14 shrink-0 flex-col items-center gap-1 rounded-2xl py-3">
       <img
         src={logo}
         alt="SheetMind"
