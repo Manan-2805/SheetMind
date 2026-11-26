@@ -11,3 +11,5 @@ log.txt
 build.log
 *.log
 /test-data/
+/docs/AUDIT_*_REPORT.md
+/docs/AUDIT_*_STATUS.md
