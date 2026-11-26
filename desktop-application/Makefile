@@ -6,6 +6,11 @@ NODE ?= node
 POWERSHELL ?= powershell.exe
 VERSION ?= 1.0.0
 API_PORT ?= 8000
+PREVIEW_PORT ?= 4173
+PREVIEW_BUILD ?= --build
+COMPOSE ?= docker compose
+PREVIEW = $(COMPOSE) -p sheetmind-desktop-preview -f compose.preview.yml
+export PREVIEW_PORT
 export SHEETMIND_BUILD_VERSION = $(VERSION)
 
 ifeq ($(OS),Windows_NT)
@@ -16,7 +21,7 @@ else ifeq ($(shell uname -s),Linux)
 PACKAGE_COMMAND = bash build-linux.sh "$$SHEETMIND_BUILD_VERSION"
 endif
 
-.PHONY: help setup setup-backend setup-frontend setup-electron dev api ui electron test test-data lint format-check typecheck pylint doctor check build package
+.PHONY: help setup setup-backend setup-frontend setup-electron dev api ui electron test test-data lint format-check typecheck pylint doctor check build package preview preview-logs preview-stop
 
 help:
 	@printf '%s\n' \
@@ -24,6 +29,8 @@ help:
 		'  setup                     Sync Python, frontend and Electron dependencies' \
 		'  dev                       Start the complete desktop app' \
 		'  api [API_PORT=8000]       Start only the Python API' \
+		'  preview                  Build and start the desktop browser preview with Docker' \
+		'  preview-logs / preview-stop Follow or stop the preview' \
 		'  ui / electron             Start Vite or Electron separately' \
 		'  test                      Run the backend test suite' \
 		'  test-data                 Generate Excel workbooks and a manual test guide' \
@@ -48,6 +55,17 @@ dev:
 
 api:
 	cd backend && $(UV) run --locked --no-sync python -B main.py $(API_PORT)
+
+preview preview-logs preview-stop: export COMPOSE_DISABLE_ENV_FILE = 1
+
+preview:
+	$(PREVIEW) up $(PREVIEW_BUILD) -d --wait
+
+preview-logs:
+	$(PREVIEW) logs --tail=100 --follow
+
+preview-stop:
+	$(PREVIEW) stop
 
 ui:
 	$(NPM) --prefix frontend run dev -- --host localhost --port 5173 --strictPort

@@ -59,6 +59,14 @@ class LLMClients:
 llm_clients = LLMClients()
 
 
+class ProviderRequestError(RuntimeError):
+    """A provider failure whose message is safe to show to the user."""
+
+    def __init__(self, message: str, *, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
+
 def provider_error_message(error: Exception) -> str:
     """Describe provider errors without exposing response payloads or credentials."""
     if isinstance(error, APIConnectionError):
@@ -97,7 +105,7 @@ async def complete_openai(
 ) -> ChatCompletion:
     """Use basic Chat Completions for compatible hosts and test requests."""
     if not settings.api_key:
-        raise ValueError("Enter an API key for the selected provider.")
+        raise ProviderRequestError("Enter an API key for the selected provider.")
     client = llm_clients.openai(settings.api_key, settings.base_url)
     model = settings.model
     options = {}
@@ -113,10 +121,16 @@ async def complete_openai(
             if json_object:
                 options["response_format"] = {"type": "json_object"}
     try:
-        return await client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=model, messages=cast(Iterable[ChatCompletionMessageParam], messages), **options
         )
     except OpenAIError as error:
         if test_connection:
             raise
-        raise RuntimeError(provider_error_message(error)) from None
+        status = error.status_code if isinstance(error, APIStatusError) else None
+        raise ProviderRequestError(provider_error_message(error), status=status) from None
+    if not test_connection and (
+        not completion.choices or not (completion.choices[0].message.content or "").strip()
+    ):
+        raise ProviderRequestError("The selected model returned no text. Check its chat settings.")
+    return completion

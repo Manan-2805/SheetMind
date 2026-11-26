@@ -143,3 +143,34 @@ class ProviderSettingsTests(IsolatedAsyncioTestCase):
                 [{"role": "user", "content": "Write a title as JSON."}],
             )
         self.assertEqual(result, {"title": "Sales"})
+
+    async def test_chat_failure_includes_reference_but_hides_provider_payload(self):
+        """Return a durable, safe diagnostic when the provider rejects the key."""
+        await self.client.put(
+            "/api/settings",
+            json={
+                "openai": {"base_url": "https://compatible.example/v1", "api_key": "fake-secret"}
+            },
+        )
+        session = await self.client.post("/api/chat/sessions", json={})
+        session_id = session.json()["id"]
+
+        def reject(_request):
+            return Response(401, json={"error": "provider echoed fake-secret"})
+
+        with (
+            patch(
+                "services.llm_client.DefaultAsyncHttpxClient",
+                side_effect=lambda **kwargs: AsyncClient(transport=MockTransport(reject), **kwargs),
+            ),
+            self.assertLogs("sheetmind", level="ERROR") as logs,
+        ):
+            response = await self.client.post(
+                f"/api/chat/sessions/{session_id}/messages", json={"content": "Count the orders"}
+            )
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("provider rejected the key", response.json()["detail"])
+        reference = response.json()["detail"].split("Reference: ")[-1]
+        self.assertRegex(reference, r"^[0-9a-f]{8}$")
+        self.assertTrue(any(reference in line and "401" in line for line in logs.output))
+        self.assertNotIn("fake-secret", response.text + "".join(logs.output))

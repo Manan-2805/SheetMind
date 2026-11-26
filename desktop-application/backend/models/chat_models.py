@@ -22,7 +22,12 @@ from schemas.chat_schemas import (
 )
 from services.chart_service import generate_chart
 from services.duckdb_service import get_connection
-from services.llm_client import complete_openai, llm_clients, unwrap_json_fence
+from services.llm_client import (
+    ProviderRequestError,
+    complete_openai,
+    llm_clients,
+    unwrap_json_fence,
+)
 from services.logging_service import get_logger
 from services.prompt_debug_service import append_debug_response, write_debug_prompt
 from services.query_service import get_result_row_limit
@@ -775,6 +780,8 @@ async def generate_sql(messages: list[dict]) -> dict[str, Any]:
             )
             return res
 
+        except ProviderRequestError:
+            raise
         except Exception as e:
             get_logger().warning(
                 "SQL generation attempt %s failed: %s", attempt + 1, type(e).__name__
@@ -930,6 +937,15 @@ async def generate_title(content: str) -> str:
         res = resp.json()["response"].strip()
         append_debug_response(debug_path, res, "TITLE GENERATION RESPONSE")
         return res
+
+
+async def _title_for_new_session(content: str) -> str | None:
+    """Keep the default title when a title-only provider call fails."""
+    try:
+        return await generate_title(content)
+    except ProviderRequestError as error:
+        get_logger().warning("Chat title generation failed (upstream HTTP %s)", error.status)
+        return None
 
 
 async def generate_query_label(nl_query: str, sql_query: str) -> str:
@@ -1244,12 +1260,13 @@ async def create_message(
     # 3. Generating SQL
     await _broadcast_ws_event(session_id, {"type": "chat_status", "status": "generating_sql"})
     if is_first:
-        title_task = generate_title(content)
+        title_task = _title_for_new_session(content)
         sql_task = generate_sql(messages)
         title, sql_res = await asyncio.gather(title_task, sql_task)
-        await asyncio.to_thread(
-            conn.execute, "UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id]
-        )
+        if title:
+            await asyncio.to_thread(
+                conn.execute, "UPDATE chat_sessions SET title = ? WHERE id = ?", [title, session_id]
+            )
         session_title = title
     else:
         sql_res = await generate_sql(messages)
@@ -1299,6 +1316,11 @@ async def create_message(
                 sql_exec_succeeded = True
                 break
             except Exception as exec_err:
+                get_logger().warning(
+                    "Chat query execution failed on attempt %s: %s",
+                    retry_count + 1,
+                    type(exec_err).__name__,
+                )
                 sql_exec_ms = int((time.time() - t2) * 1000)
                 sql_error = str(exec_err)
                 failed_attempts.append({"sql": current_sql, "error": sql_error})
