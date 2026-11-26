@@ -5,7 +5,13 @@ from typing import Any
 
 import pandas as pd
 
+from models.settings_models import get_settings
 from schemas.chat_schemas import ResultColumn, ResultTable
+
+
+def get_result_row_limit() -> int:
+    """Return the configured maximum number of rows per analytical result page."""
+    return max(1, get_settings().result_row_limit)
 
 
 def dataframe_to_result_table(

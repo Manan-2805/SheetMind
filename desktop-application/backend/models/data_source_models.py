@@ -15,6 +15,7 @@ from schemas.data_source_schemas import (
     SheetResponse,
 )
 from services.duckdb_service import get_connection
+from services.logging_service import get_logger
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,8 @@ def get_preview(source_id: str, sheet_name: str | None = None) -> PreviewRespons
 
     try:
         conn.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
-    except Exception:
+    except Exception as exc:
+        get_logger().warning("Could not preview imported data: %s", type(exc).__name__)
         return PreviewResponse(columns=[], rows=[])
 
     df = conn.execute(f"SELECT * FROM {table_name} LIMIT 50").fetchdf()
@@ -170,7 +172,7 @@ def list_for_autocomplete() -> AutocompleteResponse:
             files_map[filename].add(sheet_name)
 
     files = [
-        AutocompleteFile(filename=filename, sheets=sorted(list(sheets)))
+        AutocompleteFile(filename=filename, sheets=sorted(sheets))
         for filename, sheets in files_map.items()
     ]
     return AutocompleteResponse(files=files)

@@ -5,6 +5,7 @@ import threading
 import duckdb
 
 from dependencies import current_username
+from services.logging_service import get_logger
 from services.storage_service import get_user_db_path
 
 _conns: dict[str, duckdb.DuckDBPyConnection] = {}
@@ -13,7 +14,6 @@ _conn_lock = threading.Lock()
 
 def get_connection() -> duckdb.DuckDBPyConnection:
     """Execute the get_connection operation."""
-    global _conns
     username = current_username.get("default")
     safe_username = "".join(c for c in username if c.isalnum() or c in ("_", "-")) or "default"
 
@@ -21,7 +21,8 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
     with _conn_lock:
         if db_path not in _conns:
-            conn = duckdb.connect(db_path)
+            conn = duckdb.connect(db_path, config={"enable_external_access": "false"})
+            conn.execute("SET lock_configuration = true")
             init_schema(conn)
             _conns[db_path] = conn
 
@@ -36,8 +37,8 @@ def close_connection(username: str) -> None:
     if conn:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            get_logger().warning("Could not close a user database: %s", type(exc).__name__)
 
 
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:

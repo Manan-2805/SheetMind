@@ -1,5 +1,5 @@
 import { AlertTriangle, ChevronLeft, Save, X } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { EditorAIPanel } from "@/components/editor/EditorAIPanel";
@@ -22,6 +22,10 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     closeFile,
     session,
     isLoading,
+    workbookVersion,
+    history,
+    loadHistory,
+    restoreBackup,
     activeSheetIndex,
     univerRef,
     onWorkbookReady,
@@ -41,6 +45,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     saveFile,
   } = useExcelEditor();
   const [searchParams] = useSearchParams();
+  const [historyId, setHistoryId] = useState("");
   const navigate = useNavigate();
 
   const handleSelectFile = useCallback(
@@ -132,6 +137,39 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
             </div>
           )}
 
+          <details
+            className="relative text-xs"
+            onToggle={(event) => {
+              if (event.currentTarget.open) {
+                setHistoryId("");
+                void loadHistory();
+              }
+            }}
+          >
+            <summary className="cursor-pointer">History</summary>
+            <div className="absolute right-0 top-6 z-30 flex gap-2 rounded-lg border border-border-default bg-bg-elevated p-2">
+              <select
+                aria-label="Workbook revision"
+                value={historyId}
+                onChange={(event) => setHistoryId(event.target.value)}
+              >
+                <option value="">Select a revision</option>
+                {history.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {new Date(entry.appliedAt).toLocaleString()} · {entry.operationType}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void restoreBackup(historyId)}
+                disabled={!historyId || session.isDirty || isLoading}
+              >
+                Restore
+              </button>
+            </div>
+          </details>
+
           <button
             onClick={saveFile}
             disabled={!session.isDirty || isSaving}
@@ -172,6 +210,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           <div className="flex flex-col h-full min-h-0 bg-bg-base">
             <div className="flex-1 relative min-h-0 h-full w-full">
               <EditorGrid
+                key={workbookVersion}
                 sheets={session.sheets}
                 activeSheetIndex={activeSheetIndex}
                 formattingMap={session.formattingMap}

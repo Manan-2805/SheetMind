@@ -1,11 +1,13 @@
 """Module containing excel_editor_schemas functionality."""
 
 from datetime import datetime
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-CellValue = Union[str, int, float, bool, Any, None]
+from schemas.excel_operations import Operations, OperationType
+
+CellValue = str | int | float | bool | Any | None
 
 
 class SheetData(BaseModel):
@@ -16,6 +18,7 @@ class SheetData(BaseModel):
     rows: list[list[CellValue]] | None = None
     rowCount: int
     colCount: int
+    formulaCells: list[str] | None = None
 
 
 class ExcelEditorFile(BaseModel):
@@ -24,6 +27,7 @@ class ExcelEditorFile(BaseModel):
     fileId: str
     filename: str
     sheetCount: int
+    editable: bool
     fileSizeBytes: int
     uploadedAt: datetime
 
@@ -66,8 +70,8 @@ class MutationRequest(BaseModel):
 class MutationResponse(BaseModel):
     """Schema or class representation for MutationResponse."""
 
-    operationType: str
-    pandasCode: str
+    operationType: OperationType
+    operations: Operations
     operationSummary: str
     confidence: int
     diffRows: list[DiffRow]
@@ -80,7 +84,7 @@ class ApplyRequest(BaseModel):
 
     fileId: str
     sheetName: str
-    pandasCode: str
+    operations: Operations
     currentRows: list[list[CellValue]]
     columns: list[str]
 
@@ -93,6 +97,13 @@ class SaveRequest(BaseModel):
     formattingMap: dict[str, CellFormatting]
 
 
+class RestoreRequest(BaseModel):
+    """Restore a workbook revision selected from edit history."""
+
+    fileId: str
+    historyId: str
+
+
 class HistoryRecord(BaseModel):
     """Schema or class representation for HistoryRecord."""
 
@@ -101,7 +112,6 @@ class HistoryRecord(BaseModel):
     operationType: str
     rowsAffected: int
     appliedAt: datetime
-    backupPath: str
 
 
 class HistoryResponse(BaseModel):

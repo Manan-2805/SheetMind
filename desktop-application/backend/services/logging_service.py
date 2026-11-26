@@ -2,27 +2,22 @@
 
 import logging
 import sys
+from functools import lru_cache
 from logging.handlers import TimedRotatingFileHandler
 
 from services.storage_service import get_app_root
 
-_LOGGER = None
 
-
+@lru_cache(maxsize=1)
 def get_logger() -> logging.Logger:
     """Execute the get_logger operation."""
-    global _LOGGER
-    if _LOGGER is not None:
-        return _LOGGER
-
     # Create logger
     logger = logging.getLogger("sheetmind")
     logger.setLevel(logging.INFO)
 
     # Prevent duplicate handlers if initialized multiple times
     if logger.handlers:
-        _LOGGER = logger
-        return _LOGGER
+        return logger
 
     # Format
     formatter = logging.Formatter(
@@ -46,7 +41,5 @@ def get_logger() -> logging.Logger:
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     except Exception as e:
-        print(f"Failed to initialize rotating file log handler: {e}")
-
-    _LOGGER = logger
-    return _LOGGER
+        logger.warning("Could not initialize rotating log file: %s", type(e).__name__)
+    return logger

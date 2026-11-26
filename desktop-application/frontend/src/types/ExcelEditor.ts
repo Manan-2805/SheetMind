@@ -6,12 +6,14 @@ export interface SheetData {
   rows?: CellValue[][]; // row-major 2D array
   rowCount: number;
   colCount: number;
+  formulaCells?: string[];
 }
 
 export interface ExcelEditorFile {
   fileId: string; // matches excel_files.id in DuckDB
   filename: string;
   sheetCount: number;
+  editable: boolean;
   fileSizeBytes: number;
   uploadedAt: string;
 }
@@ -43,6 +45,44 @@ export type MutationOperationType =
   | "column_delete"
   | "row_add";
 
+export type MutationExpression =
+  | { col: string }
+  | { const: CellValue }
+  | {
+      op: "add" | "sub" | "mul" | "div" | "upper" | "lower" | "strip" | "title" | "replace";
+      args: MutationExpression[];
+    };
+
+interface MutationFilter {
+  column: string;
+  op:
+    | "eq"
+    | "ne"
+    | "lt"
+    | "lte"
+    | "gt"
+    | "gte"
+    | "contains"
+    | "startswith"
+    | "endswith"
+    | "isnull"
+    | "notnull";
+  value?: CellValue;
+}
+
+export type MutationOperation =
+  | {
+      type: "value_update" | "value_fill";
+      column: string;
+      value: MutationExpression;
+      filters?: MutationFilter[];
+    }
+  | { type: "row_delete"; filters?: MutationFilter[] }
+  | { type: "row_add"; rows: Record<string, CellValue>[] }
+  | { type: "column_add"; column: string; value?: MutationExpression; filters?: MutationFilter[] }
+  | { type: "column_delete"; column: string }
+  | { type: "formula_injection"; column: string; template: string; filters?: MutationFilter[] };
+
 export interface DiffRow {
   rowIndex: number;
   columnName: string;
@@ -60,7 +100,8 @@ export interface PendingChange {
   diffRows: DiffRow[]; // ALL changed rows, no limit
   status: "pending" | "accepted" | "rejected";
   appliedAt?: string; // ISO timestamp, set on accept
-  generatedCode?: string; // pandas operation code shown in UI
+  operations: MutationOperation[];
+  operationSummary: string;
 }
 
 export interface EditorSession {

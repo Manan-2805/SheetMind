@@ -43,11 +43,11 @@ export default function Footer() {
           </div>
 
           <Link
-            to="/login"
+            to="/download"
             className="text-sm transition-colors duration-200"
             style={{ color: 'var(--color-text-secondary)' }}
           >
-            Login
+            Download
           </Link>
         </div>
 

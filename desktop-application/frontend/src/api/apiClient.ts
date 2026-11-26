@@ -1,7 +1,9 @@
 import axios from "axios";
+import { apiBaseUrl, apiToken } from "./apiUrl";
 
 export const apiClient = axios.create({
-  baseURL: window.__SHEETMIND_API_URL__ || "http://localhost:8000/api",
+  baseURL: apiBaseUrl,
+  allowAbsoluteUrls: false,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -9,5 +11,6 @@ apiClient.interceptors.request.use((config) => {
   if (username) {
     config.headers["X-Username"] = username;
   }
+  if (apiToken) config.headers["X-SheetMind-Token"] = apiToken;
   return config;
 });

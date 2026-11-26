@@ -12,7 +12,8 @@ from schemas.dashboard import (
     DashboardWidgetRead,
 )
 from services.duckdb_service import get_connection
-from services.query_service import dataframe_to_result_table
+from services.query_service import get_result_row_limit
+from services.sql_guard import run_user_query
 
 
 def list_dashboards(
@@ -242,6 +243,7 @@ def refresh_dashboard(dashboard_id: str) -> dict[str, Any]:
     ).fetchdf()
 
     results = {}
+    row_limit = get_result_row_limit()
     for _, w_row in widgets_df.iterrows():
         w_id = str(w_row["id"])
         sq_id = str(w_row["saved_query_id"])
@@ -253,16 +255,13 @@ def refresh_dashboard(dashboard_id: str) -> dict[str, Any]:
 
         sql_query = sq_df.iloc[0]["sql_query"]
         try:
-            res_df = conn.execute(sql_query).fetchdf()
+            table = run_user_query(conn, sql_query, row_limit)
             # Mark query as used
             conn.execute(
                 "UPDATE saved_queries SET use_count = use_count + 1, last_used_at = current_timestamp WHERE id = ?",
                 [sq_id],
             )
 
-            # Default row limit is enough for typical dashboard widget
-            # (widgets usually do their own agg, or we just pass the first 500 rows)
-            table = dataframe_to_result_table(res_df, row_limit=500)
             results[w_id] = {"data": table.model_dump()}
         except Exception as e:
             results[w_id] = {"error": str(e)}

@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Database
     postgres_host: str
@@ -14,17 +14,9 @@ class Settings(BaseSettings):
     postgres_password: str
 
     # App
-    secret_key: str
-    jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 10080
     environment: str = "development"
     maintenance_mode: bool = False
     allowed_origins: str = "http://localhost:5173"
-
-    # Google OAuth
-    google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str
 
     @property
     def database_url(self) -> str:

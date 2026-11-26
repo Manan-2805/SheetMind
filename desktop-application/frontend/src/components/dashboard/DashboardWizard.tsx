@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,8 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import GridLayout from "react-grid-layout";
 import { v4 as uuidv4 } from "uuid";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 
 import { dashboardsApi } from "../../api/dashboardsApi";
 import { getSavedQueries, runSavedQuery } from "../../api/savedQueriesApi";
@@ -28,8 +31,11 @@ import type {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Grid = GridLayout as any;
-import "react-grid-layout/css/styles.css";
-import "react-resizable/css/styles.css";
+
+function dashboardError(error: unknown, fallback: string): string {
+  const detail: unknown = isAxiosError(error) ? error.response?.data?.detail : undefined;
+  return typeof detail === "string" ? detail : fallback;
+}
 
 interface DashboardWizardProps {
   onCancel: () => void;
@@ -387,11 +393,10 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({
         });
       }
     } catch (e) {
-      console.error(e);
       addToast({
         type: "error",
         title: "Generation Failed",
-        description: "Failed to generate a dashboard name with AI.",
+        description: dashboardError(e, "Could not generate a dashboard name."),
       });
     } finally {
       setIsNamingLoading(false);
@@ -484,8 +489,11 @@ export const DashboardWizard: React.FC<DashboardWizardProps> = ({
       setWidgets(newWidgets);
       setStep(2);
     } catch (e) {
-      console.error(e);
-      alert("Failed to generate layout.");
+      addToast({
+        type: "error",
+        title: "Generation Failed",
+        description: dashboardError(e, "Could not generate a dashboard layout."),
+      });
     } finally {
       setIsAiLoading(false);
     }

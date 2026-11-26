@@ -16,7 +16,7 @@ router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
 
 @router.get("", response_model=ArtifactsResponse)
-async def get_artifacts() -> ArtifactsResponse:
+def get_artifacts() -> ArtifactsResponse:
     """Execute the get_artifacts operation."""
     return artifact_models.get_all()
 
@@ -38,7 +38,7 @@ def _get_row_limit() -> int:
 
 
 @router.get("/{artifact_id}/download")
-async def download_artifact(artifact_id: str) -> FileResponse:
+def download_artifact(artifact_id: str) -> FileResponse:
     """Execute the download_artifact operation."""
     row = artifact_models.get_by_id(artifact_id)
     if not row:
@@ -48,7 +48,7 @@ async def download_artifact(artifact_id: str) -> FileResponse:
 
 
 @router.get("/{artifact_id}/data", response_model=ResultTable)
-async def get_artifact_data(artifact_id: str) -> ResultTable:
+def get_artifact_data(artifact_id: str) -> ResultTable:
     """Execute the get_artifact_data operation."""
     row = artifact_models.get_by_id(artifact_id)
     if not row:
@@ -62,7 +62,7 @@ async def get_artifact_data(artifact_id: str) -> ResultTable:
 
 
 @router.put("/{artifact_id}", response_model=ArtifactExportResponse)
-async def rename_artifact(artifact_id: str, body: RenameArtifactRequest) -> ArtifactExportResponse:
+def rename_artifact(artifact_id: str, body: RenameArtifactRequest) -> ArtifactExportResponse:
     """Execute the rename_artifact operation."""
     updated = artifact_models.rename(artifact_id, body.title)
     if not updated:
@@ -71,7 +71,7 @@ async def rename_artifact(artifact_id: str, body: RenameArtifactRequest) -> Arti
 
 
 @router.delete("/{artifact_id}", response_model=SuccessResponse)
-async def delete_artifact(artifact_id: str) -> SuccessResponse:
+def delete_artifact(artifact_id: str) -> SuccessResponse:
     """Execute the delete_artifact operation."""
     ok = artifact_models.delete(artifact_id)
     if not ok:

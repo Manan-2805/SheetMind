@@ -3,3 +3,5 @@ web-application/.env
 Temp
 lint-reports
 reports
+
+.env

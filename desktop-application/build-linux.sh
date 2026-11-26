@@ -26,11 +26,6 @@ echo "   SheetMind Desktop Linux Builder v$VERSION"
 echo "============================================="
 echo "Logging build process to: $LOG_PATH"
 
-# Close any running instances if any
-echo "Closing any active processes..."
-pkill -f sheetmind-backend || true
-pkill -f electron || true
-
 # Set Nuitka Cache Dir environment variable to use local directory
 export NUITKA_CACHE_DIR="$ROOT/backend/.nuitka-cache"
 mkdir -p "$NUITKA_CACHE_DIR"
@@ -73,22 +68,6 @@ echo "Frontend build completed."
 echo -e "\n[3/5] Compiling Backend with Nuitka..."
 cd "$ROOT/backend"
 
-# Activate Virtual Environment or Create if missing
-if [ ! -f "$ROOT/backend/.venv/bin/activate" ]; then
-    echo "Virtual environment not found. Creating a new one using uv..."
-    uv venv "$ROOT/backend/.venv"
-    source "$ROOT/backend/.venv/bin/activate"
-    echo "Installing dependencies using uv..."
-    uv pip install -r pyproject.toml
-else
-    echo "Activating python virtual environment..."
-    source "$ROOT/backend/.venv/bin/activate"
-fi
-
-# Install Nuitka using uv if not already installed
-echo "Checking build dependencies with uv..."
-uv pip install nuitka ordered-set zstandard
-
 # Execute Nuitka Compile with heavy optimizations
 echo "Compiling backend to native executable..."
 
@@ -117,15 +96,21 @@ NUITKA_PACKAGES=(
 NUITKA_ARGS=(
     "--standalone"
     "--onefile"
-    "--jobs=8"
+    "--jobs=${SHEETMIND_BUILD_JOBS:-4}"
     "--lto=no"
     "--no-progressbar"
+    "--disable-cache=bytecode"
     "--output-dir=$BACKEND_BUILD_DIR"
     "--output-filename=sheetmind-backend"
 )
 
 for pkg in "${NUITKA_PACKAGES[@]}"; do
     NUITKA_ARGS+=("--include-package=$pkg")
+done
+
+# Bundle large Python dependencies as bytecode to avoid generating C for them.
+for pkg in anyio fastapi httpx matplotlib numpy openai openpyxl pandas seaborn starlette; do
+    NUITKA_ARGS+=("--noinclude-custom-mode=$pkg:bytecode")
 done
 
 NUITKA_ARGS+=("--include-package-data=uvicorn")
@@ -137,12 +122,7 @@ else
     echo "Incremental build: Nuitka will preserve intermediate output directory (main.build/) for caching."
 fi
 
-python -B -m nuitka "${NUITKA_ARGS[@]}" main.py
-
-# Deactivate Venv
-if [ -n "$VIRTUAL_ENV" ]; then
-    deactivate
-fi
+uv run --locked --with nuitka --with ordered-set --with zstandard python -B -m nuitka "${NUITKA_ARGS[@]}" main.py
 
 echo "Backend compilation completed successfully."
 
@@ -150,20 +130,12 @@ echo "Backend compilation completed successfully."
 echo -e "\n[4/5] Packaging Desktop Application with Electron Builder..."
 cd "$ROOT/electron"
 
-# Update package.json version
-echo "Updating package.json version to $VERSION..."
-node -e "
-const fs = require('fs');
-const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-pkg.version = '$VERSION';
-fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-"
-
 echo "Running npm ci for Electron..."
 npm ci
 
 echo "Building final desktop installer..."
-npm run dist -- --linux
+npm run dist -- --linux --publish never -c.extraMetadata.version="$VERSION" \
+    -c.electronDist="$ROOT/electron/node_modules/electron/dist"
 
 echo "Electron packaging completed."
 

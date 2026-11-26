@@ -1,3 +1,5 @@
+import { datasourceSocketUrl } from "@/api/apiUrl";
+
 class WebSocketService {
   private socket: WebSocket | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -7,6 +9,7 @@ class WebSocketService {
   private isConnecting: boolean = false;
 
   public connect(username: string = "default") {
+    if (username !== this.username) this.disconnect();
     this.username = username;
     if (
       this.socket &&
@@ -24,9 +27,7 @@ class WebSocketService {
     }
 
     try {
-      this.socket = new WebSocket(
-        `ws://localhost:8000/api/ws/datasources?username=${encodeURIComponent(username)}`
-      );
+      this.socket = new WebSocket(datasourceSocketUrl(username));
 
       this.socket.onopen = () => {
         this.isConnecting = false;
@@ -95,6 +96,9 @@ class WebSocketService {
     }
     if (this.socket) {
       this.socket.onclose = null;
+      this.socket.onmessage = null;
+      this.socket.onopen = null;
+      this.socket.onerror = null;
       this.socket.close();
       this.socket = null;
     }

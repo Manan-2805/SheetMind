@@ -3,6 +3,7 @@ import axios, { type AxiosResponse } from "axios";
 import type {
   PullModelResponse,
   Settings,
+  SettingsUpdate,
   TestLLMRequest,
   TestLLMResponse,
 } from "@/types/Settings";
@@ -36,7 +37,7 @@ export async function getSettings(): Promise<Settings> {
   }
 }
 
-export async function updateSettings(data: Partial<Settings>): Promise<Settings> {
+export async function updateSettings(data: SettingsUpdate): Promise<Settings> {
   try {
     const res: AxiosResponse<Settings> = await client.put("/settings", data);
     return res.data;
@@ -108,7 +109,7 @@ export async function exportSettings(): Promise<void> {
   }
 }
 
-export async function importSettings(file: File): Promise<{ success: boolean }> {
+export async function importSettings(file: File): Promise<Settings> {
   try {
     const form = new FormData();
     form.append("file", file);

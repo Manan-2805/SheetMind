@@ -156,7 +156,7 @@ export function DataSourcesPage() {
     };
   }, [load]);
 
-  const supportedExtensions = [".xlsx", ".xls", ".csv", ".ods"];
+  const supportedExtensions = [".xlsx", ".csv"];
 
   const handleUpload = async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
@@ -172,7 +172,7 @@ export function DataSourcesPage() {
       addToast({
         type: "warning",
         title: "Unsupported files ignored",
-        description: `Ignored ${ignoredCount} file(s) that are not Excel or CSV.`,
+        description: `Ignored ${ignoredCount} file(s). Upload .xlsx or .csv files.`,
       });
     }
 
@@ -852,12 +852,12 @@ export function DataSourcesPage() {
                 or click to browse
               </p>
               <p className="text-ui-label mt-2" style={{ color: "var(--color-text-tertiary)" }}>
-                .xlsx, .xls, .csv, .ods supported
+                .xlsx and .csv supported
               </p>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv,.ods"
+                accept=".xlsx,.csv"
                 multiple
                 className="hidden"
                 onChange={(e) => {

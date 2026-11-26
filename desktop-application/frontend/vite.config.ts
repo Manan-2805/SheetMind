@@ -15,15 +15,4 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@univerjs/presets", "@univerjs/preset-sheets-core"],
   },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("@univerjs")) {
-            return "univer";
-          }
-        },
-      },
-    },
-  },
 });

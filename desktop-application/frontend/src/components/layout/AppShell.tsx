@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Toast } from "@/components/ui/Toast";
@@ -7,12 +7,23 @@ import { HistoryDrawer } from "@/drawers/HistoryDrawer";
 import { useChat } from "@/hooks/useChat";
 import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { ChatPage } from "@/pages/ChatPage";
-import { DashboardsPage } from "@/pages/DashboardsPage";
 import { DataSourcesPage } from "@/pages/DataSourcesPage";
-import { ExcelEditorPage } from "@/pages/ExcelEditorPage";
 import { SavedQueriesPage } from "@/pages/SavedQueriesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { websocketService } from "@/services/websocketService";
+
+const ExcelEditorPage = lazy(() =>
+  import("@/pages/ExcelEditorPage").then((module) => ({ default: module.ExcelEditorPage }))
+);
+const DashboardsPage = lazy(() =>
+  import("@/pages/DashboardsPage").then((module) => ({ default: module.DashboardsPage }))
+);
+
+const pageFallback = (
+  <div role="status" className="p-6 text-sm">
+    Loading page…
+  </div>
+);
 
 type ActiveView =
   | "chat"
@@ -161,9 +172,20 @@ export function AppShell() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route
               path="/excel-editor"
-              element={<ExcelEditorPage onViewChange={handleViewChange} />}
+              element={
+                <Suspense fallback={pageFallback}>
+                  <ExcelEditorPage onViewChange={handleViewChange} />
+                </Suspense>
+              }
             />
-            <Route path="/dashboards" element={<DashboardsPage />} />
+            <Route
+              path="/dashboards"
+              element={
+                <Suspense fallback={pageFallback}>
+                  <DashboardsPage />
+                </Suspense>
+              }
+            />
 
             <Route
               path="/:sessionId"

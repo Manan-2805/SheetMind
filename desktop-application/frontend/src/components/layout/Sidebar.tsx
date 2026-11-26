@@ -10,6 +10,7 @@ import {
   TableProperties,
 } from "lucide-react";
 
+import logo from "@/assets/logo.png";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/utils/cn";
 
@@ -109,7 +110,7 @@ export function Sidebar({
       }}
     >
       <img
-        src="/favicon.png"
+        src={logo}
         alt="SheetMind"
         className="mb-2 flex h-8 w-8 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"

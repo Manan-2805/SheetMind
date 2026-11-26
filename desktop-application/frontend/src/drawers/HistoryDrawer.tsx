@@ -11,7 +11,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { getSessions } from "@/api/chatApi";
+import { deleteSession, getSessions, updateSession } from "@/api/chatApi";
 import { SkeletonText } from "@/components/skeletons/SkeletonText";
 import { Drawer } from "@/components/ui/Drawer";
 import { useToast } from "@/hooks/useToast";
@@ -206,11 +206,9 @@ export function HistoryDrawer({
                                   onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                      const updated = await import("@/api/chatApi").then((m) =>
-                                        m.updateSession(session.id, {
-                                          is_favorite: !session.is_favorite,
-                                        })
-                                      );
+                                      const updated = await updateSession(session.id, {
+                                        is_favorite: !session.is_favorite,
+                                      });
                                       setSessions((prev) =>
                                         prev.map((s) => (s.id === session.id ? updated : s))
                                       );
@@ -240,9 +238,9 @@ export function HistoryDrawer({
                                     );
                                     if (newTitle && newTitle !== session.title) {
                                       try {
-                                        const updated = await import("@/api/chatApi").then((m) =>
-                                          m.updateSession(session.id, { title: newTitle })
-                                        );
+                                        const updated = await updateSession(session.id, {
+                                          title: newTitle,
+                                        });
                                         setSessions((prev) =>
                                           prev.map((s) => (s.id === session.id ? updated : s))
                                         );
@@ -266,9 +264,7 @@ export function HistoryDrawer({
                                     e.stopPropagation();
                                     if (confirm("Are you sure you want to delete this session?")) {
                                       try {
-                                        await import("@/api/chatApi").then((m) =>
-                                          m.deleteSession(session.id)
-                                        );
+                                        await deleteSession(session.id);
                                         setSessions((prev) =>
                                           prev.filter((s) => s.id !== session.id)
                                         );
@@ -361,11 +357,9 @@ export function HistoryDrawer({
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    const updated = await import("@/api/chatApi").then((m) =>
-                                      m.updateSession(session.id, {
-                                        is_favorite: !session.is_favorite,
-                                      })
-                                    );
+                                    const updated = await updateSession(session.id, {
+                                      is_favorite: !session.is_favorite,
+                                    });
                                     setSessions((prev) =>
                                       prev.map((s) => (s.id === session.id ? updated : s))
                                     );
@@ -395,9 +389,9 @@ export function HistoryDrawer({
                                   );
                                   if (newTitle && newTitle !== session.title) {
                                     try {
-                                      const updated = await import("@/api/chatApi").then((m) =>
-                                        m.updateSession(session.id, { title: newTitle })
-                                      );
+                                      const updated = await updateSession(session.id, {
+                                        title: newTitle,
+                                      });
                                       setSessions((prev) =>
                                         prev.map((s) => (s.id === session.id ? updated : s))
                                       );
@@ -421,9 +415,7 @@ export function HistoryDrawer({
                                   e.stopPropagation();
                                   if (confirm("Are you sure you want to delete this session?")) {
                                     try {
-                                      await import("@/api/chatApi").then((m) =>
-                                        m.deleteSession(session.id)
-                                      );
+                                      await deleteSession(session.id);
                                       setSessions((prev) =>
                                         prev.filter((s) => s.id !== session.id)
                                       );

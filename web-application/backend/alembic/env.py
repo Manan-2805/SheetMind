@@ -1,7 +1,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool, text
 
 from app.config import settings
 from app.database import Base
@@ -9,22 +9,22 @@ from app.models import ApiLog, BlockedIP, User  # noqa: F401
 
 config = context.config
 
-if config.config_file_name is not None:
+if config.config_file_name is not None and config.attributes.get("configure_logging", True):
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
-
 target_metadata = Base.metadata
+MIGRATION_LOCK_ID = 0x53484545544D494E
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    """Serialize schema upgrades across backend workers and manual runs."""
+    connectable = create_engine(settings.database_url, poolclass=pool.NullPool)
 
-    with connectable.connect() as connection:
+    with connectable.begin() as connection:
+        connection.execute(
+            text("SELECT pg_advisory_xact_lock(:lock_id)"),
+            {"lock_id": MIGRATION_LOCK_ID},
+        )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

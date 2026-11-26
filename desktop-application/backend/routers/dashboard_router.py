@@ -1,8 +1,10 @@
 """Module containing dashboard_router functionality."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import ValidationError
 
 from schemas.common_schemas import SuccessResponse
 from schemas.dashboard import (
@@ -21,7 +23,7 @@ router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
 
 @router.get("", response_model=list[DashboardRead])
-async def list_dashboards(
+def list_dashboards(
     q: str | None = None,
     filter: str = Query("all", description="all, favorites, recent"),
     sort: str = Query("name", description="name, created, viewed"),
@@ -34,7 +36,7 @@ async def list_dashboards(
 
 
 @router.post("", response_model=DashboardRead)
-async def create_dashboard(data: DashboardCreate):
+def create_dashboard(data: DashboardCreate):
     """Execute the create_dashboard operation."""
     try:
         return dashboard_service.create_dashboard(data)
@@ -43,7 +45,7 @@ async def create_dashboard(data: DashboardCreate):
 
 
 @router.get("/{dashboard_id}", response_model=DashboardRead)
-async def get_dashboard(dashboard_id: str):
+def get_dashboard(dashboard_id: str):
     """Execute the get_dashboard operation."""
     try:
         dashboard = dashboard_service.get_dashboard(dashboard_id)
@@ -57,7 +59,7 @@ async def get_dashboard(dashboard_id: str):
 
 
 @router.put("/{dashboard_id}", response_model=DashboardRead)
-async def update_dashboard(dashboard_id: str, data: DashboardUpdate):
+def update_dashboard(dashboard_id: str, data: DashboardUpdate):
     """Execute the update_dashboard operation."""
     try:
         updated = dashboard_service.update_dashboard(dashboard_id, data)
@@ -71,7 +73,7 @@ async def update_dashboard(dashboard_id: str, data: DashboardUpdate):
 
 
 @router.delete("/{dashboard_id}", response_model=SuccessResponse)
-async def delete_dashboard(dashboard_id: str):
+def delete_dashboard(dashboard_id: str):
     """Execute the delete_dashboard operation."""
     try:
         success = dashboard_service.delete_dashboard(dashboard_id)
@@ -85,7 +87,7 @@ async def delete_dashboard(dashboard_id: str):
 
 
 @router.get("/{dashboard_id}/refresh", response_model=dict[str, Any])
-async def refresh_dashboard(dashboard_id: str):
+def refresh_dashboard(dashboard_id: str):
     """Execute the refresh_dashboard operation."""
     try:
         results = dashboard_service.refresh_dashboard(dashboard_id)
@@ -94,41 +96,46 @@ async def refresh_dashboard(dashboard_id: str):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _dashboard_name_context(data: AINameGenRequest) -> list[dict[str, Any]]:
+    conn = get_connection()
+    widgets_with_rich_context = []
+    for w in data.widgets:
+        widget_dict = w.model_dump()
+        if w.saved_query_id:
+            # Query saved_queries for details
+            sq_row = conn.execute(
+                "SELECT label, sql_query, natural_query FROM saved_queries WHERE id = ?",
+                [w.saved_query_id],
+            ).fetchone()
+            if sq_row:
+                widget_dict["query_name"] = sq_row[0]
+                widget_dict["sql_query"] = sq_row[1]
+                widget_dict["natural_query"] = sq_row[2]
+        widgets_with_rich_context.append(widget_dict)
+
+    return widgets_with_rich_context
+
+
 @router.post("/generate-name", response_model=AINameGenResponse)
 async def generate_dashboard_name(data: AINameGenRequest):
     """Execute the generate_dashboard_name operation."""
     try:
-        conn = get_connection()
-        widgets_with_rich_context = []
-        for w in data.widgets:
-            widget_dict = w.model_dump()
-            if w.saved_query_id:
-                # Query saved_queries for details
-                sq_row = conn.execute(
-                    "SELECT label, sql_query, natural_query FROM saved_queries WHERE id = ?",
-                    [w.saved_query_id]
-                ).fetchone()
-                if sq_row:
-                    widget_dict["query_name"] = sq_row[0]
-                    widget_dict["sql_query"] = sq_row[1]
-                    widget_dict["natural_query"] = sq_row[2]
-            widgets_with_rich_context.append(widget_dict)
-            
+        widgets_with_rich_context = await asyncio.to_thread(_dashboard_name_context, data)
         title = await llm_service.generate_dashboard_name(widgets_with_rich_context)
         return AINameGenResponse(title=title)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except llm_service.LLMResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/generate-layout", response_model=AIDashboardGenResponse)
 async def generate_dashboard_layout(data: AIDashboardGenRequest):
-    """Execute the generate_dashboard_layout operation."""
+    """Generate a layout or report invalid provider output."""
     try:
         res = await llm_service.generate_dashboard_layout(data.description)
-        if not res or "title" not in res:
-            raise HTTPException(status_code=500, detail="Failed to generate valid layout")
-        return AIDashboardGenResponse(**res)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        return AIDashboardGenResponse.model_validate(res)
+    except llm_service.LLMResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=502, detail="The LLM returned an invalid dashboard layout."
+        ) from exc

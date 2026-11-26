@@ -1,17 +1,21 @@
 """Module containing llm_service functionality."""
 
+import asyncio
 import json
 from typing import Any
 
-import httpx
-from openai import AsyncOpenAI
-
 from models.settings_models import get_settings
+from services.llm_client import complete_openai, llm_clients, unwrap_json_fence
+from services.logging_service import get_logger
+
+
+class LLMResponseError(ValueError):
+    """An LLM response that cannot be used by the dashboard."""
 
 
 async def generate_dashboard_layout(description: str) -> dict[str, Any]:
     """Generates a dashboard layout (title + widgets) based on user description."""
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
 
     system_prompt = (
         "You are a dashboard layout assistant. Based on the user's description, suggest a dashboard layout.\n"
@@ -35,7 +39,7 @@ async def generate_dashboard_layout(description: str) -> dict[str, Any]:
 
 async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
     """Generates a dashboard name based on the widgets it contains and their bound queries."""
-    settings = get_settings()
+    settings = await asyncio.to_thread(get_settings)
 
     widgets_lines = []
     for w in widgets:
@@ -47,7 +51,7 @@ async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
         if w.get("sql_query"):
             line += f", SQL Query: '{w['sql_query']}'"
         widgets_lines.append(line)
-        
+
     widgets_text = "\n".join(widgets_lines)
 
     system_prompt = (
@@ -66,7 +70,10 @@ async def generate_dashboard_name(widgets: list[dict[str, Any]]) -> str:
     ]
 
     res = await _call_llm_json(settings, prompt_msgs)
-    return res.get("title", "Untitled Dashboard")
+    title = res.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise LLMResponseError("The LLM did not return a dashboard title.")
+    return title
 
 
 async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> dict[str, Any]:
@@ -74,32 +81,34 @@ async def _call_llm_json(settings: Any, prompt_msgs: list[dict[str, str]]) -> di
     llm_response_text = ""
 
     if settings.llm_provider == "openai":
-        client = AsyncOpenAI(api_key=settings.openai.api_key)
-        response = await client.chat.completions.create(
-            model=settings.openai.model,
-            messages=prompt_msgs,  # type: ignore
+        response = await complete_openai(
+            settings.openai,
+            messages=prompt_msgs,
             temperature=0.7,
-            response_format={"type": "json_object"},
+            json_object=True,
         )
         llm_response_text = response.choices[0].message.content or "{}"
     else:
         url = settings.ollama.url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{url}/api/chat",
-                json={
-                    "model": settings.ollama.model,
-                    "messages": prompt_msgs,
-                    "stream": False,
-                    "format": "json",
-                },
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-            llm_response_text = resp.json().get("message", {}).get("content", "{}")
+        client = llm_clients.ollama()
+        resp = await client.post(
+            f"{url}/api/chat",
+            json={
+                "model": settings.ollama.model,
+                "messages": prompt_msgs,
+                "stream": False,
+                "format": "json",
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        llm_response_text = resp.json().get("message", {}).get("content", "{}")
 
     try:
-        data = json.loads(llm_response_text)
-        return data
-    except Exception:
-        return {}
+        data = json.loads(unwrap_json_fence(llm_response_text))
+        if not isinstance(data, dict) or not data:
+            raise ValueError("Expected a nonempty JSON object")
+    except (ValueError, TypeError) as exc:
+        get_logger().warning("The LLM returned invalid JSON for a dashboard request")
+        raise LLMResponseError("The LLM returned invalid JSON. Try again.") from exc
+    return data

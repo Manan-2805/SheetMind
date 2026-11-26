@@ -3,7 +3,8 @@ export type Theme = "dark" | "light" | "system";
 export type LLMProvider = "openai" | "ollama";
 
 export interface OpenAISettings {
-  api_key: string;
+  api_key_set: boolean;
+  base_url: string;
   model: string;
   max_input_tokens: number;
 }
@@ -28,10 +29,15 @@ export interface Settings {
   auto_chart_display: boolean;
 }
 
+export type SettingsUpdate = Omit<Partial<Settings>, "openai"> & {
+  openai?: Omit<OpenAISettings, "api_key_set"> & { api_key?: string };
+};
+
 export interface TestLLMRequest {
   provider: LLMProvider;
   api_key?: string;
   url?: string;
+  model?: string;
 }
 
 export interface TestLLMResponse {

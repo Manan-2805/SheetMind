@@ -1,8 +1,10 @@
+import { isAxiosError } from "axios";
 import type {
   CellFormatting,
   CellValue,
   DiffRow,
   ExcelEditorFile,
+  MutationOperation,
   MutationOperationType,
   SheetData,
 } from "@/types/ExcelEditor";
@@ -36,7 +38,7 @@ export const getSheetData = async (fileId: string, sheetName: string): Promise<S
 
 export interface MutationResponse {
   operationType: MutationOperationType;
-  pandasCode: string;
+  operations: MutationOperation[];
   operationSummary: string;
   confidence: number;
   diffRows: DiffRow[];
@@ -58,7 +60,7 @@ export const mutateFile = async (params: {
 export const applyMutation = async (params: {
   fileId: string;
   sheetName: string;
-  pandasCode: string;
+  operations: MutationOperation[];
   currentRows: CellValue[][];
   columns: string[];
 }): Promise<{ success: boolean }> => {
@@ -81,7 +83,6 @@ export interface HistoryRecord {
   operationType: string;
   rowsAffected: number;
   appliedAt: string;
-  backupPath: string;
 }
 
 export const getHistory = async (fileId: string): Promise<HistoryRecord[]> => {
@@ -91,8 +92,15 @@ export const getHistory = async (fileId: string): Promise<HistoryRecord[]> => {
 
 export const restoreBackup = async (
   fileId: string,
-  backupPath: string
+  historyId: string
 ): Promise<{ success: boolean }> => {
-  const resp = await client.post(`${API_BASE}/restore`, { fileId, backupPath });
+  const resp = await client.post(`${API_BASE}/restore`, { fileId, historyId });
   return resp.data;
 };
+
+export function describeEditorError(error: unknown, fallback: string): string {
+  if (isAxiosError(error) && typeof error.response?.data?.detail === "string") {
+    return error.response.data.detail;
+  }
+  return error instanceof Error && !isAxiosError(error) ? error.message : fallback;
+}

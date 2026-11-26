@@ -8,40 +8,25 @@ The cloud-based web version of SheetMind. It features a React frontend and a rob
 - **[Backend](./backend/README.md)**: Built with FastAPI, utilizing PostgreSQL for robust data management and Alembic for migrations.
 - **Docker**: Containerized setup with `docker-compose`.
 
-## Getting Started
+## Development and production
 
-### Prerequisites
-- Node.js (v18+)
-- Python (v3.10+)
-- `uv` (Python package manager)
-- Docker Desktop (for running PostgreSQL and containerized services)
+Use Docker with the Compose plugin. Create `web-application/.env` using the repository template and set the values for your local stack.
 
-### Running Locally with Docker (Recommended)
+From the repository root, run:
 
-To spin up the entire web application (frontend, backend, database) using Docker:
-```powershell
-docker-compose up --build
+```sh
+make web-setup
+make web
 ```
 
-### Running Locally for Development (Manual)
+Open [http://localhost:8000](http://localhost:8000/). Use `make web-restart` after changing `.env`, `make web-logs` to follow logs, `make web-ps` for status, and `make web-stop` to stop services while preserving the database volume.
 
-**1. Database**
-Ensure you have a PostgreSQL instance running or start one via Docker. Set the environment variables in `.env` based on `.env.example`.
+Use `make web-build` to build production images, `make web-prod` to start them on port 80, and `make web-prod-restart` to apply changes to `.env`. Use separate Compose project names when isolating dev and production data. Set `WEB_HOST_PORT` to change the published port. An optional gitignored `web-application/.env.local` can supply defaults that `web-application/.env` overrides.
 
-**2. Start the Backend**
-```powershell
-cd backend
-uv venv
-.\.venv\Scripts\activate
-uv pip install -e .
-alembic upgrade head
-# Start server using the standard uvicorn command
-uvicorn app.main:app --reload
-```
+The web API applies Alembic migrations before accepting requests in both Docker stacks. Use `make web-migrate` or `make web-prod-migrate` to apply migrations manually to a running stack. To deploy new backend code or migrations to the production stack, run `make web-build SERVICES=backend` followed by `make web-prod-restart`.
 
-**3. Start the Frontend**
-```powershell
-cd frontend
-npm install
-npm run dev
-```
+The `/download` page is public. After a native desktop build, run `make web-stage-downloads VERSION=1.0.0` from the repository root. It copies the available x64 installers into the gitignored `web-application/downloads` directory served by Docker. In production, place the installers in that directory on the web host or mount a release directory through `WEB_DOWNLOADS_DIR`. Visitors can download whichever installers are present.
+
+The website and desktop app can be used without a Google account. Desktop profiles live on the device.
+
+For local code checks or a standalone frontend build, run `make web-setup-local`, then `make web-check` or `make web-build-ui`.

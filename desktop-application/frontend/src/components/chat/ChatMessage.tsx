@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { chartImageUrl } from "@/api/apiUrl";
 import { getMessageData } from "@/api/chatApi";
+import logo from "@/assets/logo.png";
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
 import { useToast } from "@/hooks/useToast";
 import type { ChatMessage as ChatMessageType, ResultTable } from "@/types/ChatMessage";
@@ -55,15 +57,6 @@ export function ChatMessage({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalData(message.result_data || null);
   }, [message.id, message.result_data]);
-
-  const getFullChartUrl = (url: string) => {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
-      return url;
-    }
-    const backendBase = "http://localhost:8000";
-    return `${backendBase}${url.startsWith("/") ? "" : "/"}${url}`;
-  };
 
   const handlePageChange = async (newPage: number) => {
     if (isLoadingData) return;
@@ -348,7 +341,7 @@ export function ChatMessage({
   return (
     <div className="group flex gap-3 py-4">
       <img
-        src="/favicon.png"
+        src={logo}
         alt="SheetMind"
         className="mt-0.5 h-5 w-5 shrink-0 rounded-sm object-contain shadow-sm"
         aria-hidden="true"
@@ -419,13 +412,13 @@ export function ChatMessage({
               Auto Generated Chart
             </span>
             <img
-              src={getFullChartUrl(chartUrl)}
+              src={chartImageUrl(chartUrl)}
+              referrerPolicy="no-referrer"
               alt="Auto Generated Chart"
               className="max-h-[300px] w-auto object-contain rounded-lg shadow-lg border"
               style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
               onError={(e) => {
-                console.error("Failed to load chart image:", e);
-                (e.currentTarget as HTMLImageElement).style.display = "none";
+                e.currentTarget.style.display = "none";
               }}
             />
           </div>

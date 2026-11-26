@@ -1,13 +1,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-// Fetch the dynamic backend API URL from the main process synchronously
-const apiUrl = ipcRenderer.sendSync("get-backend-api-url");
+const { apiUrl, apiToken } = ipcRenderer.sendSync("get-backend-api-config") ?? {};
 
-// Validate that the URL is a legitimate local loopback address for security
-if (typeof apiUrl === "string" && /^http:\/\/127\.0\.0\.1:\d+\/api$/.test(apiUrl)) {
-  // Expose it to the main world window.__SHEETMIND_API_URL__ safely
+if (
+  typeof apiUrl === "string" &&
+  /^http:\/\/127\.0\.0\.1:\d+\/api$/.test(apiUrl) &&
+  typeof apiToken === "string" &&
+  /^[a-f0-9]{64}$/.test(apiToken)
+) {
   contextBridge.exposeInMainWorld("__SHEETMIND_API_URL__", apiUrl);
+  contextBridge.exposeInMainWorld("__SHEETMIND_API_TOKEN__", apiToken);
 } else {
-  console.error("[Preload] Invalid backend API URL received:", apiUrl);
-  contextBridge.exposeInMainWorld("__SHEETMIND_API_URL__", null);
+  console.error("[Preload] Invalid backend API configuration");
 }

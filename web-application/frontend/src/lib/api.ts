@@ -9,13 +9,6 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      const currentPath = window.location.pathname;
-      if (currentPath !== '/login' && currentPath !== '/auth/callback') {
-        window.location.href = '/login';
-      }
-    }
-
     if (error.response?.status === 503 && error.response?.data?.error?.code === 'MAINTENANCE') {
       window.location.href = '/maintenance';
     }

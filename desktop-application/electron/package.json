@@ -18,7 +18,14 @@
         "productName": "SheetMind",
         "win": {
             "target": "nsis",
-            "icon": "assets/icon.ico"
+            "artifactName": "SheetMind-${version}-windows-${arch}-setup.${ext}",
+            "icon": "assets/icon.ico",
+            "extraResources": [
+                {
+                    "from": "../build/backend/main.dist",
+                    "to": "backend"
+                }
+            ]
         },
         "mac": {
             "target": "dmg",
@@ -26,6 +33,7 @@
         },
         "linux": {
             "target": "AppImage",
+            "artifactName": "SheetMind-${version}-linux-${arch}.${ext}",
             "icon": "assets/icon.png"
         },
         "nsis": {
@@ -38,7 +46,8 @@
         "extraResources": [
             {
                 "from": "../build/backend",
-                "to": "backend"
+                "to": "backend",
+                "filter": ["sheetmind-backend"]
             },
             {
                 "from": "../build/frontend",
