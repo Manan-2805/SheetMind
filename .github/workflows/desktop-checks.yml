@@ -1,0 +1,47 @@
+name: Desktop checks
+
+on:
+  pull_request:
+    paths:
+      - 'desktop-application/**'
+      - 'Makefile'
+      - '.github/workflows/desktop-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_DISABLE_ENV_FILE: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop-application/frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v5
+      - run: make desktop-setup-backend desktop-setup-frontend
+      - name: Backend tests and Ruff
+        working-directory: desktop-application/backend
+        run: |
+          export SHEETMIND_DATA_DIR="$RUNNER_TEMP/sheetmind-data"
+          export MPLCONFIGDIR="$RUNNER_TEMP/sheetmind-matplotlib"
+          uv run --locked --no-sync python -B -m unittest discover -s tests -v
+          uv run --locked --no-sync ruff check .
+          uv run --locked --no-sync ruff format --check .
+          uv run --locked --no-sync ruff check --config pyproject.toml ../scripts/smoke_preview.py
+      - run: make desktop-typecheck desktop-build
+      - run: make desktop-preview
+      - name: Verify Docker preview
+        working-directory: desktop-application
+        run: docker compose -p sheetmind-desktop-preview -f compose.preview.yml exec -T preview python -B - < scripts/smoke_preview.py

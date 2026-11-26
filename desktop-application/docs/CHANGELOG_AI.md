@@ -1,5 +1,8 @@
 # AI changelog
 
+- Add a loopback Docker preview of the desktop renderer and API with its own data volume and a mock-provider CI smoke test.
+- Keep bounded logs at a stable path and report chat failures with diagnostic references. Use larger desktop typography and translucent glass surfaces.
+
 - Provider settings: store an OpenAI-compatible base URL and exact model ID, test with a chat completion, and use the endpoint across chat, dashboards, and spreadsheet edits. Clear the previous key when changing endpoints without supplying a new key.
 - Manual testing: generate six related synthetic workbooks, a ZIP, and a guide with expected results through Make.
 - Windows packaging: bundle large dependencies as bytecode and ship the standalone backend inside NSIS so the installer performs compression once.
