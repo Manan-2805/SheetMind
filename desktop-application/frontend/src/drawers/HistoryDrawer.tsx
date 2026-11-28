@@ -7,6 +7,7 @@ import {
   Search,
   Star,
   Trash2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -83,12 +84,20 @@ export function HistoryDrawer({
   const ORDER: DateGroup[] = ["Today", "Yesterday", "Last 7 days", "Older"];
 
   return (
-    <Drawer open={open} onClose={onClose} side="left" width={240}>
+    <Drawer open={open} onClose={onClose} title="Chat history">
       <div className="flex h-full flex-col">
-        <div className="px-3 py-3" style={{ borderBottom: "1px solid var(--color-border-subtle)" }}>
-          <p className="text-panel-heading mb-3" style={{ color: "var(--color-text-primary)" }}>
-            History
-          </p>
+        <div className="border-b border-border-subtle px-4 py-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-panel-heading text-primary">Chat history</h2>
+            <button
+              type="button"
+              aria-label="Close history"
+              className="rounded-md p-1.5 text-secondary hover:bg-bg-hover"
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
+          </div>
           <div className="relative">
             <Search
               size={13}
@@ -100,6 +109,7 @@ export function HistoryDrawer({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search sessions..."
+              aria-label="Search chat history"
               className="w-full rounded-md py-1.5 pl-7 pr-2 text-body outline-none"
               style={{
                 backgroundColor: "var(--color-bg-hover)",

@@ -1,5 +1,9 @@
 # AI changelog
 
+- Use completed workbook schema for untagged chat, preserve selected file references, and separate SQL generation and retry time from database execution. Stop chat at the provider or SQL worker, cap request time, and summarize small results without another model call.
+- Match the landing page's clear glass surfaces and overlay the content with a readable, rounded chat history drawer beside navigation.
+- Commit active grid edits before saving, download the saved workbook copy, and show a loading state during AI edit preview.
+
 - Add a loopback Docker preview of the desktop renderer and API with its own data volume and a mock-provider CI smoke test.
 - Keep bounded logs at a stable path and report chat failures with diagnostic references. Use larger desktop typography and translucent glass surfaces.
 
