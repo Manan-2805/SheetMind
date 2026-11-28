@@ -92,7 +92,7 @@ export function HistoryDrawer({
             <button
               type="button"
               aria-label="Close history"
-              className="rounded-md p-1.5 text-secondary hover:bg-bg-hover"
+              className="rounded-md p-1.5 text-text-secondary hover:bg-bg-hover"
               onClick={onClose}
             >
               <X size={16} />
@@ -127,6 +127,10 @@ export function HistoryDrawer({
                 <SkeletonText key={i} height="36px" className="rounded-lg" />
               ))}
             </div>
+          ) : filtered.length === 0 ? (
+            <p className="px-4 py-3 text-body text-text-secondary">
+              {search.trim() ? "No conversations match your search." : "No conversations yet."}
+            </p>
           ) : (
             <>
               {favorites.length > 0 && (

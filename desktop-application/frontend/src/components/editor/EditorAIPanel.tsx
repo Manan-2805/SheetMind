@@ -58,7 +58,7 @@ export function EditorAIPanel({
         {/* Center: Diff View or Empty State */}
         <div className="flex-1 flex flex-col min-w-0">
           {isGenerating ? (
-            <output className="flex flex-1 items-center justify-center gap-2 text-body text-secondary">
+            <output className="flex flex-1 items-center justify-center gap-2 text-body text-text-secondary">
               <LoaderCircle className="size-5 animate-spin text-accent" aria-hidden="true" />
               Preparing edit preview
             </output>
