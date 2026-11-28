@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
@@ -20,24 +21,47 @@ class QueryTimeoutError(ValueError):
     """An analytical query exceeded its execution budget."""
 
 
-def _check_functions(ast: Any) -> None:
+def _walk_ast(ast: Any) -> Iterator[dict]:
     pending = [ast]
     while pending:
         value = pending.pop()
         if isinstance(value, list):
             pending.extend(value)
         elif isinstance(value, dict):
-            if value.get("type") == "TABLE_FUNCTION":
-                function = value.get("function", {})
-                if function.get("function_name", "").lower() not in _PURE_TABLE_FUNCTIONS:
-                    raise ValueError(
-                        "SELECT queries may only use imported data and built-in generators"
-                    )
-                if function.get("schema") or function.get("catalog"):
-                    raise ValueError("SELECT table functions must be unqualified")
-            if value.get("function_name", "").lower() in {"query", "query_table", "nextval"}:
-                raise ValueError("SELECT queries cannot invoke SQL or change database state")
+            yield value
             pending.extend(value.values())
+
+
+def _check_functions(ast: Any) -> None:
+    for value in _walk_ast(ast):
+        if value.get("type") == "TABLE_FUNCTION":
+            function = value.get("function", {})
+            if function.get("function_name", "").lower() not in _PURE_TABLE_FUNCTIONS:
+                raise ValueError(
+                    "SELECT queries may only use imported data and built-in generators"
+                )
+            if function.get("schema") or function.get("catalog"):
+                raise ValueError("SELECT table functions must be unqualified")
+        if value.get("function_name", "").lower() in {"query", "query_table", "nextval"}:
+            raise ValueError("SELECT queries cannot invoke SQL or change database state")
+
+
+def _table_references(conn: duckdb.DuckDBPyConnection, sql: str, ast: dict) -> set[str]:
+    changed = False
+    for node in _walk_ast(ast):
+        if node.get("type") == "BASE_TABLE" and node.get("alias"):
+            # The qualified lookup includes aliases in its returned table names.
+            node["alias"] = ""
+            node["column_name_alias"] = []
+            changed = True
+        if node.get("type") == "JOIN" and node.get("using_columns"):
+            # The dependency binder checks USING columns without their schemas.
+            # For lookup only, keep both operands and omit the join condition.
+            node.update(using_columns=[], join_type="INNER", ref_type="CROSS")
+            changed = True
+    if changed:
+        sql = conn.execute("SELECT json_deserialize_sql(?)", [json.dumps(ast)]).fetchone()[0]
+    return conn.get_table_names(sql, qualified=True)
 
 
 def _validated_sql(conn: duckdb.DuckDBPyConnection, sql: str) -> str:
@@ -58,7 +82,7 @@ def _validated_sql(conn: duckdb.DuckDBPyConnection, sql: str) -> str:
     ).fetchall():
         lower_name = name.lower()
         imported_names.update({lower_name, f"main.{lower_name}", f"{catalog}.main.{lower_name}"})
-    referenced = {name.lower() for name in conn.get_table_names(sql, qualified=True)}
+    referenced = {name.lower() for name in _table_references(conn, sql, ast)}
     if not referenced.issubset(imported_names):
         raise ValueError(
             "SELECT queries may only reference imported data tables. "
