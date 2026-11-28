@@ -21,6 +21,14 @@ make desktop
 
 The development launcher waits for Vite before opening Electron. Closing Electron stops Vite. Use `make desktop-api` and `make desktop-ui` for browser-only development in separate terminals.
 
+## Docker preview and diagnostics
+
+Run `make desktop-preview` and open [http://localhost:4173](http://localhost:4173/). The preview serves the built desktop renderer and the desktop API with a separate Docker data volume. Use `make desktop-preview PREVIEW_PORT=4174` to change ports, `make desktop-preview-logs` to follow logs, or `make desktop-preview-stop` to stop it.
+
+To start an existing local preview image without a rebuild, pass `PREVIEW_BUILD=--no-build`.
+
+The installed app writes to `~/.sheetmind/logs/app.log` on Linux and macOS and `%USERPROFILE%\.sheetmind\logs\app.log` on Windows. An explicit `SHEETMIND_DATA_DIR` changes the data directory and log location. Chat failures stay visible with a reference ID that also appears in the log. The active file is recreated on the next log entry if removed. By default logs rotate at 5 MiB, retain up to three numbered backups, and prune archives older than seven days. Set `SHEETMIND_LOG_MAX_BYTES` before launch to override the rotation size.
+
 Run `make desktop-package VERSION=1.0.0` on the target OS. This installs the locked frontend and Electron dependencies, builds the Python backend with Nuitka, and writes the installer to `desktop-application/electron/dist`. Close SheetMind before packaging if the OS holds its build files open.
 
 - **Linux** needs GCC, Make, and `patchelf`. If you use Debian's system Python, install its development headers (`python3-dev`). The x64 output is `SheetMind-1.0.0-linux-x86_64.AppImage`. On the target laptop, run `chmod +x SheetMind-1.0.0-linux-x86_64.AppImage` and then `./SheetMind-1.0.0-linux-x86_64.AppImage`. Build on a distribution with a glibc version at least as old as the one where you plan to run it. The repository's Linux build accepts `SHEETMIND_BUILD_JOBS` to limit the compiler's parallelism.

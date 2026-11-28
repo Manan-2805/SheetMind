@@ -1,4 +1,4 @@
-import { ArrowUp, Sparkles } from "lucide-react";
+import { ArrowUp, LoaderCircle, Sparkles } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import type { PendingChange } from "@/types/ExcelEditor";
@@ -13,6 +13,7 @@ interface EditorAIPanelProps {
   onRejectChange: (id: string) => void;
   onSubmitPrompt: (prompt: string) => void;
   isGenerating: boolean;
+  disabled: boolean;
   activeSheetName: string;
 }
 
@@ -24,6 +25,7 @@ export function EditorAIPanel({
   onRejectChange,
   onSubmitPrompt,
   isGenerating,
+  disabled,
   activeSheetName,
 }: EditorAIPanelProps) {
   const [prompt, setPrompt] = useState("");
@@ -32,7 +34,7 @@ export function EditorAIPanel({
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!prompt.trim() || isGenerating) return;
+    if (!prompt.trim() || isGenerating || disabled) return;
     onSubmitPrompt(prompt);
     setPrompt("");
   };
@@ -55,7 +57,12 @@ export function EditorAIPanel({
 
         {/* Center: Diff View or Empty State */}
         <div className="flex-1 flex flex-col min-w-0">
-          {selectedChange ? (
+          {isGenerating ? (
+            <output className="flex flex-1 items-center justify-center gap-2 text-body text-text-secondary">
+              <LoaderCircle className="size-5 animate-spin text-accent" aria-hidden="true" />
+              Preparing edit preview
+            </output>
+          ) : selectedChange ? (
             <EditorDiffTable
               change={selectedChange}
               onAccept={() => onAcceptChange(selectedChange.changeId)}
@@ -85,16 +92,18 @@ export function EditorAIPanel({
       {/* Bottom: Prompt Input Bar */}
       <div className="border-t border-border-default p-3 bg-bg-elevated/30">
         <div className="max-w-4xl mx-auto flex flex-col gap-2">
-          <div className="flex items-center pointer-events-none  gap-2">
+          <div className="flex items-center gap-2">
             <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[9px] font-bold text-accent border border-accent/20 uppercase tracking-tight">
               Editing: {activeSheetName}
             </span>
             {/* Suggestion Chips */}
             {!isGenerating && !selectedChangeId && (
               <div className="flex gap-2 mb-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {suggestions.map((s, idx) => (
+                {suggestions.map((s) => (
                   <button
-                    key={idx}
+                    key={s}
+                    type="button"
+                    disabled={disabled}
                     onClick={() => setPrompt(s)}
                     onDoubleClick={() => {
                       setPrompt(s);
@@ -121,14 +130,17 @@ export function EditorAIPanel({
                   }
                 }}
                 placeholder="Describe a modification to this sheet..."
-                disabled={isGenerating}
+                disabled={isGenerating || disabled}
+                aria-label="Describe a spreadsheet edit"
                 className="w-full rounded-xl bg-bg-base pl-3 pr-12 py-3 text-sm border border-border-default outline-none focus:border-accent transition-colors resize-none overflow-hidden"
                 rows={1}
                 style={{ minHeight: "44px", maxHeight: "120px" }}
               />
               <button
+                type="button"
+                aria-label="Preview spreadsheet edit"
                 onClick={handleSubmit}
-                disabled={isGenerating || !prompt.trim()}
+                disabled={isGenerating || disabled || !prompt.trim()}
                 className="absolute right-1.5 bottom-3 h-8 w-8 flex items-center justify-center rounded-lg bg-accent text-white shadow-lg shadow-accent/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale disabled:scale-100"
               >
                 {isGenerating ? (

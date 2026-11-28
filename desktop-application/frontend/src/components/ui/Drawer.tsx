@@ -1,61 +1,41 @@
-import { useEffect, useRef } from "react";
-
-import { cn } from "@/utils/cn";
+import { useEffect, useEffectEvent } from "react";
 
 interface DrawerProps {
   open: boolean;
   onClose: () => void;
-  side?: "left" | "right";
-  width?: number;
+  title: string;
   children: React.ReactNode;
-  className?: string;
 }
 
-export function Drawer({
-  open,
-  onClose,
-  side = "left",
-  width = 280,
-  children,
-  className,
-}: DrawerProps) {
-  const drawerRef = useRef<HTMLDivElement>(null);
+export function Drawer({ open, onClose, title, children }: DrawerProps) {
+  const closeFromKeyboard = useEffectEvent(onClose);
 
   useEffect(() => {
     if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") closeFromKeyboard();
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open]);
 
-  const hiddenOffset = width + 52;
-  const translateX =
-    side === "left" ? `translateX(-${hiddenOffset}px)` : `translateX(${hiddenOffset}px)`;
+  if (!open) return null;
 
   return (
     <>
-      {open && (
-        <div className="fixed inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
-      )}
-      <div
-        ref={drawerRef}
-        className={cn("fixed top-0 z-40 flex h-full flex-col", className)}
-        style={{
-          width,
-          [side]: 52,
-          backgroundColor: "var(--color-bg-elevated)",
-          borderRight: side === "left" ? "1px solid var(--color-border-default)" : undefined,
-          borderLeft: side === "right" ? "1px solid var(--color-border-default)" : undefined,
-          transform: open ? "translateX(0)" : translateX,
-          transition: "transform 200ms ease-out",
-          boxShadow: open ? "4px 0 24px rgba(0,0,0,0.3)" : "none",
-        }}
-        aria-hidden={!open}
+      <button
+        type="button"
+        className="absolute inset-0 z-30 rounded-2xl bg-black/15"
+        onClick={onClose}
+        aria-label={`Close ${title.toLowerCase()}`}
+        tabIndex={-1}
+      />
+      <aside
+        aria-label={title}
+        className="absolute inset-y-0 left-0 z-40 flex w-72 max-w-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-elevated shadow-xl"
       >
         {children}
-      </div>
+      </aside>
     </>
   );
 }

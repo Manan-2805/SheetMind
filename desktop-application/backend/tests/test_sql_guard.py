@@ -35,6 +35,29 @@ class SqlGuardTests(TestCase):
         self.assertEqual((result.total_rows, result.page, result.total_pages), (3, 2, 2))
         self.assertEqual(run_user_query(self.conn, "SELECT 1 AS v", 1).rows, [{"v": 1}])
 
+    def test_join_using_imported_columns(self):
+        """The table-name lookup must handle valid joins on a shared column."""
+        self.conn.execute("CREATE TABLE file_quantities AS SELECT 2 AS v, 9 AS quantity")
+        self.conn.execute("INSERT INTO excel_sheets VALUES ('file_quantities')")
+        for join in ("USING (v)", "ON f.v = q.v"):
+            with self.subTest(join=join):
+                result = run_user_query(
+                    self.conn,
+                    "SELECT SUM(q.quantity) AS total FROM file_fixture f "
+                    f"JOIN file_quantities q {join}",
+                    5,
+                )
+                self.assertEqual(result.rows, [{"total": 9}])
+
+    def test_join_using_cannot_reference_app_tables(self):
+        """Removing the lookup-only join condition must not hide a table."""
+        with self.assertRaisesRegex(ValueError, "only reference imported data tables"):
+            run_user_query(
+                self.conn,
+                "SELECT * FROM file_fixture f JOIN settings AS q USING (v)",
+                5,
+            )
+
     def test_reject_nonselect_and_multiple_statements(self):
         """Reject catalog changes and batches before execution."""
         with TemporaryDirectory() as temporary:

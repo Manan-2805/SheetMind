@@ -1,9 +1,11 @@
 """Module containing chat_router functionality."""
 
+import asyncio
+from collections.abc import Coroutine
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from models import chat_models
@@ -17,8 +19,41 @@ from schemas.chat_schemas import (
     SendMessageRequest,
 )
 from services import chart_service
+from services.llm_client import ProviderRequestError
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+CHAT_TIMEOUT_SECONDS = 85
+
+
+async def _wait_for_disconnect(request: Request) -> None:
+    while (await request.receive())["type"] != "http.disconnect":
+        continue
+
+
+async def _until_disconnect(
+    request: Request, generation: Coroutine[Any, Any, ChatMessageResponse]
+) -> ChatMessageResponse | Response:
+    work = asyncio.create_task(generation)
+    disconnect = asyncio.create_task(_wait_for_disconnect(request))
+    try:
+        done, _ = await asyncio.wait(
+            (work, disconnect), timeout=CHAT_TIMEOUT_SECONDS, return_when=asyncio.FIRST_COMPLETED
+        )
+        if work in done:
+            return work.result()
+        if disconnect in done:
+            return Response(status_code=499)
+        raise ProviderRequestError(
+            "Chat timed out. Try a simpler question or choose a faster model.",
+            cause="ChatDeadline",
+            timed_out=True,
+        )
+    finally:
+        for task in (work, disconnect):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(work, disconnect, return_exceptions=True)
 
 
 class ChartGenerateRequest(BaseModel):
@@ -84,18 +119,22 @@ def get_session_messages(session_id: str) -> list[ChatMessageResponse]:
 async def create_message(
     session_id: str,
     body: SendMessageRequest,
-) -> ChatMessageResponse:
+    request: Request,
+) -> ChatMessageResponse | Response:
     """Execute the create_message operation."""
     if len(body.content) > 2000:
         raise HTTPException(
             status_code=400,
             detail="Message content cannot exceed 2000 characters.",
         )
-    return await chat_models.create_message(
-        session_id=session_id,
-        content=body.content,
-        referenced_files=body.referenced_files,
-        parent_user_message_id=body.parent_user_message_id,
+    return await _until_disconnect(
+        request,
+        chat_models.create_message(
+            session_id=session_id,
+            content=body.content,
+            referenced_files=body.referenced_files,
+            parent_user_message_id=body.parent_user_message_id,
+        ),
     )
 
 
@@ -164,7 +203,9 @@ class RegenerateRequest(BaseModel):
 
 
 @router.post("/sessions/{session_id}/regenerate", response_model=ChatMessageResponse)
-async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMessageResponse:
+async def regenerate_message(
+    session_id: str, body: RegenerateRequest, request: Request
+) -> ChatMessageResponse | Response:
     """Execute the regenerate_message operation."""
     if len(body.content) > 2000:
         raise HTTPException(
@@ -178,11 +219,14 @@ async def regenerate_message(session_id: str, body: RegenerateRequest) -> ChatMe
             f"\n\nRegeneration requested because: {body.reason}\nInstruction: {body.instruction}"
         )
 
-    return await chat_models.regenerate_response(
-        session_id=session_id,
-        content=combined_content,
-        referenced_files=body.referenced_files,
-        parent_user_message_id=body.parent_user_message_id,
+    return await _until_disconnect(
+        request,
+        chat_models.regenerate_response(
+            session_id=session_id,
+            content=combined_content,
+            referenced_files=body.referenced_files,
+            parent_user_message_id=body.parent_user_message_id,
+        ),
     )
 
 
@@ -195,8 +239,8 @@ class EditMessageRequest(BaseModel):
 
 @router.put("/sessions/{session_id}/messages/{message_id}", response_model=ChatMessageResponse)
 async def edit_message(
-    session_id: str, message_id: str, body: EditMessageRequest
-) -> ChatMessageResponse:
+    session_id: str, message_id: str, body: EditMessageRequest, request: Request
+) -> ChatMessageResponse | Response:
     """Execute the edit_message operation."""
     if len(body.content) > 2000:
         raise HTTPException(
@@ -204,11 +248,14 @@ async def edit_message(
             detail="Message content cannot exceed 2000 characters.",
         )
     try:
-        return await chat_models.edit_user_message(
-            session_id=session_id,
-            message_id=message_id,
-            new_content=body.content,
-            referenced_files=body.referenced_files,
+        return await _until_disconnect(
+            request,
+            chat_models.edit_user_message(
+                session_id=session_id,
+                message_id=message_id,
+                new_content=body.content,
+                referenced_files=body.referenced_files,
+            ),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

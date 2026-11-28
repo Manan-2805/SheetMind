@@ -29,6 +29,19 @@ export const openFile = async (fileId: string): Promise<OpenFileResponse> => {
   return resp.data;
 };
 
+export const downloadWorkbook = async (fileId: string, filename: string): Promise<void> => {
+  const response = await client.get<Blob>(`${API_BASE}/download`, {
+    params: { file_id: fileId },
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 export const getSheetData = async (fileId: string, sheetName: string): Promise<SheetData> => {
   const resp = await client.get(`${API_BASE}/sheet-data`, {
     params: { file_id: fileId, sheet_name: sheetName },

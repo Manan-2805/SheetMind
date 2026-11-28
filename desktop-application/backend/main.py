@@ -5,6 +5,7 @@ import hmac
 import os
 import sys
 from contextlib import asynccontextmanager, suppress
+from uuid import uuid4
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -25,8 +26,8 @@ from routers.excel_editor_router import router as excel_editor_router
 from routers.saved_queries_router import router as saved_queries_router
 from routers.settings_router import router as settings_router
 from services.background_tasks import queue_worker, resume_pending_tasks
-from services.llm_client import llm_clients
-from services.logging_service import get_logger
+from services.llm_client import ProviderRequestError, llm_clients
+from services.logging_service import exception_location, get_logger
 from services.prompt_debug_service import prune_debug_prompts
 from services.storage_service import is_valid_username, resolve_chart_file
 
@@ -109,16 +110,28 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handle all uncaught exceptions globally, logging traceback and returning a 500 error."""
+    """Report a safe diagnostic ID for an unexpected or upstream failure."""
     logger = get_logger()
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     route = getattr(request.scope.get("route"), "path", "")
-    logger.error("Unhandled %s in %s", type(exc).__name__, route)
-
+    reference = uuid4().hex[:8]
+    provider_error = isinstance(exc, ProviderRequestError)
+    logger.error(
+        "Failure %s in %s: %s (upstream HTTP %s); %s; cause %s",
+        reference,
+        route,
+        type(exc).__name__,
+        exc.status if provider_error else None,
+        exception_location(exc),
+        exc.cause if provider_error and exc.cause else "unspecified",
+    )
+    message = str(exc) if provider_error else "An internal error occurred. Please try again."
+    status_code = 504 if provider_error and exc.timed_out else 502 if provider_error else 500
     return JSONResponse(
-        status_code=500, content={"detail": "An internal error occurred. Please try again."}
+        status_code=status_code,
+        content={"detail": f"{message} Reference: {reference}"},
     )
 
 
@@ -126,7 +139,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def extract_username_middleware(request: Request, call_next):
     """Execute the extract_username_middleware operation."""
     path = request.url.path
-    if request.method != "OPTIONS" and path != "/api/health":
+    preview_asset = getattr(request.app.state, "browser_preview", False) and (
+        path in {"/", "/favicon.png"} or path.startswith("/assets/")
+    )
+    if request.method != "OPTIONS" and path != "/api/health" and not preview_asset:
         supplied = request.headers.get(TOKEN_HEADER, "")
         if not supplied and request.method == "GET" and path.startswith("/api/chat/charts/static/"):
             supplied = request.query_params.get("api_token", "")

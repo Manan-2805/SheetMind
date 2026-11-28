@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from openai import (
     APIConnectionError,
     APIStatusError,
+    APITimeoutError,
     AsyncOpenAI,
     DefaultAsyncHttpxClient,
     OpenAIError,
@@ -59,8 +60,22 @@ class LLMClients:
 llm_clients = LLMClients()
 
 
+class ProviderRequestError(RuntimeError):
+    """A provider failure whose message is safe to show to the user."""
+
+    def __init__(
+        self, message: str, *, status: int | None = None, cause: str = "", timed_out: bool = False
+    ):
+        super().__init__(message)
+        self.status = status
+        self.cause = cause
+        self.timed_out = timed_out
+
+
 def provider_error_message(error: Exception) -> str:
     """Describe provider errors without exposing response payloads or credentials."""
+    if isinstance(error, APITimeoutError):
+        return "The provider timed out. Try again or choose a faster model."
     if isinstance(error, APIConnectionError):
         return "Could not reach the provider. Check the API base URL and network."
     if isinstance(error, APIStatusError):
@@ -94,10 +109,11 @@ async def complete_openai(
     json_object: bool = False,
     use_mini: bool = False,
     test_connection: bool = False,
+    interactive: bool = False,
 ) -> ChatCompletion:
     """Use basic Chat Completions for compatible hosts and test requests."""
     if not settings.api_key:
-        raise ValueError("Enter an API key for the selected provider.")
+        raise ProviderRequestError("Enter an API key for the selected provider.")
     client = llm_clients.openai(settings.api_key, settings.base_url)
     model = settings.model
     options = {}
@@ -112,11 +128,25 @@ async def complete_openai(
                 options["max_tokens"] = max_tokens
             if json_object:
                 options["response_format"] = {"type": "json_object"}
+    if interactive:
+        client = client.with_options(timeout=45.0, max_retries=0)
     try:
-        return await client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=model, messages=cast(Iterable[ChatCompletionMessageParam], messages), **options
         )
     except OpenAIError as error:
         if test_connection:
             raise
-        raise RuntimeError(provider_error_message(error)) from None
+        status = error.status_code if isinstance(error, APIStatusError) else None
+        cause = type(error.__cause__ or error).__name__
+        raise ProviderRequestError(
+            provider_error_message(error),
+            status=status,
+            cause=cause,
+            timed_out=isinstance(error, APITimeoutError),
+        ) from None
+    if not test_connection and (
+        not completion.choices or not (completion.choices[0].message.content or "").strip()
+    ):
+        raise ProviderRequestError("The selected model returned no text. Check its chat settings.")
+    return completion

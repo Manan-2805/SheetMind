@@ -1,0 +1,21 @@
+services:
+  preview:
+    build:
+      context: .
+      dockerfile: Dockerfile.preview
+    init: true
+    environment:
+      SHEETMIND_PREVIEW_PORT: ${PREVIEW_PORT:-4173}
+      SHEETMIND_LOG_MAX_BYTES: ${SHEETMIND_LOG_MAX_BYTES:-5242880}
+    ports:
+      - "127.0.0.1:${PREVIEW_PORT:-4173}:${PREVIEW_PORT:-4173}"
+    volumes:
+      - preview-data:/var/lib/sheetmind
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['SHEETMIND_PREVIEW_PORT'] + '/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+volumes:
+  preview-data:

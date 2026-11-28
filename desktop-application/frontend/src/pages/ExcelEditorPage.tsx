@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronLeft, Save, X } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Download, Save, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -43,6 +43,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
     setSelectedChangeId,
     isSaving,
     saveFile,
+    downloadFile,
   } = useExcelEditor();
   const [searchParams] = useSearchParams();
   const [historyId, setHistoryId] = useState("");
@@ -171,8 +172,19 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
           </details>
 
           <button
+            type="button"
+            onClick={downloadFile}
+            disabled={isSaving}
+            className="flex h-9 items-center gap-2 rounded-lg border border-border-default px-3 text-xs font-semibold hover:bg-bg-hover disabled:opacity-50"
+          >
+            <Download className="size-3.5" />
+            Download copy
+          </button>
+
+          <button
+            type="button"
             onClick={saveFile}
-            disabled={!session.isDirty || isSaving}
+            disabled={isSaving || isLoading || isGenerating}
             className="flex h-9 items-center gap-2 rounded-lg bg-accent px-4 text-xs font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:scale-100"
           >
             {isSaving ? (
@@ -247,6 +259,7 @@ export function ExcelEditorPage({ onViewChange }: ExcelEditorPageProps) {
             onRejectChange={rejectChange}
             onSubmitPrompt={submitMutationPrompt}
             isGenerating={isGenerating}
+            disabled={isSaving || isLoading}
             activeSheetName={activeSheet.sheetName}
           />
         </Panel>

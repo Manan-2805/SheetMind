@@ -1,8 +1,10 @@
 """Validate, bound, and interrupt SQL originating outside application code."""
 
+import asyncio
 import json
 import math
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
 
@@ -15,24 +17,51 @@ _QUERY_WORKERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sheetmind
 _PURE_TABLE_FUNCTIONS = {"generate_series", "range", "unnest"}
 
 
-def _check_functions(ast: Any) -> None:
+class QueryTimeoutError(ValueError):
+    """An analytical query exceeded its execution budget."""
+
+
+def _walk_ast(ast: Any) -> Iterator[dict]:
     pending = [ast]
     while pending:
         value = pending.pop()
         if isinstance(value, list):
             pending.extend(value)
         elif isinstance(value, dict):
-            if value.get("type") == "TABLE_FUNCTION":
-                function = value.get("function", {})
-                if function.get("function_name", "").lower() not in _PURE_TABLE_FUNCTIONS:
-                    raise ValueError(
-                        "SELECT queries may only use imported data and built-in generators"
-                    )
-                if function.get("schema") or function.get("catalog"):
-                    raise ValueError("SELECT table functions must be unqualified")
-            if value.get("function_name", "").lower() in {"query", "query_table", "nextval"}:
-                raise ValueError("SELECT queries cannot invoke SQL or change database state")
+            yield value
             pending.extend(value.values())
+
+
+def _check_functions(ast: Any) -> None:
+    for value in _walk_ast(ast):
+        if value.get("type") == "TABLE_FUNCTION":
+            function = value.get("function", {})
+            if function.get("function_name", "").lower() not in _PURE_TABLE_FUNCTIONS:
+                raise ValueError(
+                    "SELECT queries may only use imported data and built-in generators"
+                )
+            if function.get("schema") or function.get("catalog"):
+                raise ValueError("SELECT table functions must be unqualified")
+        if value.get("function_name", "").lower() in {"query", "query_table", "nextval"}:
+            raise ValueError("SELECT queries cannot invoke SQL or change database state")
+
+
+def _table_references(conn: duckdb.DuckDBPyConnection, sql: str, ast: dict) -> set[str]:
+    changed = False
+    for node in _walk_ast(ast):
+        if node.get("type") == "BASE_TABLE" and node.get("alias"):
+            # The qualified lookup includes aliases in its returned table names.
+            node["alias"] = ""
+            node["column_name_alias"] = []
+            changed = True
+        if node.get("type") == "JOIN" and node.get("using_columns"):
+            # The dependency binder checks USING columns without their schemas.
+            # For lookup only, keep both operands and omit the join condition.
+            node.update(using_columns=[], join_type="INNER", ref_type="CROSS")
+            changed = True
+    if changed:
+        sql = conn.execute("SELECT json_deserialize_sql(?)", [json.dumps(ast)]).fetchone()[0]
+    return conn.get_table_names(sql, qualified=True)
 
 
 def _validated_sql(conn: duckdb.DuckDBPyConnection, sql: str) -> str:
@@ -53,9 +82,12 @@ def _validated_sql(conn: duckdb.DuckDBPyConnection, sql: str) -> str:
     ).fetchall():
         lower_name = name.lower()
         imported_names.update({lower_name, f"main.{lower_name}", f"{catalog}.main.{lower_name}"})
-    referenced = {name.lower() for name in conn.get_table_names(sql, qualified=True)}
+    referenced = {name.lower() for name in _table_references(conn, sql, ast)}
     if not referenced.issubset(imported_names):
-        raise ValueError("SELECT queries may only reference imported data tables")
+        raise ValueError(
+            "SELECT queries may only reference imported data tables. "
+            "Use the exact DuckDB table name (file_...) from the schema."
+        )
 
     return conn.execute("SELECT json_deserialize_sql(?)", [serialized]).fetchone()[0]
 
@@ -97,6 +129,25 @@ def _read_page(conn: duckdb.DuckDBPyConnection, sql: str, page: int, size: int) 
         )
 
 
+def _start_query(
+    conn: duckdb.DuckDBPyConnection,
+    sql: str,
+    row_limit: int,
+    page: int = 1,
+    page_size: int | None = None,
+) -> tuple[Future[ResultTable], duckdb.DuckDBPyConnection]:
+    size = max(1, min(row_limit, page_size if page_size is not None else row_limit))
+    cursor = conn.cursor()
+    return _QUERY_WORKERS.submit(_read_page, cursor, sql, page, size), cursor
+
+
+def _interrupt(future: Future[ResultTable], cursor: duckdb.DuckDBPyConnection) -> None:
+    if future.cancel():
+        cursor.close()
+    elif not future.done():
+        cursor.interrupt()
+
+
 def run_user_query(
     conn: duckdb.DuckDBPyConnection,
     sql: str,
@@ -105,16 +156,28 @@ def run_user_query(
     page_size: int | None = None,
 ) -> ResultTable:
     """Run one validated SELECT and return a counted page capped by user settings."""
-    size = max(1, min(row_limit, page_size if page_size is not None else row_limit))
-    cursor = conn.cursor()
-    future = _QUERY_WORKERS.submit(_read_page, cursor, sql, page, size)
+    future, cursor = _start_query(conn, sql, row_limit, page, page_size)
     try:
         return future.result(timeout=QUERY_TIMEOUT_SECONDS)
     except TimeoutError as exc:
-        if future.cancel():
-            cursor.close()
-        elif not future.done():
-            cursor.interrupt()
-        raise ValueError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds") from exc
+        _interrupt(future, cursor)
+        raise QueryTimeoutError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds") from exc
+    except duckdb.Error as exc:
+        raise ValueError(f"SQL execution failed: {exc}") from exc
+
+
+async def run_chat_query(conn: duckdb.DuckDBPyConnection, sql: str, row_limit: int) -> ResultTable:
+    """Run the same guard with cancellation tied to the active chat request."""
+    future, cursor = _start_query(conn, sql, row_limit)
+    wrapped = asyncio.wrap_future(future)
+    try:
+        done, _ = await asyncio.wait((wrapped,), timeout=QUERY_TIMEOUT_SECONDS)
+        if done:
+            return wrapped.result()
+        raise QueryTimeoutError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds")
+    except (asyncio.CancelledError, QueryTimeoutError):
+        wrapped.cancel()
+        _interrupt(future, cursor)
+        raise
     except duckdb.Error as exc:
         raise ValueError(f"SQL execution failed: {exc}") from exc

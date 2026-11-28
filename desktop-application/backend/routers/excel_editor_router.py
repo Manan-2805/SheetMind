@@ -3,6 +3,7 @@
 import asyncio
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from models.settings_models import get_settings
@@ -24,6 +25,7 @@ from services.excel_editor_service import (
     apply_mutation_to_disk,
     get_available_files,
     get_edit_history,
+    get_workbook_download,
     load_mutation_frame,
     open_excel_file,
     open_excel_sheet,
@@ -58,6 +60,20 @@ def open_file(file_id: str):
         return OpenFileResponse(**open_excel_file(file_id))
     except EditorError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/download")
+def download_workbook(file_id: str) -> FileResponse:
+    """Download the current saved workbook with its original file name."""
+    try:
+        filename, path = get_workbook_download(file_id)
+    except EditorError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return FileResponse(
+        path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.get("/sheet-data", response_model=SheetData)
@@ -105,6 +121,7 @@ async def mutate_file(body: MutationRequest):
             messages=prompt_msgs,
             temperature=0.0,
             json_object=True,
+            interactive=True,
         )
         llm_response_text = response.choices[0].message.content
     else:

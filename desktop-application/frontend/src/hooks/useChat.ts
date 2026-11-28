@@ -25,12 +25,20 @@ export function useChat() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendFailure, setSendFailure] = useState<{
+    sessionId: string | null;
+    message: string;
+  } | null>(null);
   const [followups, setFollowups] = useState<string[]>([]);
   const [sqlRetryStatus, setSqlRetryStatus] = useState<{
     attempt: number;
     max: number;
     error?: string;
   } | null>(null);
+
+  const pendingRequest = useRef<AbortController | null>(null);
+  const stopGeneration = useCallback(() => pendingRequest.current?.abort(), []);
+  useEffect(() => () => pendingRequest.current?.abort(), []);
 
   const activeSessionIdRef = useRef<string | null>(null);
 
@@ -119,23 +127,31 @@ export function useChat() {
 
   const sendChatMessage = useCallback(
     async (content: string, referencedFiles: string[] = []) => {
+      if (pendingRequest.current) return;
+      const controller = new AbortController();
+      pendingRequest.current = controller;
+      setIsSending(true);
+      setSendFailure(null);
       let sessionId = activeSessionId;
       let isNewSession = false;
 
       if (!sessionId) {
         try {
-          const session = await createSession();
+          const session = await createSession(controller.signal);
           setSessions((prev) => [session, ...prev]);
           sessionId = session.id;
           setActiveSessionId(sessionId);
           isNewSession = true;
         } catch (err: unknown) {
           const e = err as { message?: string };
-          addToast({
-            type: "error",
-            title: "Error",
-            description: e?.message ?? "Failed to create session for new message",
-          });
+          if (!controller.signal.aborted) {
+            setSendFailure({
+              sessionId: null,
+              message: e?.message ?? "Could not start a conversation.",
+            });
+          }
+          pendingRequest.current = null;
+          setIsSending(false);
           return;
         }
       }
@@ -161,17 +177,12 @@ export function useChat() {
 
       setMessages((prev) => [...prev, userMessage, typingMessage]);
       setSqlRetryStatus(null);
-      setIsSending(true);
-
       if (isNewSession) {
         navigate(`/${sessionId}`, { replace: true });
       }
 
-      // Small delay to ensure the typing indicator is rendered before the API response potentially replaces it
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
       try {
-        const response = await sendMessage(sessionId, content, referencedFiles);
+        const response = await sendMessage(sessionId, content, referencedFiles, controller.signal);
         setSqlRetryStatus(null);
         setMessages((prev) => {
           const updated = prev
@@ -199,18 +210,21 @@ export function useChat() {
           )
         );
       } catch (err: unknown) {
+        setSqlRetryStatus(null);
         setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
         const e = err as { message?: string };
-        addToast({
-          type: "error",
-          title: "Error",
-          description: e?.message ?? "Failed to send message",
-        });
+        if (!controller.signal.aborted) {
+          setSendFailure({ sessionId, message: e?.message ?? "Could not send the message." });
+        }
+        // The server saves the user's question before generating its answer.
+        const data = await getMessages(sessionId).catch(() => null);
+        if (data?.length && activeSessionIdRef.current === sessionId) setMessages(data);
       } finally {
+        pendingRequest.current = null;
         setIsSending(false);
       }
     },
-    [activeSessionId, addToast, navigate]
+    [activeSessionId, navigate]
   );
 
   const deleteMessageBranchHandler = useCallback(
@@ -233,7 +247,10 @@ export function useChat() {
 
   const editMessageHandler = useCallback(
     async (messageId: string, content: string, referencedFiles: string[]) => {
-      if (!activeSessionId) return;
+      if (!activeSessionId || pendingRequest.current) return;
+      const controller = new AbortController();
+      pendingRequest.current = controller;
+      setSendFailure(null);
 
       const typingMessage: ChatMessage = {
         id: TYPING_ID,
@@ -264,7 +281,13 @@ export function useChat() {
       setIsSending(true);
 
       try {
-        const response = await editMessage(activeSessionId, messageId, content, referencedFiles);
+        const response = await editMessage(
+          activeSessionId,
+          messageId,
+          content,
+          referencedFiles,
+          controller.signal
+        );
         setSqlRetryStatus(null);
         setMessages((prev) => {
           const updated = prev
@@ -283,24 +306,31 @@ export function useChat() {
       } catch (err: unknown) {
         const e = err as { message?: string };
         setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
-        addToast({ type: "error", title: "Error", description: e.message ?? "Failed to edit" });
+        if (!controller.signal.aborted) {
+          setSendFailure({ sessionId: activeSessionId, message: e.message ?? "Failed to edit" });
+        }
         // Re-load to sync state
-        const data = await getMessages(activeSessionId);
-        setMessages(data);
+        const data = await getMessages(activeSessionId).catch(() => null);
+        if (data && activeSessionIdRef.current === activeSessionId) setMessages(data);
       } finally {
+        pendingRequest.current = null;
+        setSqlRetryStatus(null);
         setIsSending(false);
       }
     },
-    [activeSessionId, messages, addToast]
+    [activeSessionId, messages]
   );
 
   const regenerateResponseHandler = useCallback(
     async (msg: ChatMessage, reason: string, instruction: string) => {
-      if (!activeSessionId) return;
+      if (!activeSessionId || pendingRequest.current) return;
 
       // Find the actual user message that this assistant message belongs to
       const parentId = msg.role === "user" ? msg.id : msg.parent_user_message_id;
       if (!parentId) return;
+      const controller = new AbortController();
+      pendingRequest.current = controller;
+      setSendFailure(null);
 
       const typingMessage: ChatMessage = {
         id: TYPING_ID,
@@ -324,7 +354,8 @@ export function useChat() {
           msg.referenced_files ?? [],
           reason,
           instruction,
-          parentId // Correctly pass the user message ID
+          controller.signal,
+          parentId
         );
         setSqlRetryStatus(null);
         setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID).concat(response));
@@ -334,19 +365,19 @@ export function useChat() {
       } catch (err: unknown) {
         const e = err as { message?: string };
         setMessages((prev) => prev.filter((m) => m.id !== TYPING_ID));
-        addToast({
-          type: "error",
-          title: "Error",
-          description: e.message ?? "Failed to regenerate",
-        });
-        // Reload messages to ensure sync if something went wrong
-        const data = await getMessages(activeSessionId);
-        setMessages(data);
+        if (!controller.signal.aborted) {
+          setSendFailure({
+            sessionId: activeSessionId,
+            message: e.message ?? "Failed to regenerate",
+          });
+        }
       } finally {
+        pendingRequest.current = null;
+        setSqlRetryStatus(null);
         setIsSending(false);
       }
     },
-    [activeSessionId, addToast]
+    [activeSessionId]
   );
 
   return {
@@ -356,6 +387,7 @@ export function useChat() {
     isLoadingSessions,
     isLoadingMessages,
     isSending,
+    stopGeneration,
     loadSessions,
     selectSession,
     startNewChat,
@@ -368,5 +400,6 @@ export function useChat() {
     followups,
     setFollowups,
     sqlRetryStatus,
+    sendError: sendFailure?.sessionId === activeSessionId ? sendFailure.message : null,
   };
 }

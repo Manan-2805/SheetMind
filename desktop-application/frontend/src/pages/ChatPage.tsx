@@ -17,6 +17,8 @@ interface ChatPageProps {
   messages: ChatMessageType[];
   isLoadingMessages: boolean;
   isSending: boolean;
+  stopGeneration: () => void;
+  sendError: string | null;
   sendChatMessage: (content: string, files?: string[]) => Promise<void>;
   loadSessions: () => Promise<void>;
   startNewChat: () => void | Promise<unknown>;
@@ -40,6 +42,8 @@ export function ChatPage({
   messages,
   isLoadingMessages,
   isSending,
+  stopGeneration,
+  sendError,
   sendChatMessage,
   loadSessions,
   activeSessionId,
@@ -109,11 +113,10 @@ export function ChatPage({
     return () => clearTimeout(timer);
   }, [messages, isLoadingMessages]);
 
-  const handleSend = async () => {
-    const text = inputValue.trim();
+  const handleSend = async (text: string, files: string[]) => {
     if (!text || isSending) return;
     setInputValue("");
-    await sendChatMessage(text);
+    await sendChatMessage(text, files);
   };
 
   const handleSuggestion = (text: string) => {
@@ -401,10 +404,7 @@ export function ChatPage({
   const isEmpty = messages.length === 0 && !isLoadingMessages;
 
   return (
-    <div
-      className="flex h-full flex-col overflow-hidden"
-      style={{ backgroundColor: "var(--color-bg-base)" }}
-    >
+    <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-1 flex-col overflow-hidden">
         {isLoadingMessages ? (
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
@@ -485,14 +485,25 @@ export function ChatPage({
               No data sources found. Please upload a file in the Data Sources page before chatting.
             </div>
           ) : (
-            <ChatInput
-              value={inputValue}
-              onChange={setInputValue}
-              onSend={handleSend}
-              isLoading={isSending || hasFiles === null}
-              followups={followups}
-              onFollowupClick={onFollowupClick}
-            />
+            <>
+              {sendError && (
+                <div
+                  role="alert"
+                  className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-body"
+                >
+                  {sendError}
+                </div>
+              )}
+              <ChatInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSend={handleSend}
+                isLoading={isSending || hasFiles === null}
+                onStop={isSending ? stopGeneration : undefined}
+                followups={followups}
+                onFollowupClick={onFollowupClick}
+              />
+            </>
           )}
         </div>
       </div>
