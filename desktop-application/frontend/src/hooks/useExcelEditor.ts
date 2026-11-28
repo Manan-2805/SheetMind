@@ -13,6 +13,19 @@ import type {
   PendingChange,
 } from "@/types/ExcelEditor";
 
+type Workbook = NonNullable<ReturnType<FUniver["getActiveWorkbook"]>>;
+
+function getSheetSnapshot(
+  workbook: Workbook,
+  snapshot: ReturnType<Workbook["save"]>,
+  sheetName: string
+) {
+  const sheet = workbook.getSheetByName(sheetName);
+  const sheetSnapshot = sheet && snapshot.sheets[sheet.getSheetId()];
+  if (!sheetSnapshot) throw new Error(`The spreadsheet grid could not read "${sheetName}".`);
+  return sheetSnapshot;
+}
+
 export function useExcelEditor() {
   const [availableFiles, setAvailableFiles] = useState<ExcelEditorFile[]>([]);
   const [session, setSession] = useState<EditorSession | null>(null);
@@ -22,6 +35,7 @@ export function useExcelEditor() {
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null);
   const [workbookVersion, setWorkbookVersion] = useState(0);
   const [history, setHistory] = useState<api.HistoryRecord[]>([]);
+  const isLoadingSheet = useRef(false);
   const formattingChanges = useRef<CellFormattingMap>({});
 
   const univerRef = useRef<FUniver | null>(null);
@@ -134,29 +148,34 @@ export function useExcelEditor() {
             const workbook = univerRef.current.getActiveWorkbook();
             const sheet = workbook?.getSheetByName(targetSheet.sheetName);
             if (sheet) {
-              if (data.columns) {
-                data.columns.forEach((colName, cIdx) => {
-                  const cellRange = sheet.getRange(0, cIdx, 1, 1);
-                  cellRange.setValue(colName);
-                  cellRange.setFontWeight("bold");
-                  cellRange.setHorizontalAlignment("center");
-                  cellRange.setBackground("#F3F4F6");
-                });
-              }
-              if (data.rows) {
-                const formulas = new Set(data.formulaCells);
-                data.rows.forEach((row, rIdx) => {
-                  row.forEach((cellValue, colIndex) => {
-                    if (cellValue !== null && cellValue !== undefined) {
-                      const cellRange = sheet.getRange(rIdx + 1, colIndex, 1, 1);
-                      if (typeof cellValue === "string" && formulas.has(`${rIdx}:${colIndex}`)) {
-                        cellRange.setFormula(cellValue);
-                      } else {
-                        cellRange.setValue(cellValue as never);
-                      }
-                    }
+              isLoadingSheet.current = true;
+              try {
+                if (data.columns) {
+                  data.columns.forEach((colName, cIdx) => {
+                    const cellRange = sheet.getRange(0, cIdx, 1, 1);
+                    cellRange.setValue(colName);
+                    cellRange.setFontWeight("bold");
+                    cellRange.setHorizontalAlignment("center");
+                    cellRange.setBackground("#F3F4F6");
                   });
-                });
+                }
+                if (data.rows) {
+                  const formulas = new Set(data.formulaCells);
+                  data.rows.forEach((row, rIdx) => {
+                    row.forEach((cellValue, colIndex) => {
+                      if (cellValue !== null && cellValue !== undefined) {
+                        const cellRange = sheet.getRange(rIdx + 1, colIndex, 1, 1);
+                        if (typeof cellValue === "string" && formulas.has(`${rIdx}:${colIndex}`)) {
+                          cellRange.setFormula(cellValue);
+                        } else {
+                          cellRange.setValue(cellValue as never);
+                        }
+                      }
+                    });
+                  });
+                }
+              } finally {
+                isLoadingSheet.current = false;
               }
             }
           }
@@ -232,6 +251,7 @@ export function useExcelEditor() {
   );
 
   const onCellChanged = useCallback(() => {
+    if (isLoadingSheet.current) return;
     setSession((prev) => (prev ? { ...prev, isDirty: true } : null));
   }, []);
 
@@ -351,8 +371,8 @@ export function useExcelEditor() {
 
   const submitMutationPrompt = useCallback(
     async (instruction: string) => {
-      if (!session || !univerRef.current) return;
-      if (session.isDirty) {
+      if (!session || !univerRef.current || isLoading || isSaving || isGenerating) return;
+      if (session.isDirty || univerRef.current.getActiveWorkbook()?.isCellEditing()) {
         addToast({
           type: "error",
           title: "Mutation Failed",
@@ -367,12 +387,9 @@ export function useExcelEditor() {
         const workbook = univerRef.current.getActiveWorkbook();
         if (!workbook) throw new Error("No active workbook");
 
-        // Get live rows from Univer snapshot so in-canvas edits are captured
-        const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
-        const sheetId = `sheet_${session.activeSheetIndex}`;
-        const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
-        const { columns: extractedCols, rows: currentRows } =
-          extractRowsFromSnapshot(sheetSnapshot);
+        const { columns: extractedCols, rows: currentRows } = extractRowsFromSnapshot(
+          getSheetSnapshot(workbook, workbook.save(), activeSheet.sheetName)
+        );
 
         const result = await api.mutateFile({
           fileId: session.fileId,
@@ -413,7 +430,7 @@ export function useExcelEditor() {
         setIsGenerating(false);
       }
     },
-    [session, extractRowsFromSnapshot, addToast]
+    [session, extractRowsFromSnapshot, addToast, isLoading, isSaving, isGenerating]
   );
 
   const acceptChange = useCallback(
@@ -528,16 +545,19 @@ export function useExcelEditor() {
   }, []);
 
   const saveFile = useCallback(async () => {
-    if (!univerRef.current || !session) return;
+    if (!univerRef.current || !session || isSaving || isLoading || isGenerating) return;
     setIsSaving(true);
 
     try {
       const workbook = univerRef.current.getActiveWorkbook();
       if (!workbook) throw new Error("No workbook loaded");
 
-      const snapshot = workbook.save() as { sheets?: Record<string, Record<string, unknown>> };
+      if (workbook.isCellEditing() && !(await workbook.endEditingAsync(true))) {
+        throw new Error("Finish editing the selected cell before saving.");
+      }
 
-      const sheetsForBackend = session.sheets.map((sessionSheet, index) => {
+      const snapshot = workbook.save();
+      const sheetsForBackend = session.sheets.map((sessionSheet) => {
         if (!sessionSheet.columns || !sessionSheet.rows) {
           // If this sheet has not been loaded, return null columns and rows to skip modifying it in the backend
           return {
@@ -549,9 +569,9 @@ export function useExcelEditor() {
           };
         }
 
-        const sheetId = `sheet_${index}`;
-        const sheetSnapshot = snapshot.sheets?.[sheetId] || {};
-        const { columns, rows, formulaCells } = extractRowsFromSnapshot(sheetSnapshot);
+        const { columns, rows, formulaCells } = extractRowsFromSnapshot(
+          getSheetSnapshot(workbook, snapshot, sessionSheet.sheetName)
+        );
 
         return {
           sheetName: sessionSheet.sheetName,
@@ -570,14 +590,42 @@ export function useExcelEditor() {
       });
 
       await reloadWorkbook(session.fileId, session.activeSheetIndex);
-      addToast({ type: "success", title: "Saved", description: "File saved successfully." });
+      addToast({
+        type: "success",
+        title: "Saved",
+        description: "Saved in SheetMind. Use Download copy to open it outside the app.",
+      });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      addToast({ type: "error", title: "Save failed", description: msg });
+      addToast({
+        type: "error",
+        title: "Save failed",
+        description: api.describeEditorError(err, "Could not save the workbook."),
+      });
     } finally {
       setIsSaving(false);
     }
-  }, [session, addToast, extractRowsFromSnapshot, reloadWorkbook]);
+  }, [
+    session,
+    addToast,
+    extractRowsFromSnapshot,
+    reloadWorkbook,
+    isSaving,
+    isLoading,
+    isGenerating,
+  ]);
+
+  const downloadFile = useCallback(async () => {
+    if (!session) return;
+    try {
+      await api.downloadWorkbook(session.fileId, session.filename);
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Download failed",
+        description: api.describeEditorError(error, "Could not download the workbook."),
+      });
+    }
+  }, [session, addToast]);
 
   return {
     availableFiles,
@@ -609,5 +657,6 @@ export function useExcelEditor() {
     setSelectedChangeId,
     isSaving,
     saveFile,
+    downloadFile,
   };
 }

@@ -18,6 +18,7 @@ from services.excel_editor_service import (
     apply_mutation_to_disk,
     get_available_files,
     get_edit_history,
+    get_workbook_download,
     open_excel_file,
     restore_backup,
     save_manual_edits,
@@ -96,6 +97,20 @@ class ExcelDiskTests(TestCase):
         self.assertTrue(sheet["A3"].font.bold)
         self.assertIn("C2:C3", sheet.merged_cells)
         self.assertEqual(len(sheet.conditional_formatting), 1)
+
+    def test_download_contains_saved_edits(self):
+        """Downloads return the edited workbook while keeping its original filename."""
+        data = SheetData(
+            sheetName="Sheet",
+            columns=["label", "amount", "notes"],
+            rows=[["saved", 9, "merged"], ["next", "=B2+1", None]],
+            rowCount=2,
+            colCount=3,
+        )
+        save_manual_edits("synthetic", [data], {})
+        filename, path = get_workbook_download("synthetic")
+        self.assertEqual(filename, "styled.xlsx")
+        self.assertEqual(load_workbook(path).active["B2"].value, 9)
 
     def test_backup_retention_and_restore_through_history(self):
         """Keep distinct snapshots and restore a selected revision by its ID."""

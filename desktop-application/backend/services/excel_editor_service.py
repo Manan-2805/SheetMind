@@ -242,6 +242,12 @@ def open_excel_sheet(file_id: str, sheet_name: str) -> SheetData:
         return read_sheet(_workbook_sheet(workbook, sheet_name))
 
 
+def get_workbook_download(file_id: str) -> tuple[str, Path]:
+    """Find the saved workbook in the requesting profile."""
+    with get_connection() as conn:
+        return _editable_file(conn, file_id)
+
+
 def _sheet_values(data: SheetData, *, legacy_formulas: bool = False) -> list[list]:
     positions = set(data.formulaCells or [])
     return [
@@ -449,11 +455,17 @@ def save_manual_edits(
                 values = _sheet_values(data, legacy_formulas=True)
                 rows = [tuple(map(comparable, row)) for row in original.rows or []]
                 incoming = [tuple(map(comparable, row)) for row in values]
+                old_columns = original.columns or []
+                if (
+                    rows == incoming
+                    and old_columns == data.columns
+                    and (data.formulaCells or []) == (original.formulaCells or [])
+                ):
+                    continue
                 try:
                     row_origins = infer_origins(rows, incoming, 2)
                 except TypeError as exc:
                     raise EditorError(400, "Unsupported worksheet cell value") from exc
-                old_columns = original.columns or []
                 column_origins = infer_origins(old_columns, data.columns, 1)
                 reshape(
                     sheet,
