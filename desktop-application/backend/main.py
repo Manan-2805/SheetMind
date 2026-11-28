@@ -119,16 +119,18 @@ async def global_exception_handler(request: Request, exc: Exception):
     reference = uuid4().hex[:8]
     provider_error = isinstance(exc, ProviderRequestError)
     logger.error(
-        "Failure %s in %s: %s (upstream HTTP %s); %s",
+        "Failure %s in %s: %s (upstream HTTP %s); %s; cause %s",
         reference,
         route,
         type(exc).__name__,
         exc.status if provider_error else None,
         exception_location(exc),
+        exc.cause if provider_error and exc.cause else "unspecified",
     )
     message = str(exc) if provider_error else "An internal error occurred. Please try again."
+    status_code = 504 if provider_error and exc.timed_out else 502 if provider_error else 500
     return JSONResponse(
-        status_code=502 if provider_error else 500,
+        status_code=status_code,
         content={"detail": f"{message} Reference: {reference}"},
     )
 

@@ -1,4 +1,4 @@
-import { Hash, Send } from "lucide-react";
+import { Hash, Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
 import { useFileAutocomplete } from "@/hooks/useFileAutocomplete";
@@ -10,6 +10,7 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSend: (content: string, referencedFiles: string[]) => void;
   isLoading: boolean;
+  onStop?: () => void;
   placeholder?: string;
   followups?: string[];
   onFollowupClick?: (text: string) => void;
@@ -20,6 +21,7 @@ export function ChatInput({
   onChange,
   onSend,
   isLoading,
+  onStop,
   placeholder = "Ask anything about your data...",
   followups = [],
   onFollowupClick,
@@ -179,23 +181,27 @@ export function ChatInput({
             aria-multiline="true"
           />
 
-          <button
-            onClick={handleSendClick}
-            disabled={isLoading || value.length > 2000}
-            className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all duration-[120ms] active:scale-[0.97]"
-            style={{
-              backgroundColor:
-                value.trim() && value.length <= 2000
-                  ? "var(--color-accent)"
-                  : "var(--color-bg-hover)",
-              color: value.trim() && value.length <= 2000 ? "#fff" : "var(--color-text-tertiary)",
-              cursor: value.trim() && value.length <= 2000 ? "pointer" : "not-allowed",
-              opacity: value.length > 2000 ? 0.5 : 1,
-            }}
-            aria-label="Send message"
-          >
-            <Send size={14} />
-          </button>
+          {onStop ? (
+            <button
+              type="button"
+              onClick={onStop}
+              className="mt-2 flex size-7 shrink-0 items-center justify-center rounded-md bg-bg-hover text-primary hover:bg-bg-active"
+              title="Stop generation"
+              aria-label="Stop generation"
+            >
+              <Square size={13} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSendClick}
+              disabled={isLoading || !value.trim() || value.length > 2000}
+              className="mt-2 flex size-7 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors disabled:bg-bg-hover disabled:text-tertiary"
+              aria-label="Send message"
+            >
+              <Send size={14} />
+            </button>
+          )}
         </div>
 
         <div

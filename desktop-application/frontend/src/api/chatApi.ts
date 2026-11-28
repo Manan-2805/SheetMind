@@ -43,9 +43,11 @@ export async function getMessages(sessionId: string): Promise<ChatMessage[]> {
   }
 }
 
-export async function createSession(): Promise<ChatSession> {
+export async function createSession(signal?: AbortSignal): Promise<ChatSession> {
   try {
-    const res: AxiosResponse<ChatSession> = await client.post("/chat/sessions");
+    const res: AxiosResponse<ChatSession> = await client.post("/chat/sessions", undefined, {
+      signal,
+    });
     return res.data;
   } catch (error) {
     handleError(error);
@@ -56,12 +58,14 @@ export async function sendMessage(
   sessionId: string,
   content: string,
   referencedFiles: string[],
+  signal?: AbortSignal,
   parentUserMessageId?: string
 ): Promise<ChatMessage> {
   try {
     const res: AxiosResponse<ChatMessage> = await client.post(
       `/chat/sessions/${sessionId}/messages`,
-      { content, referenced_files: referencedFiles, parent_user_message_id: parentUserMessageId }
+      { content, referenced_files: referencedFiles, parent_user_message_id: parentUserMessageId },
+      { signal }
     );
     return res.data;
   } catch (error) {
@@ -107,6 +111,7 @@ export async function regenerateMessage(
   referencedFiles: string[],
   reason: string = "",
   instruction: string = "",
+  signal?: AbortSignal,
   parentUserMessageId?: string
 ): Promise<ChatMessage> {
   try {
@@ -118,7 +123,8 @@ export async function regenerateMessage(
         reason,
         instruction,
         parent_user_message_id: parentUserMessageId,
-      }
+      },
+      { signal }
     );
     return res.data;
   } catch (error) {
@@ -180,12 +186,14 @@ export async function editMessage(
   sessionId: string,
   messageId: string,
   content: string,
-  referencedFiles: string[]
+  referencedFiles: string[],
+  signal?: AbortSignal
 ): Promise<ChatMessage> {
   try {
     const res: AxiosResponse<ChatMessage> = await client.put(
       `/chat/sessions/${sessionId}/messages/${messageId}`,
-      { content, referenced_files: referencedFiles }
+      { content, referenced_files: referencedFiles },
+      { signal }
     );
     return res.data;
   } catch (error) {

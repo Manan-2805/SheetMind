@@ -1,8 +1,9 @@
 """Validate, bound, and interrupt SQL originating outside application code."""
 
+import asyncio
 import json
 import math
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
 
@@ -13,6 +14,10 @@ from schemas.chat_schemas import ResultColumn, ResultTable
 QUERY_TIMEOUT_SECONDS = 30
 _QUERY_WORKERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sheetmind-sql")
 _PURE_TABLE_FUNCTIONS = {"generate_series", "range", "unnest"}
+
+
+class QueryTimeoutError(ValueError):
+    """An analytical query exceeded its execution budget."""
 
 
 def _check_functions(ast: Any) -> None:
@@ -55,7 +60,10 @@ def _validated_sql(conn: duckdb.DuckDBPyConnection, sql: str) -> str:
         imported_names.update({lower_name, f"main.{lower_name}", f"{catalog}.main.{lower_name}"})
     referenced = {name.lower() for name in conn.get_table_names(sql, qualified=True)}
     if not referenced.issubset(imported_names):
-        raise ValueError("SELECT queries may only reference imported data tables")
+        raise ValueError(
+            "SELECT queries may only reference imported data tables. "
+            "Use the exact DuckDB table name (file_...) from the schema."
+        )
 
     return conn.execute("SELECT json_deserialize_sql(?)", [serialized]).fetchone()[0]
 
@@ -97,6 +105,25 @@ def _read_page(conn: duckdb.DuckDBPyConnection, sql: str, page: int, size: int) 
         )
 
 
+def _start_query(
+    conn: duckdb.DuckDBPyConnection,
+    sql: str,
+    row_limit: int,
+    page: int = 1,
+    page_size: int | None = None,
+) -> tuple[Future[ResultTable], duckdb.DuckDBPyConnection]:
+    size = max(1, min(row_limit, page_size if page_size is not None else row_limit))
+    cursor = conn.cursor()
+    return _QUERY_WORKERS.submit(_read_page, cursor, sql, page, size), cursor
+
+
+def _interrupt(future: Future[ResultTable], cursor: duckdb.DuckDBPyConnection) -> None:
+    if future.cancel():
+        cursor.close()
+    elif not future.done():
+        cursor.interrupt()
+
+
 def run_user_query(
     conn: duckdb.DuckDBPyConnection,
     sql: str,
@@ -105,16 +132,28 @@ def run_user_query(
     page_size: int | None = None,
 ) -> ResultTable:
     """Run one validated SELECT and return a counted page capped by user settings."""
-    size = max(1, min(row_limit, page_size if page_size is not None else row_limit))
-    cursor = conn.cursor()
-    future = _QUERY_WORKERS.submit(_read_page, cursor, sql, page, size)
+    future, cursor = _start_query(conn, sql, row_limit, page, page_size)
     try:
         return future.result(timeout=QUERY_TIMEOUT_SECONDS)
     except TimeoutError as exc:
-        if future.cancel():
-            cursor.close()
-        elif not future.done():
-            cursor.interrupt()
-        raise ValueError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds") from exc
+        _interrupt(future, cursor)
+        raise QueryTimeoutError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds") from exc
+    except duckdb.Error as exc:
+        raise ValueError(f"SQL execution failed: {exc}") from exc
+
+
+async def run_chat_query(conn: duckdb.DuckDBPyConnection, sql: str, row_limit: int) -> ResultTable:
+    """Run the same guard with cancellation tied to the active chat request."""
+    future, cursor = _start_query(conn, sql, row_limit)
+    wrapped = asyncio.wrap_future(future)
+    try:
+        done, _ = await asyncio.wait((wrapped,), timeout=QUERY_TIMEOUT_SECONDS)
+        if done:
+            return wrapped.result()
+        raise QueryTimeoutError(f"Query timed out after {QUERY_TIMEOUT_SECONDS} seconds")
+    except (asyncio.CancelledError, QueryTimeoutError):
+        wrapped.cancel()
+        _interrupt(future, cursor)
+        raise
     except duckdb.Error as exc:
         raise ValueError(f"SQL execution failed: {exc}") from exc
